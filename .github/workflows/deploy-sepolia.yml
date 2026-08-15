@@ -1,0 +1,91 @@
+name: Deploy VINSS Contracts - Sepolia
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: contracts
+
+    env:
+      STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
+      ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
+      PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
+      PRIVACY_POOL_ADDRESS: ${{ secrets.PRIVACY_POOL_ADDRESS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Scarb
+        uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.17.0
+
+      - name: Setup Starknet Foundry
+        uses: foundry-rs/setup-snfoundry@v3
+        with:
+          version: 0.56.0
+
+      - name: Build
+        run: scarb build
+
+      - name: Test
+        run: snforge test
+
+      - name: Validate secrets
+        run: |
+          test -n "$STARKNET_RPC_URL"
+          test -n "$ACCOUNT_ADDRESS"
+          test -n "$PRIVATE_KEY"
+          test -n "$PRIVACY_POOL_ADDRESS"
+
+      - name: Create deploy account
+        run: |
+          sncast account import \
+            --url "$STARKNET_RPC_URL" \
+            --name vinss-deployer \
+            --address "$ACCOUNT_ADDRESS" \
+            --private-key "$PRIVATE_KEY" \
+            --type oz \
+            --silent
+
+      - name: Declare and deploy VINSS contracts
+        run: |
+          deploy() {
+            NAME="$1"
+
+            echo "=== DECLARE $NAME ==="
+
+            OUTPUT=$(sncast declare \
+              --url "$STARKNET_RPC_URL" \
+              --account vinss-deployer \
+              --contract-name "$NAME")
+
+            echo "$OUTPUT"
+
+            CLASS_HASH=$(echo "$OUTPUT" | grep -i "Class Hash:" | awk '{print $3}')
+
+            if [ -z "$CLASS_HASH" ]; then
+              echo "Could not extract class hash for $NAME"
+              exit 1
+            fi
+
+            echo "=== DEPLOY $NAME ==="
+
+            sncast deploy \
+              --url "$STARKNET_RPC_URL" \
+              --account vinss-deployer \
+              --class-hash "$CLASS_HASH" \
+              --constructor-calldata "$PRIVACY_POOL_ADDRESS"
+          }
+
+          deploy "VinssChannelHelper"
+          deploy "VinssOfferHelper"
+          deploy "VinssClaimEscrow"
+          deploy "VinssPrivateEscrowHelper"
+          deploy "VinssPrivateEscrowSettlement"
