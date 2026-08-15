@@ -15,7 +15,7 @@ jobs:
       STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
       ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
       PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
-      PRIVACY_POOL_ADDRESS: ${{ secrets.PRIVACY_POOL_ADDRESS }}
+      PRIVACY_POOL_ADDRESS: "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91"
 
     steps:
       - name: Checkout
@@ -42,7 +42,6 @@ jobs:
           test -n "$STARKNET_RPC_URL"
           test -n "$ACCOUNT_ADDRESS"
           test -n "$PRIVATE_KEY"
-          test -n "$PRIVACY_POOL_ADDRESS"
 
       - name: Create deploy account
         run: |
