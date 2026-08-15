@@ -1,5 +1,6 @@
 #[starknet::contract]
 pub mod VinssChannelHelper {
+    use crate::messaging::timeline_payload_hash;
     use starknet::storage::{
         Map,
         StorageMapReadAccess,
