@@ -18,3 +18,31 @@ pub mod offers {
 
 pub mod interfaces { pub mod privacy_pool_types; }
 pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time; pub mod validation; }
+
+
+pub mod claim_escrow {
+    pub mod claim_escrow_commitments;
+    pub mod claim_escrow_errors;
+    pub mod claim_escrow_events;
+    pub mod claim_escrow_interfaces;
+    pub mod claim_escrow_types;
+    pub mod vinss_claim_escrow;
+}
+
+pub mod private_escrow {
+    pub mod private_escrow_commitments;
+    pub mod private_escrow_events;
+    pub mod private_escrow_interfaces;
+    pub mod private_escrow_types;
+    pub mod private_escrow_validation;
+    pub mod vinss_private_escrow_helper;
+}
+
+pub mod private_escrow_settlement {
+    pub mod private_escrow_settlement_commitments;
+    pub mod private_escrow_settlement_errors;
+    pub mod private_escrow_settlement_events;
+    pub mod private_escrow_settlement_interfaces;
+    pub mod private_escrow_settlement_types;
+    pub mod vinss_private_escrow_settlement;
+}
