@@ -10,7 +10,6 @@ pub mod offers {
     pub mod offer_commitments;
     pub mod offer_events;
     pub mod offer_interfaces;
-    pub mod offer_payload;
     pub mod offer_types;
     pub mod offer_validation;
     pub mod vinss_offer;
