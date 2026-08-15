@@ -66,20 +66,24 @@ export async function sendMessage(
   const response = await (
     account as unknown as {
       strk20InvokeTransaction: (
-        actions: Array<{
-          contractAddress: string;
-          entrypoint: string;
-          calldata: string[];
-        }>,
+        params: {
+          actions: Array<{
+            type: "invoke";
+            contract: string;
+            calldata: string[];
+          }>;
+        },
       ) => Promise<{ transaction_hash: string }>;
     }
-  ).strk20InvokeTransaction([
-    {
-      contractAddress: CONTRACTS.channelHelper,
-      entrypoint: "privacy_invoke",
-      calldata,
-    },
-  ]);
+  ).strk20InvokeTransaction({
+    actions: [
+      {
+        type: "invoke",
+        contract: CONTRACTS.channelHelper,
+        calldata: ["privacy_invoke", ...calldata],
+      },
+    ],
+  });
 
   return {
     transactionHash: response.transaction_hash,

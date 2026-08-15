@@ -171,7 +171,9 @@ export default function DealRoomPage() {
       ]);
       setDraft("");
     } catch (err) {
-      setError(humanizeError(err, "We couldn't send your message. Please try again."));
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error("[VINSS SEND ERROR]", err);
+      setError(raw || "Unknown send error");
     } finally {
       setBusy(false);
     }

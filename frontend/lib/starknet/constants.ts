@@ -6,27 +6,15 @@
 export const NETWORK = (process.env.NEXT_PUBLIC_STARKNET_NETWORK ??
   "sepolia") as "sepolia" | "mainnet";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    // Intentionally not throwing at import time in dev — components should
-    // handle an empty address by disabling the relevant action and telling
-    // the user which env var is missing, per concepts.md's "least privilege"
-    // and honest-UX rules (no silent no-ops).
-    return "";
-  }
-  return value;
-}
-
 export const CONTRACTS = {
-  privacyPool: requireEnv("NEXT_PUBLIC_PRIVACY_POOL_ADDRESS"),
-  channelHelper: requireEnv("NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS"),
-  offerHelper: requireEnv("NEXT_PUBLIC_OFFER_HELPER_ADDRESS"),
-  privateEscrowHelper: requireEnv("NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS"),
-  privateEscrowSettlement: requireEnv(
-    "NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS",
-  ),
-  claimEscrow: requireEnv("NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS"),
+  privacyPool: process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? "",
+  channelHelper: process.env.NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS ?? "",
+  offerHelper: process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? "",
+  privateEscrowHelper:
+    process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
+  privateEscrowSettlement:
+    process.env.NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS ?? "",
+  claimEscrow: process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? "",
 };
 
 export const RPC_URL =
