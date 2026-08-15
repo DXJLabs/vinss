@@ -10,11 +10,11 @@ use snforge_std::{
 };
 use starknet::ContractAddress;
 
-use vinssc::messaging_interfaces::{
+use crate::messaging::messaging_interfaces::{
     IVinssChannelHelperDispatcher,
     IVinssChannelHelperDispatcherTrait,
 };
-use vinssc::utils::constants::{
+use crate::utils::constants::{
     MAX_PAYLOAD_CHUNKS,
     VINSS_MESSAGE_COMMITMENT_DOMAIN,
     VINSS_MESSAGE_ENVELOPE_VERSION,
