@@ -1,8 +1,10 @@
 [package]
-lib = "lib.cairo"
 name = "vinss"
 version = "0.1.0"
 edition = "2024_07"
+
+[lib]
+path = "lib.cairo"
 
 [dependencies]
 starknet = "2.17.0"
