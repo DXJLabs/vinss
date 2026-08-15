@@ -60,9 +60,10 @@ jobs:
 
             echo "=== DECLARE $NAME ==="
 
-            OUTPUT=$(sncast declare \
-              --url "$STARKNET_RPC_URL" \
+            OUTPUT=$(sncast \
               --account vinss-deployer \
+              declare \
+              --url "$STARKNET_RPC_URL" \
               --contract-name "$NAME")
 
             echo "$OUTPUT"
@@ -76,9 +77,10 @@ jobs:
 
             echo "=== DEPLOY $NAME ==="
 
-            sncast deploy \
-              --url "$STARKNET_RPC_URL" \
+            sncast \
               --account vinss-deployer \
+              deploy \
+              --url "$STARKNET_RPC_URL" \
               --class-hash "$CLASS_HASH" \
               --constructor-calldata "$PRIVACY_POOL_ADDRESS"
           }
