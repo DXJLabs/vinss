@@ -55,10 +55,14 @@ jobs:
 
       - name: Declare and deploy VINSS contracts
         run: |
+          DEPLOY_REPORT=""
+
           deploy() {
             NAME="$1"
 
             echo "=== DECLARE $NAME ==="
+
+            sleep 15
 
             OUTPUT=$(sncast \
               --account vinss-deployer \
@@ -100,12 +104,24 @@ jobs:
 
             echo "=== DEPLOY $NAME ==="
 
-            sncast \
+            DEPLOY_OUTPUT=$(sncast \
               --account vinss-deployer \
               deploy \
               --url "$STARKNET_RPC_URL" \
               --class-hash "$CLASS_HASH" \
-              --arguments "$PRIVACY_POOL_ADDRESS"
+              --arguments "$PRIVACY_POOL_ADDRESS")
+
+            echo "$DEPLOY_OUTPUT"
+
+            CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep -i "Contract Address:" | awk '{print $3}')
+            DEPLOY_TX=$(echo "$DEPLOY_OUTPUT" | grep -i "Transaction Hash:" | awk '{print $3}')
+
+            DEPLOY_REPORT="${DEPLOY_REPORT}
+          $NAME
+            Class Hash: $CLASS_HASH
+            Contract:   $CONTRACT_ADDRESS
+            Tx:         $DEPLOY_TX
+          "
           }
 
           deploy "VinssChannelHelper"
@@ -113,3 +129,11 @@ jobs:
           deploy "VinssClaimEscrow"
           deploy "VinssPrivateEscrowHelper"
           deploy "VinssPrivateEscrowSettlement"
+
+          echo ""
+          echo "=========================================="
+          echo "       VINSS SEPOLIA DEPLOYMENT DONE"
+          echo "=========================================="
+          echo "$DEPLOY_REPORT"
+          echo "Privacy Pool: $PRIVACY_POOL_ADDRESS"
+          echo "=========================================="
