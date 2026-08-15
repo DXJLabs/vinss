@@ -17,16 +17,24 @@ VINSS does not replace or modify the Starknet Canonical Privacy Pool. Privacy Po
 
 ## Starknet Sepolia Testnet Deployment
 
-Last updated: 2026-07-08.
+Last updated: 2026-08-15.
 
 | Contract | Address | Class hash | Deploy transaction |
 | --- | --- | --- | --- |
-| `Privacy` | `0x03a91bc44040f4173f30f3233d3cb2510aa05a0b74c22a5ee8240a313a0c8de5` | `0x030b8c540cf04d8ef0f4db2a9098d9cc0e35e83af1cb3325f5a4f40144b4b30b` | `0x04692acc8d3e586a65f394d952934acb9997f580f88781e30da4d39b1da5d3b0` |
-| `VINSSChannelHelper` | `0x052390845931a0c8d4735246d853a1a514c3cbf88cb1714937284814c5e57b23` | `0x7892efb93c77260c410d2e3e29cf6a28421d8e1ab0c688ffaf64304e7e47d97` | `0x0141b71a2dc7c5be0433e282533a64e9f92caf444d04dae5227fbe8e490e9fd5` |
-| `VINSSOffer` | `0x02f31ea76073dbf57f404513d2160fb0ca81d6d7432be594be10cca37441feab` | `0x04ac44039e5ea11daa8eb5396c88370d48086d6038258319bd66b6b85c2ae84b` | `0x0283f42a45500051c4c6ed613cc0e5a77bfdcc497bbfe199802062eb7293f1d9` |
-`VINSSChannelHelper` is configured with the Sepolia `Privacy` address above. Its `get_privacy_pool()` read was verified against `0x03a91bc44040f4173f30f3233d3cb2510aa05a0b74c22a5ee8240a313a0c8de5`.
+| `VinssChannelHelper` | `0x0173f5b0a94bc454084bed9892c6cee961b93abf8e1aaa63ff87c93ead63cf77` | `0x07a1f3489c4e62351812a99ed880e3bb1b35527845f87df39689f0f6f1e623ca` | `0x00a04d11cf7d90936cf7450b2ee08d247ef750838bfb22e9f3973d4cee0ec43d` |
+| `VinssOfferHelper` | `0x0184a7c69e83f9b2ef9e6a0e0cf7f8680308e4701b715b8281037b91b3732bb9` | `0x05d6fec1f155f10666c97be54130cd55b4b808ad1fccc8c8d13d5fc65e7543d6` | `0x04d7de9b5dc7e38b3516daea9a5a3632adf2893306ff0fe1510d814ce0cf6030` |
+| `VinssClaimEscrow` | `0x0345e61ed5e046ed4a7670b2a8a8b16c889f489cf95c6a326ae9b22253639280` | `0x04efbe39dd1ac0b77db29cdd6fab7b018b6d2876e2a3306b3ad0abbe0ef05946` | `0x0187c0b98d78d0c78d0f93d3a0c6639510f1d4b78196e795c845421fe41e454a` |
+| `VinssPrivateEscrowHelper` | `0x01038379f1b0f876f719116eddc9c41d97e9e968f5dbec3ba603a9eb2211664a` | `0x033402e23b912c0b88528b223653c73472cef9ca597adaa2afafde2c5aa4a004` | `0x024cd65ac31f67aa6368885d732e15148b5410d16a6e512eeab4a959e91d077f` |
+| `VinssPrivateEscrowSettlement` | `0x06973364950e28379b8784ac36fed200770aac9bd16502392a16e88e023ae6c7` | `0x04c84494c21f92d19979df307f1a4170983c1fa276a72c71e98d8760ced9e2de` | `0x025fe8dc77e247a3b5c26e715bab6564ca1e5c7b390628f8b0445c9a8636fb1d` |
 
-The Sepolia `Privacy` deployment comes from the local canonical reference under `reference/contracts/packages/privacy`. Full Shield execution still requires a compatible proof/Privacy SDK path in the client environment.
+### Privacy Pool
+
+`0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91`
+
+All five VINSS application contracts above were successfully deployed on Starknet Sepolia using the configured Privacy Pool address.
+
+These addresses are **Sepolia testnet deployments only** and must not be used as Starknet Mainnet addresses.
+
 
 ## Detailed Docs
 
