@@ -1,0 +1,649 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0B0D10;
+  --color-paper: #F6F5F1;
+  --color-vault: #14181D;
+  --color-wire: #2B323A;
+  --color-signal: #5EEAD4;
+  --color-amber: #E8A33D;
+  --color-danger: #E2665B;
+
+  --font-display: "IBM Plex Mono", monospace;
+  --font-body: "Inter", sans-serif;
+}
+
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-image:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.04), transparent 320px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(246, 245, 241, 0.025) 0px,
+      rgba(246, 245, 241, 0.025) 1px,
+      transparent 1px,
+      transparent 28px
+    );
+}
+
+.ledger-rule {
+  border-top: 1px solid rgba(246, 245, 241, 0.12);
+}
+
+.seal-tick {
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+}
+
+/* --- OVERRIDE MODAL STARKNET (DARK MODE) --- */
+/* Latar belakang pop-up modal */
+div[role="dialog"], 
+div[aria-modal="true"] {
+  background-color: var(--color-vault) !important;
+  color: var(--color-paper) !important;
+  border: 1px solid var(--color-wire) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Judul/Teks di dalam modal */
+div[role="dialog"] h2, 
+div[role="dialog"] h3,
+div[aria-modal="true"] h2 {
+  color: var(--color-signal) !important;
+  font-family: var(--font-display) !important;
+}
+
+/* Tombol pilihan dompet (Argent, Braavos, dll) */
+div[role="dialog"] button,
+div[aria-modal="true"] button {
+  background-color: var(--color-ink) !important;
+  border: 1px solid var(--color-wire) !important;
+  color: var(--color-paper) !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+/* Efek saat tombol dompet disentuh (hover) */
+div[role="dialog"] button:hover,
+div[aria-modal="true"] button:hover {
+  background-color: var(--color-wire) !important;
+  border-color: var(--color-signal) !important;
+}
+
+/* Layar transparan (backdrop) di belakang modal */
+div[id*="headlessui-dialog-overlay"],
+div[role="dialog"] > div:first-child {
+   background-color: rgba(11, 13, 16, 0.8) !important;
+   backdrop-filter: blur(4px) !important;
+}
+
+/* --- OVERRIDE MODAL STARKNET (DARK MODE) --- */
+div[role="dialog"], 
+div[aria-modal="true"] {
+  background-color: var(--color-vault) !important;
+  color: var(--color-paper) !important;
+  border: 1px solid var(--color-wire) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+div[role="dialog"] h2, 
+div[role="dialog"] h3,
+div[aria-modal="true"] h2 {
+  color: var(--color-signal) !important;
+  font-family: var(--font-display) !important;
+}
+
+div[role="dialog"] button,
+div[aria-modal="true"] button {
+  background-color: var(--color-ink) !important;
+  border: 1px solid var(--color-wire) !important;
+  color: var(--color-paper) !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+div[role="dialog"] button:hover,
+div[aria-modal="true"] button:hover {
+  background-color: var(--color-wire) !important;
+  border-color: var(--color-signal) !important;
+}
+
+div[id*="headlessui-dialog-overlay"],
+div[role="dialog"] > div:first-child {
+   background-color: rgba(11, 13, 16, 0.8) !important;
+   backdrop-filter: blur(4px) !important;
+}
+
+/* =========================================================
+   VINSS — GET STARKNET WALLET UI
+   Responsive / Desktop + Mobile
+   ========================================================= */
+
+.get-starknet-ui {
+  --background: 9 12 16 !important;
+  --foreground: 241 245 247 !important;
+  --muted-foreground: 145 158 169 !important;
+  --accent: 20 34 37 !important;
+  --accent-foreground: 241 245 247 !important;
+  --border: 38 50 58 !important;
+
+  color: #f1f5f7 !important;
+}
+
+/* =========================================================
+   DESKTOP
+   ========================================================= */
+
+@media (min-width: 768px) {
+
+  .get-starknet-ui[data-slot="dialog-content"] {
+    width: min(900px, calc(100vw - 48px)) !important;
+    max-width: none !important;
+    height: min(600px, calc(100vh - 80px)) !important;
+    max-height: calc(100vh - 80px) !important;
+
+    padding: 0 !important;
+    overflow: hidden !important;
+
+    border: 1px solid rgba(148,163,184,.16) !important;
+    border-radius: 24px !important;
+
+    background:
+      radial-gradient(
+        600px 360px at 80% 0%,
+        rgba(45,212,191,.055),
+        transparent 70%
+      ),
+      linear-gradient(
+        180deg,
+        #10161d 0%,
+        #090d12 100%
+      ) !important;
+
+    box-shadow:
+      0 30px 100px rgba(0,0,0,.55),
+      0 0 50px rgba(45,212,191,.035),
+      inset 0 1px 0 rgba(255,255,255,.035) !important;
+  }
+
+  .get-starknet-ui[data-slot="dialog-content"] > div {
+    height: 100% !important;
+    min-height: 0 !important;
+    grid-template-columns: 300px minmax(0,1fr) !important;
+  }
+
+  /* Left navigation */
+
+  .get-starknet-ui[data-slot="dialog-content"] > div > div:first-child {
+    height: 100% !important;
+    min-height: 0 !important;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(16,23,30,.98),
+        rgba(10,15,20,.98)
+      ) !important;
+
+    border-right: 1px solid rgba(148,163,184,.12) !important;
+  }
+
+  /* Header */
+
+  .get-starknet-ui [class*="h-[90px]"] {
+    height: auto !important;
+    min-height: 105px !important;
+
+    padding: 28px 24px 20px !important;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(19,27,35,.98),
+        rgba(14,20,27,.96)
+      ) !important;
+
+    border-bottom: 1px solid rgba(148,163,184,.10) !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-title"] {
+    color: #f1f5f7 !important;
+    font-size: 21px !important;
+    font-weight: 600 !important;
+    letter-spacing: -.025em !important;
+    line-height: 1.2 !important;
+    margin-bottom: 9px !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] {
+    color: #8997a4 !important;
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  /* Section labels */
+
+  .get-starknet-ui p[class*="text-xs"] {
+    color: #71808d !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+
+    margin: 16px 0 9px !important;
+  }
+
+  /* Wallet list */
+
+  .get-starknet-ui [class*="flex-col"][class*="gap-1"] {
+    gap: 6px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Wallet cards */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] {
+    min-height: 58px !important;
+    padding: 9px 12px !important;
+
+    border: 1px solid rgba(148,163,184,.09) !important;
+    border-radius: 14px !important;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(21,29,37,.96),
+        rgba(12,18,24,.96)
+      ) !important;
+
+    color: #edf2f4 !important;
+
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.025) !important;
+
+    transition:
+      transform .16s ease,
+      border-color .16s ease,
+      background .16s ease,
+      box-shadow .16s ease !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"]:hover {
+    transform: translateY(-1px) !important;
+
+    border-color: rgba(94,234,212,.28) !important;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(24,39,43,.98),
+        rgba(12,20,25,.98)
+      ) !important;
+
+    box-shadow:
+      0 8px 24px rgba(0,0,0,.22),
+      0 0 20px rgba(45,212,191,.045) !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] img {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] span {
+    color: #edf2f4 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+  }
+
+  /* Selected */
+
+  .get-starknet-ui
+  [class*="rounded-md"][class*="grid"][class*="bg-foreground"] {
+    background:
+      linear-gradient(
+        135deg,
+        rgba(45,212,191,.13),
+        rgba(20,184,166,.035)
+      ) !important;
+
+    border-color: rgba(45,212,191,.42) !important;
+
+    box-shadow:
+      0 0 24px rgba(45,212,191,.055),
+      inset 0 0 20px rgba(45,212,191,.02) !important;
+  }
+
+  /* Right content */
+
+  .get-starknet-ui[data-slot="dialog-content"] > div > div:last-child {
+    min-width: 0 !important;
+
+    background:
+      radial-gradient(
+        520px 320px at 50% 0%,
+        rgba(45,212,191,.045),
+        transparent 72%
+      ) !important;
+  }
+
+  /* No fake mobile handle on desktop */
+
+  .get-starknet-ui::before {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 767px) {
+
+  .get-starknet-ui[data-vaul-drawer],
+  [data-vaul-drawer].get-starknet-ui {
+
+    width: 100% !important;
+    max-width: 100% !important;
+
+    background:
+      radial-gradient(
+        420px 220px at 50% 0%,
+        rgba(45,212,191,.07),
+        transparent 65%
+      ),
+      linear-gradient(
+        180deg,
+        #0d1218,
+        #090d12
+      ) !important;
+
+    border-radius: 26px 26px 0 0 !important;
+
+    border:
+      1px solid rgba(148,163,184,.15) !important;
+
+    border-bottom: 0 !important;
+
+    box-shadow:
+      0 -20px 70px rgba(0,0,0,.58),
+      inset 0 1px 0 rgba(255,255,255,.035) !important;
+
+    overflow: hidden !important;
+  }
+
+  /* Handle */
+
+  .get-starknet-ui::before {
+    content: "" !important;
+
+    position: absolute !important;
+    top: 10px !important;
+    left: 50% !important;
+
+    width: 54px !important;
+    height: 4px !important;
+
+    transform: translateX(-50%) !important;
+
+    border-radius: 999px !important;
+
+    background:
+      linear-gradient(
+        90deg,
+        rgba(94,234,212,.12),
+        rgba(94,234,212,.55),
+        rgba(94,234,212,.12)
+      ) !important;
+
+    box-shadow:
+      0 0 14px rgba(45,212,191,.12) !important;
+
+    pointer-events: none !important;
+    z-index: 100 !important;
+  }
+
+  /* Header */
+
+  .get-starknet-ui [class*="h-[90px]"] {
+    height: auto !important;
+    min-height: 132px !important;
+
+    padding:
+      38px 22px 20px !important;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(17,24,31,.98),
+        rgba(12,17,23,.98)
+      ) !important;
+
+    border-bottom:
+      1px solid rgba(148,163,184,.09) !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-title"] {
+    color: #5eead4 !important;
+
+    font-size: clamp(23px, 7vw, 28px) !important;
+    font-weight: 600 !important;
+
+    letter-spacing: -.035em !important;
+    line-height: 1.1 !important;
+
+    margin-bottom: 10px !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] {
+    color: #8f9ca8 !important;
+
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+  }
+
+  /* Section labels */
+
+  .get-starknet-ui p[class*="text-xs"] {
+    color: #74828e !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+
+    margin: 16px 0 9px !important;
+  }
+
+  /* List */
+
+  .get-starknet-ui [class*="flex-col"][class*="gap-1"] {
+    gap: 7px !important;
+
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Cards */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] {
+    min-height: 60px !important;
+
+    padding: 9px 12px !important;
+
+    border-radius: 15px !important;
+
+    border:
+      1px solid rgba(148,163,184,.10) !important;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(20,27,34,.96),
+        rgba(12,17,23,.96)
+      ) !important;
+
+    color: #edf2f4 !important;
+
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.025) !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"]:active {
+    transform: scale(.985) !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] img {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 10px !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] span {
+    color: #edf2f4 !important;
+
+    font-size: 15px !important;
+    font-weight: 500 !important;
+  }
+
+  /* Selected */
+
+  .get-starknet-ui
+  [class*="rounded-md"][class*="grid"][class*="bg-foreground"] {
+    background:
+      linear-gradient(
+        135deg,
+        rgba(45,212,191,.14),
+        rgba(20,184,166,.04)
+      ) !important;
+
+    border-color:
+      rgba(45,212,191,.45) !important;
+
+    box-shadow:
+      0 0 25px rgba(45,212,191,.055),
+      inset 0 0 22px rgba(45,212,191,.025) !important;
+  }
+
+  /* Connected controls */
+
+  .get-starknet-ui [data-slot="dialog-description"] > div {
+    gap: 8px !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] button {
+    min-height: 44px !important;
+
+    border:
+      1px solid rgba(148,163,184,.14) !important;
+
+    border-radius: 13px !important;
+
+    background:
+      rgba(8,13,18,.76) !important;
+
+    color: #e7eef1 !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] button:hover {
+    border-color: rgba(94,234,212,.35) !important;
+
+    background:
+      rgba(18,35,38,.85) !important;
+
+    color: #5eead4 !important;
+  }
+
+  /* Scrollbar */
+
+  .get-starknet-ui [class*="styled-scrollbar"] {
+    scrollbar-width: thin !important;
+    scrollbar-color:
+      rgba(94,234,212,.22)
+      transparent !important;
+  }
+
+  .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar {
+    width: 4px !important;
+  }
+
+  .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar-thumb {
+    background: rgba(94,234,212,.22) !important;
+    border-radius: 999px !important;
+  }
+}
+
+/* =========================================================
+   SMALL PHONES
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .get-starknet-ui [class*="h-[90px]"] {
+    min-height: 124px !important;
+    padding: 36px 18px 18px !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-title"] {
+    font-size: 23px !important;
+  }
+
+  .get-starknet-ui [class*="flex-col"][class*="gap-1"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] {
+    min-height: 56px !important;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .get-starknet-ui *,
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* =========================================================
+   DRAWER BACKDROP
+   ========================================================= */
+
+[data-vaul-overlay] {
+
+  background:
+    rgba(0, 0, 0, .72) !important;
+
+  backdrop-filter:
+    blur(8px) !important;
+
+  -webkit-backdrop-filter:
+    blur(8px) !important;
+}

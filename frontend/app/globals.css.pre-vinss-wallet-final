@@ -1,0 +1,518 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0B0D10;
+  --color-paper: #F6F5F1;
+  --color-vault: #14181D;
+  --color-wire: #2B323A;
+  --color-signal: #5EEAD4;
+  --color-amber: #E8A33D;
+  --color-danger: #E2665B;
+
+  --font-display: "IBM Plex Mono", monospace;
+  --font-body: "Inter", sans-serif;
+}
+
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-image:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.04), transparent 320px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(246, 245, 241, 0.025) 0px,
+      rgba(246, 245, 241, 0.025) 1px,
+      transparent 1px,
+      transparent 28px
+    );
+}
+
+.ledger-rule {
+  border-top: 1px solid rgba(246, 245, 241, 0.12);
+}
+
+.seal-tick {
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+}
+
+/* --- OVERRIDE MODAL STARKNET (DARK MODE) --- */
+/* Latar belakang pop-up modal */
+div[role="dialog"], 
+div[aria-modal="true"] {
+  background-color: var(--color-vault) !important;
+  color: var(--color-paper) !important;
+  border: 1px solid var(--color-wire) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Judul/Teks di dalam modal */
+div[role="dialog"] h2, 
+div[role="dialog"] h3,
+div[aria-modal="true"] h2 {
+  color: var(--color-signal) !important;
+  font-family: var(--font-display) !important;
+}
+
+/* Tombol pilihan dompet (Argent, Braavos, dll) */
+div[role="dialog"] button,
+div[aria-modal="true"] button {
+  background-color: var(--color-ink) !important;
+  border: 1px solid var(--color-wire) !important;
+  color: var(--color-paper) !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+/* Efek saat tombol dompet disentuh (hover) */
+div[role="dialog"] button:hover,
+div[aria-modal="true"] button:hover {
+  background-color: var(--color-wire) !important;
+  border-color: var(--color-signal) !important;
+}
+
+/* Layar transparan (backdrop) di belakang modal */
+div[id*="headlessui-dialog-overlay"],
+div[role="dialog"] > div:first-child {
+   background-color: rgba(11, 13, 16, 0.8) !important;
+   backdrop-filter: blur(4px) !important;
+}
+
+/* --- OVERRIDE MODAL STARKNET (DARK MODE) --- */
+div[role="dialog"], 
+div[aria-modal="true"] {
+  background-color: var(--color-vault) !important;
+  color: var(--color-paper) !important;
+  border: 1px solid var(--color-wire) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+div[role="dialog"] h2, 
+div[role="dialog"] h3,
+div[aria-modal="true"] h2 {
+  color: var(--color-signal) !important;
+  font-family: var(--font-display) !important;
+}
+
+div[role="dialog"] button,
+div[aria-modal="true"] button {
+  background-color: var(--color-ink) !important;
+  border: 1px solid var(--color-wire) !important;
+  color: var(--color-paper) !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+div[role="dialog"] button:hover,
+div[aria-modal="true"] button:hover {
+  background-color: var(--color-wire) !important;
+  border-color: var(--color-signal) !important;
+}
+
+div[id*="headlessui-dialog-overlay"],
+div[role="dialog"] > div:first-child {
+   background-color: rgba(11, 13, 16, 0.8) !important;
+   backdrop-filter: blur(4px) !important;
+}
+
+/* =========================================================
+   VINSS / GET STARKNET
+   MOBILE WALLET DRAWER — PREMIUM DARK UI
+   ========================================================= */
+
+.get-starknet-ui {
+  --background: 9 12 16 !important;
+  --foreground: 241 245 247 !important;
+
+  --muted-foreground: 145 158 169 !important;
+
+  --accent: 20 34 37 !important;
+  --accent-foreground: 241 245 247 !important;
+
+  --border: 38 50 58 !important;
+
+  background:
+    radial-gradient(
+      520px 260px at 50% -10%,
+      rgba(45, 212, 191, .10),
+      transparent 65%
+    ),
+    linear-gradient(
+      180deg,
+      #0d1218 0%,
+      #090d12 100%
+    ) !important;
+
+  color: #f1f5f7 !important;
+
+  border-color: rgba(120, 145, 155, .18) !important;
+}
+
+/* =========================================================
+   MOBILE DRAWER ITSELF
+   ========================================================= */
+
+@media (max-width: 767px) {
+
+  /* Vaul drawer */
+  .get-starknet-ui[data-vaul-drawer],
+  [data-vaul-drawer].get-starknet-ui {
+
+    background:
+      radial-gradient(
+        420px 220px at 50% 0%,
+        rgba(45, 212, 191, .075),
+        transparent 65%
+      ),
+      linear-gradient(
+        180deg,
+        #0d1218 0%,
+        #090d12 100%
+      ) !important;
+
+    border-radius: 28px 28px 0 0 !important;
+
+    border:
+      1px solid rgba(148, 163, 184, .17) !important;
+
+    border-bottom: 0 !important;
+
+    box-shadow:
+      0 -18px 70px rgba(0, 0, 0, .55),
+      0 -2px 20px rgba(45, 212, 191, .035),
+      inset 0 1px 0 rgba(255, 255, 255, .035) !important;
+
+    overflow: hidden !important;
+  }
+
+  /* =======================================================
+     DRAG HANDLE
+     ======================================================= */
+
+  .get-starknet-ui::before {
+
+    content: "";
+
+    position: absolute;
+
+    top: 12px;
+    left: 50%;
+
+    width: 72px;
+    height: 5px;
+
+    transform: translateX(-50%);
+
+    border-radius: 999px;
+
+    background:
+      linear-gradient(
+        90deg,
+        rgba(94, 234, 212, .18),
+        rgba(94, 234, 212, .65),
+        rgba(94, 234, 212, .18)
+      );
+
+    box-shadow:
+      0 0 16px rgba(45, 212, 191, .16);
+
+    z-index: 100;
+
+    pointer-events: none;
+  }
+
+  /* =======================================================
+     HEADER
+     ======================================================= */
+
+  .get-starknet-ui [class*="h-[90px]"] {
+
+    height: auto !important;
+
+    min-height: 150px !important;
+
+    padding:
+      42px 30px 24px !important;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(17, 24, 31, .98),
+        rgba(12, 17, 23, .98)
+      ) !important;
+
+    border-bottom:
+      1px solid rgba(148, 163, 184, .10) !important;
+
+    position: relative;
+  }
+
+  /* Header title */
+
+  .get-starknet-ui [data-slot="dialog-title"] {
+
+    color: #5eead4 !important;
+
+    font-size: 28px !important;
+
+    font-weight: 500 !important;
+
+    letter-spacing: -.035em !important;
+
+    line-height: 1.1 !important;
+
+    margin-bottom: 12px !important;
+
+    text-shadow:
+      0 0 24px rgba(45, 212, 191, .12);
+  }
+
+  /* Header description */
+
+  .get-starknet-ui [data-slot="dialog-description"] {
+
+    color: #8f9ca8 !important;
+
+    font-size: 16px !important;
+
+    line-height: 1.45 !important;
+  }
+
+  /* =======================================================
+     SECTION TITLES
+     ======================================================= */
+
+  .get-starknet-ui p[class*="text-xs"] {
+
+    color: #7f8c98 !important;
+
+    font-size: 11px !important;
+
+    font-weight: 600 !important;
+
+    letter-spacing: .12em !important;
+
+    text-transform: uppercase !important;
+
+    margin-top: 18px !important;
+
+    margin-bottom: 10px !important;
+  }
+
+  /* =======================================================
+     WALLET LIST
+     ======================================================= */
+
+  .get-starknet-ui [class*="flex-col"][class*="gap-1"] {
+
+    gap: 7px !important;
+
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  /* Target wallet item regardless of whether library renders
+     button/div/a */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] {
+
+    min-height: 64px !important;
+
+    padding:
+      10px 14px !important;
+
+    border-radius: 17px !important;
+
+    border:
+      1px solid rgba(148, 163, 184, .105) !important;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(20, 27, 34, .96),
+        rgba(12, 17, 23, .96)
+      ) !important;
+
+    color: #edf2f4 !important;
+
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .025) !important;
+
+    transition:
+      all .18s ease !important;
+  }
+
+  /* Hover / press */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"]:hover {
+
+    border-color:
+      rgba(94, 234, 212, .30) !important;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(22, 39, 43, .98),
+        rgba(12, 21, 25, .98)
+      ) !important;
+
+    transform: translateY(-1px);
+
+    box-shadow:
+      0 7px 24px rgba(0, 0, 0, .22),
+      0 0 18px rgba(45, 212, 191, .045) !important;
+  }
+
+  /* =======================================================
+     WALLET ICON AREA
+     ======================================================= */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] img {
+
+    width: 40px !important;
+    height: 40px !important;
+
+    border-radius: 11px !important;
+  }
+
+  /* =======================================================
+     WALLET NAME
+     ======================================================= */
+
+  .get-starknet-ui [class*="rounded-md"][class*="grid"] span {
+
+    color: #edf2f4 !important;
+
+    font-size: 17px !important;
+
+    font-weight: 450 !important;
+  }
+
+  /* =======================================================
+     SELECTED / CONNECTED WALLET
+     ======================================================= */
+
+  .get-starknet-ui
+  [class*="rounded-md"][class*="grid"][class*="bg-foreground"] {
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(45, 212, 191, .13),
+        rgba(20, 184, 166, .045)
+      ) !important;
+
+    border-color:
+      rgba(45, 212, 191, .48) !important;
+
+    box-shadow:
+      0 0 28px rgba(45, 212, 191, .065),
+      inset 0 0 24px rgba(45, 212, 191, .025) !important;
+  }
+
+  /* =======================================================
+     CONNECTED / LAST CONNECTED TEXT
+     ======================================================= */
+
+  .get-starknet-ui [class*="text-muted-foreground"] {
+
+    color: #96a2ad !important;
+  }
+
+  /* =======================================================
+     CONNECTED ADDRESS / DISCONNECT
+     ======================================================= */
+
+  .get-starknet-ui [data-slot="dialog-description"] > div {
+
+    gap: 10px !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] button {
+
+    min-height: 48px !important;
+
+    border:
+      1px solid rgba(148, 163, 184, .15) !important;
+
+    border-radius: 15px !important;
+
+    background:
+      rgba(8, 13, 18, .78) !important;
+
+    color: #e7eef1 !important;
+
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .025) !important;
+  }
+
+  .get-starknet-ui [data-slot="dialog-description"] button:hover {
+
+    border-color:
+      rgba(94, 234, 212, .40) !important;
+
+    color: #5eead4 !important;
+
+    background:
+      rgba(18, 35, 38, .85) !important;
+  }
+
+  /* =======================================================
+     SCROLL AREA
+     ======================================================= */
+
+  .get-starknet-ui [class*="styled-scrollbar"] {
+
+    scrollbar-width: thin;
+
+    scrollbar-color:
+      rgba(94, 234, 212, .22)
+      transparent;
+  }
+
+  .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar {
+
+    width: 4px;
+  }
+
+  .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar-thumb {
+
+    background:
+      rgba(94, 234, 212, .22);
+
+    border-radius: 999px;
+  }
+}
+
+/* =========================================================
+   DRAWER BACKDROP
+   ========================================================= */
+
+[data-vaul-overlay] {
+
+  background:
+    rgba(0, 0, 0, .72) !important;
+
+  backdrop-filter:
+    blur(8px) !important;
+
+  -webkit-backdrop-filter:
+    blur(8px) !important;
+}

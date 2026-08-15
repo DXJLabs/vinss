@@ -1,0 +1,63 @@
+"use client";
+
+import {
+  GetStarknetProvider,
+  useConnect,
+  WalletConnectModal,
+} from "@starknet-io/get-starknet-ui";
+import { useEffect } from "react";
+import type { VinssWalletSession } from "@/lib/starknet/walletClient";
+import { createWalletSession } from "@/lib/starknet/walletClient";
+
+function WalletBridge({
+  onConnected,
+}: {
+  onConnected: (session: VinssWalletSession) => void;
+}) {
+  const { connected } = useConnect();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function buildSession() {
+      if (!connected) return;
+
+      try {
+        const session = await createWalletSession(connected);
+
+        if (cancelled) return;
+
+        onConnected(session);
+      } catch (error) {
+        console.error(
+          "[VINSS] failed to create WalletAccountV6",
+          error,
+        );
+      }
+    }
+
+    void buildSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, onConnected]);
+
+  return (
+    <WalletConnectModal
+      buttonClassName="rounded-none border border-signal/40 bg-vault px-4 py-2 font-display text-xs uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink"
+    />
+  );
+}
+
+export function WalletConnectButton({
+  onConnected,
+}: {
+  onConnected: (session: VinssWalletSession) => void;
+}) {
+  return (
+    <GetStarknetProvider>
+      <WalletBridge onConnected={onConnected} />
+    </GetStarknetProvider>
+  );
+}

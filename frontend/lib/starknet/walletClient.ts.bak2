@@ -1,0 +1,41 @@
+import { RpcProvider, WalletAccountV6 } from "starknet";
+import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard/features";
+import { RPC_URL } from "./constants";
+
+export interface VinssWalletSession {
+  account: WalletAccountV6;
+  address: string;
+  wallet: WalletWithStarknetFeatures;
+  strk20Capable: boolean;
+}
+
+let provider: RpcProvider | null = null;
+
+function getProvider(): RpcProvider {
+  if (!provider) {
+    provider = new RpcProvider({ nodeUrl: RPC_URL });
+  }
+  return provider;
+}
+
+export async function createWalletSession(
+  wallet: WalletWithStarknetFeatures,
+): Promise<VinssWalletSession> {
+  const account = await WalletAccountV6.connect(
+    { nodeUrl: RPC_URL },
+    wallet,
+  );
+
+  return {
+    account,
+    address: account.address,
+    wallet,
+    strk20Capable: false,
+  };
+}
+
+export async function disconnectWallet(): Promise<void> {
+  // Wallet Standard handles the wallet connection lifecycle.
+}
+
+export { getProvider };
