@@ -11,7 +11,7 @@
  * root/parent relationships live only inside ciphertext (offer_types.cairo).
  */
 
-import type { WalletAccountV6 } from "starknet";
+import { hash, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -57,21 +57,14 @@ export async function sendOfferAction(
     ...ciphertextChunks,
   ].map(String);
 
-  const response = await (
-    account as unknown as {
-      strk20InvokeTransaction: (
-        actions: Array<{
-          contractAddress: string;
-          entrypoint: string;
-          calldata: string[];
-        }>,
-      ) => Promise<{ transaction_hash: string }>;
-    }
-  ).strk20InvokeTransaction([
+  const response = await account.strk20InvokeTransaction([
     {
-      contractAddress: CONTRACTS.offerHelper,
-      entrypoint: "privacy_invoke",
-      calldata,
+      type: "invoke",
+      contract: CONTRACTS.offerHelper,
+      calldata: [
+        hash.getSelectorFromName("privacy_invoke"),
+        ...calldata,
+      ],
     },
   ]);
 

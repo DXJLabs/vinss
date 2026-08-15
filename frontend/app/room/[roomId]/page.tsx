@@ -189,6 +189,13 @@ export default function DealRoomPage() {
         discoverOfferActions(BACKEND_URL, channelKey).catch(() => []),
       ]);
 
+      console.log("[VINSS DISCOVERY]", {
+        messages,
+        messagesIsArray: Array.isArray(messages),
+        offers,
+        offersIsArray: Array.isArray(offers),
+      });
+
       const messageEntries: TimelineEntry[] = messages.map((m) => ({
         id: crypto.randomUUID(),
         kind: "message",

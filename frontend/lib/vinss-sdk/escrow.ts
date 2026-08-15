@@ -43,18 +43,15 @@ async function invokeHelper(
   contractAddress: string,
   calldata: string[],
 ): Promise<{ transaction_hash: string }> {
-  return (
-    account as unknown as {
-      strk20InvokeTransaction: (
-        actions: Array<{
-          contractAddress: string;
-          entrypoint: string;
-          calldata: string[];
-        }>,
-      ) => Promise<{ transaction_hash: string }>;
-    }
-  ).strk20InvokeTransaction([
-    { contractAddress, entrypoint: "privacy_invoke", calldata },
+  return account.strk20InvokeTransaction([
+    {
+      type: "invoke",
+      contract: contractAddress,
+      calldata: [
+        hash.getSelectorFromName("privacy_invoke"),
+        ...calldata,
+      ],
+    },
   ]);
 }
 

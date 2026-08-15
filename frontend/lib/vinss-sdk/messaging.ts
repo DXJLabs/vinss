@@ -12,7 +12,7 @@
  * contract change (Opsi B), out of scope for this app-code-only plan.
  */
 
-import { CairoCustomEnum, type WalletAccountV6 } from "starknet";
+import { CairoCustomEnum, hash, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -63,27 +63,16 @@ export async function sendMessage(
   // Confirm the exact wallet-facing method name against the current
   // WalletAccount guide before relying on `execute` here — this is a
   // best-known placeholder for the STRK20 InvokeExternal action shape.
-  const response = await (
-    account as unknown as {
-      strk20InvokeTransaction: (
-        params: {
-          actions: Array<{
-            type: "invoke";
-            contract: string;
-            calldata: string[];
-          }>;
-        },
-      ) => Promise<{ transaction_hash: string }>;
-    }
-  ).strk20InvokeTransaction({
-    actions: [
-      {
-        type: "invoke",
-        contract: CONTRACTS.channelHelper,
-        calldata: ["privacy_invoke", ...calldata],
-      },
-    ],
-  });
+  const response = await account.strk20InvokeTransaction([
+    {
+      type: "invoke",
+      contract: CONTRACTS.channelHelper,
+      calldata: [
+        hash.getSelectorFromName("privacy_invoke"),
+        ...calldata,
+      ],
+    },
+  ]);
 
   return {
     transactionHash: response.transaction_hash,
