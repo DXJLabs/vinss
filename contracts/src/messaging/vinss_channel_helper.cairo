@@ -17,8 +17,6 @@ pub mod VinssChannelHelper {
     use crate::utils::constants::MESSAGE_ENVELOPE_HEADER_FELTS;
     use crate::utils::errors;
 
-    #[path("timeline_payload_hash.cairo")]
-    mod timeline_payload_hash;
 
     #[storage]
     struct Storage {
