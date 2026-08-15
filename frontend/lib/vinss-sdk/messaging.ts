@@ -20,6 +20,7 @@ import {
   decryptPayload,
   generateActionLocator,
   ENVELOPE_VERSION,
+  toFelt,
   type ChannelKey,
 } from "./envelope";
 import type { MessagePayload, SendActionResult } from "./types";
@@ -48,31 +49,45 @@ export async function sendMessage(
     ciphertextChunks,
   );
 
+  // Every calldata item must be a 0x-prefixed FELT string
+  // (STRK20_CALLDATA_ITEM per @starknet-io/starknet-types-0104) — plain
+  // .map(String) on a bigint produced decimal strings and was the actual
+  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
   const calldata = [
+    hash.getSelectorFromName("privacy_invoke"),
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,
-  ].map(String);
+  ].map(toFelt);
 
   // The dapp does not call privacy_invoke on the helper directly — that
   // entrypoint is restricted to the pinned Privacy Pool. Instead the dapp
   // asks the wallet to route this InvokeExternal call through the pool via
   // the Wallet API, exactly like a shield/transfer/unshield action.
-  // Confirm the exact wallet-facing method name against the current
-  // WalletAccount guide before relying on `execute` here — this is a
-  // best-known placeholder for the STRK20 InvokeExternal action shape.
-  const response = await account.strk20InvokeTransaction([
+  // Confirmed against @starknet-io/starknet-types-0104's
+  // wallet-api/components.d.ts: strk20InvokeTransaction expects
+  // STRK20_INVOKE_ACTION = { type: 'invoke'; contract: ADDRESS; calldata:
+  // STRK20_CALLDATA_ITEM[] } — no entry_point field, so the selector must
+  // be calldata[0], exactly as below.
+  const debugActions = [
     {
-      type: "invoke",
+      type: "invoke" as const,
       contract: CONTRACTS.channelHelper,
-      calldata: [
-        hash.getSelectorFromName("privacy_invoke"),
-        ...calldata,
-      ],
+      calldata,
     },
-  ]);
+  ];
+
+  let response;
+  try {
+    response = await account.strk20InvokeTransaction(debugActions);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${msg} | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}`,
+    );
+  }
 
   return {
     transactionHash: response.transaction_hash,

@@ -21,6 +21,11 @@
  *    treated like the message channel key — never logged, never sent to the
  *    backend. Deposit/withdrawal amounts on this contract are public (the
  *    ERC-20 legs), matching STRK20_INTEGRATION_PLAN.md §3.
+ *
+ *    Both contracts' only external entrypoint is privacy_invoke(calldata:
+ *    Span<felt252>) — confirmed against
+ *    contracts/private_escrow_settlement/private_escrow_settlement_interfaces.cairo
+ *    — so the selector below applies to both call sites in this file.
  */
 
 import type { WalletAccountV6 } from "starknet";
@@ -31,6 +36,7 @@ import {
   encryptPayload,
   generateActionLocator,
   ENVELOPE_VERSION,
+  toFelt,
   type ChannelKey,
 } from "./envelope";
 import type { EscrowActionPayload, SendActionResult } from "./types";
@@ -78,13 +84,16 @@ export async function sendEscrowCoordinationAction(
     ciphertextChunks,
   );
 
+  // Every calldata item must be a 0x-prefixed FELT string — plain
+  // .map(String) on a bigint produced decimal strings and was the actual
+  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
   const calldata = [
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,
-  ].map(String);
+  ].map(toFelt);
 
   const response = await invokeHelper(
     account,
@@ -174,13 +183,13 @@ export async function depositEscrow(
     );
   }
   const calldata = [
-    "1",
-    String(params.custodyCommitment),
-    String(params.releaseCommitment),
-    String(params.refundCommitment),
-    String(params.refundAfter),
+    toFelt(1),
+    toFelt(params.custodyCommitment),
+    toFelt(params.releaseCommitment),
+    toFelt(params.refundCommitment),
+    toFelt(params.refundAfter),
     params.token,
-    String(params.amount),
+    toFelt(params.amount),
   ];
   const response = await invokeHelper(
     account,
@@ -200,10 +209,10 @@ export async function releaseEscrow(
     );
   }
   const calldata = [
-    "2",
-    String(params.custodyCommitment),
-    String(params.releaseSecret),
-    String(params.outputNoteId),
+    toFelt(2),
+    toFelt(params.custodyCommitment),
+    toFelt(params.releaseSecret),
+    toFelt(params.outputNoteId),
   ];
   const response = await invokeHelper(
     account,
@@ -223,10 +232,10 @@ export async function refundEscrow(
     );
   }
   const calldata = [
-    "3",
-    String(params.custodyCommitment),
-    String(params.refundSecret),
-    String(params.outputNoteId),
+    toFelt(3),
+    toFelt(params.custodyCommitment),
+    toFelt(params.refundSecret),
+    toFelt(params.outputNoteId),
   ];
   const response = await invokeHelper(
     account,

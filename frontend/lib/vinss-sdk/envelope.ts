@@ -17,7 +17,7 @@
  * encryption. See references/concepts.md "the golden rule".
  */
 
-import { hash } from "starknet";
+import { hash, num } from "starknet";
 
 export const ENVELOPE_VERSION = 1;
 export const MAX_PAYLOAD_CHUNKS = 64;
@@ -85,6 +85,19 @@ export function generateActionLocator(channelKey: ChannelKey): bigint {
 
 const FELT_PRIME =
   2n ** 251n + 17n * 2n ** 192n + 1n; // Starknet field prime.
+
+/**
+ * Convert any calldata item (bigint / number / already-hex string) into the
+ * 0x-prefixed FELT string the STRK20 Wallet API requires
+ * (pattern ^0x(0|[a-fA-F1-9][a-fA-F0-9]{0,62})$ — see
+ * @starknet-io/starknet-types-0104's wallet-api/components.d.ts). Plain
+ * `.map(String)` on a bigint produces a decimal string, which the wallet
+ * rejects with INVALID_REQUEST_PAYLOAD — always send calldata through this
+ * before handing it to strk20InvokeTransaction.
+ */
+export function toFelt(value: bigint | number | string): string {
+  return num.toHex(value);
+}
 
 /**
  * AES-GCM encrypt a JSON-serializable payload with the channel key, then

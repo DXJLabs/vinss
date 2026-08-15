@@ -11,6 +11,7 @@
 
 import { hash, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
+import { toFelt } from "./envelope";
 
 async function invokeHelper(
   account: WalletAccountV6,
@@ -53,10 +54,10 @@ export async function depositClaim(
     );
   }
   const calldata = [
-    "1",
-    String(params.commitment),
+    toFelt(1),
+    toFelt(params.commitment),
     params.token,
-    String(params.amount),
+    toFelt(params.amount),
   ];
   const response = await invokeHelper(account, CONTRACTS.claimEscrow, calldata);
   return { transactionHash: response.transaction_hash };
@@ -71,7 +72,7 @@ export async function claim(
       "NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS is not set — see .env.local.example.",
     );
   }
-  const calldata = ["2", String(params.secret), String(params.outputNoteId)];
+  const calldata = [toFelt(2), toFelt(params.secret), toFelt(params.outputNoteId)];
   const response = await invokeHelper(account, CONTRACTS.claimEscrow, calldata);
   return { transactionHash: response.transaction_hash };
 }

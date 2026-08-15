@@ -19,12 +19,13 @@ import {
   decryptPayload,
   generateActionLocator,
   ENVELOPE_VERSION,
+  toFelt,
   type ChannelKey,
 } from "./envelope";
 import type { OfferActionPayload, SendActionResult } from "./types";
 
-const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V1"; // must match the
-// analogous constant in contracts/utils/constants.cairo for the offer
+const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V1"; // confirm exact
+// name in contracts/utils/constants.cairo for the offer
 // module — confirm exact name at build time (not shown in the excerpt
 // reviewed while scaffolding; the messaging domain constant is confirmed).
 
@@ -49,22 +50,24 @@ export async function sendOfferAction(
     ciphertextChunks,
   );
 
+  // Every calldata item must be a 0x-prefixed FELT string
+  // (STRK20_CALLDATA_ITEM per @starknet-io/starknet-types-0104) — plain
+  // .map(String) on a bigint produced decimal strings and was the actual
+  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
   const calldata = [
+    hash.getSelectorFromName("privacy_invoke"),
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,
-  ].map(String);
+  ].map(toFelt);
 
   const response = await account.strk20InvokeTransaction([
     {
       type: "invoke",
       contract: CONTRACTS.offerHelper,
-      calldata: [
-        hash.getSelectorFromName("privacy_invoke"),
-        ...calldata,
-      ],
+      calldata,
     },
   ]);
 
@@ -78,7 +81,6 @@ export async function sendOfferAction(
 // Convenience wrappers — each just fixes `kind`, keeping call sites in the
 // UI readable and matching the product doc's feature list (Offer: create,
 // counter, accept, reject, expire, convert to escrow).
-
 export const createOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
