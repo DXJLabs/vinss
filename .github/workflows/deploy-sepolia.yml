@@ -68,7 +68,29 @@ jobs:
 
             echo "$OUTPUT"
 
+            TX_HASH=$(echo "$OUTPUT" | grep -i "Transaction Hash:" | awk "{print \$3}")
+            echo "Waiting for declaration: $TX_HASH"
+
+            for i in {1..30}; do
+              RECEIPT=$(sncast receipt --url "$STARKNET_RPC_URL" --transaction-hash "$TX_HASH" 2>/dev/null || true)
+              echo "$RECEIPT" | grep -q "ACCEPTED" && break
+              sleep 5
+            done
+
+            echo "$RECEIPT"
+
             CLASS_HASH=$(echo "$OUTPUT" | grep -i "Class Hash:" | awk '{print $3}')
+
+            TX_HASH=$(echo "$OUTPUT" | grep -i "Transaction Hash:" | awk "{print \$3}")
+            echo "Waiting for declaration: $TX_HASH"
+
+            for i in {1..30}; do
+              RECEIPT=$(sncast receipt --url "$STARKNET_RPC_URL" --transaction-hash "$TX_HASH" 2>/dev/null || true)
+              echo "$RECEIPT" | grep -q "ACCEPTED" && break
+              sleep 5
+            done
+
+            echo "$RECEIPT"
 
             if [ -z "$CLASS_HASH" ]; then
               echo "Could not extract class hash for $NAME"
