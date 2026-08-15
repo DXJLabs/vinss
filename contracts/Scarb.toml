@@ -1,4 +1,5 @@
 [package]
+lib = "lib.cairo"
 name = "vinss"
 version = "0.1.0"
 edition = "2024_07"
