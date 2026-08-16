@@ -15,6 +15,13 @@ export const CONTRACTS = {
   privateEscrowSettlement:
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS ?? "",
   claimEscrow: process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? "",
+  // TODO(belum diputuskan): token yang dipasangkan pada action `transfer`
+  // amount:"OPEN" untuk membuka slot zero-value note sebelum privacy_invoke
+  // (lihat strk20-by-example.org/starknet-wallet-api/private-defi, "The two
+  // actions"). Kemungkinan besar ini token STRK Sepolia, tapi belum
+  // dikonfirmasi ke pool/wallet test dapp — isi via env var di bawah.
+  zeroValueNoteToken:
+    process.env.NEXT_PUBLIC_ZERO_VALUE_NOTE_TOKEN_ADDRESS ?? "",
 };
 
 export const RPC_URL =

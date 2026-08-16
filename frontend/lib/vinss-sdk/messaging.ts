@@ -12,7 +12,7 @@
  * contract change (Opsi B), out of scope for this app-code-only plan.
  */
 
-import { CairoCustomEnum, hash, type WalletAccountV6 } from "starknet";
+import { CairoCustomEnum, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -38,6 +38,13 @@ export async function sendMessage(
       "NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS is not set — see .env.local.example.",
     );
   }
+  if (!CONTRACTS.zeroValueNoteToken) {
+    throw new Error(
+      "NEXT_PUBLIC_ZERO_VALUE_NOTE_TOKEN_ADDRESS is not set — the paired " +
+        "transfer:OPEN action needs a token address. See the TODO on " +
+        "CONTRACTS.zeroValueNoteToken in constants.ts.",
+    );
+  }
 
   const actionLocator = generateActionLocator(channelKey);
   const ciphertextChunks = await encryptPayload(channelKey, payload);
@@ -49,12 +56,15 @@ export async function sendMessage(
     ciphertextChunks,
   );
 
-  // Every calldata item must be a 0x-prefixed FELT string
-  // (STRK20_CALLDATA_ITEM per @starknet-io/starknet-types-0104) — plain
-  // .map(String) on a bigint produced decimal strings and was the actual
-  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
+  // NOTE: no selector here. Confirmed against the real STRK20 Wallet API
+  // docs (strk20-by-example.org/starknet-wallet-api/private-defi): the
+  // wallet always calls the helper's `privacy_invoke` itself via the
+  // protocol's own INVOKE_SELECTOR — `calldata` is deserialized directly
+  // into that function's own parameters. Prepending
+  // hash.getSelectorFromName("privacy_invoke") (as this used to do) shifts
+  // every argument by one slot and is the actual cause of
+  // INVALID_REQUEST_PAYLOAD.
   const calldata = [
-    hash.getSelectorFromName("privacy_invoke"),
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
@@ -62,16 +72,21 @@ export async function sendMessage(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // The dapp does not call privacy_invoke on the helper directly — that
-  // entrypoint is restricted to the pinned Privacy Pool. Instead the dapp
-  // asks the wallet to route this InvokeExternal call through the pool via
-  // the Wallet API, exactly like a shield/transfer/unshield action.
-  // Confirmed against @starknet-io/starknet-types-0104's
-  // wallet-api/components.d.ts: strk20InvokeTransaction expects
-  // STRK20_INVOKE_ACTION = { type: 'invoke'; contract: ADDRESS; calldata:
-  // STRK20_CALLDATA_ITEM[] } — no entry_point field, so the selector must
-  // be calldata[0], exactly as below.
+  // A privacy_invoke call is ONE STRK20 transaction carrying TWO actions
+  // (see the same docs page, "The two actions"):
+  //   1. a `transfer` with amount "OPEN" — opens the note slot the
+  //      helper's return value credits into (here: the zero-value replay
+  //      anchor noted in messaging_types.cairo's VinssMessageRecord doc).
+  //   2. the `invoke` naming the helper contract and its calldata.
+  // Sending only the `invoke` action (as this used to do) is a malformed
+  // request on its own — there is no open note for the pool to credit.
   const debugActions = [
+    {
+      type: "transfer" as const,
+      token: CONTRACTS.zeroValueNoteToken,
+      amount: "OPEN" as const,
+      recipient: account.address,
+    },
     {
       type: "invoke" as const,
       contract: CONTRACTS.channelHelper,
@@ -84,8 +99,31 @@ export async function sendMessage(
     response = await account.strk20InvokeTransaction(debugActions);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+
+    // The wallet extension's Error often carries extra fields (code, data,
+    // a nested `cause`, etc.) that aren't part of `.message`. Pull those
+    // out explicitly — generic "(UNKNOWN_ERROR)" messages are useless
+    // without them.
+    const extra: Record<string, unknown> = {};
+    if (err && typeof err === "object") {
+      for (const key of Object.getOwnPropertyNames(err)) {
+        if (key === "message" || key === "stack") continue;
+        extra[key] = (err as Record<string, unknown>)[key];
+      }
+    }
+
+    console.error("[vinss-sdk] strk20InvokeTransaction failed", {
+      message: msg,
+      ...extra,
+      debugActions,
+    });
+
     throw new Error(
-      `${msg} | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}`,
+      `${msg}` +
+        (Object.keys(extra).length
+          ? ` | WALLET_ERROR_DETAIL=${JSON.stringify(extra)}`
+          : "") +
+        ` | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}`,
     );
   }
 
