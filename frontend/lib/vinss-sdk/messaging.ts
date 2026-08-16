@@ -12,7 +12,7 @@
  * contract change (Opsi B), out of scope for this app-code-only plan.
  */
 
-import { CairoCustomEnum, type WalletAccountV6 } from "starknet";
+import { CairoCustomEnum, hash, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -38,13 +38,6 @@ export async function sendMessage(
       "NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS is not set — see .env.local.example.",
     );
   }
-  if (!CONTRACTS.zeroValueNoteToken) {
-    throw new Error(
-      "NEXT_PUBLIC_ZERO_VALUE_NOTE_TOKEN_ADDRESS is not set — the paired " +
-        "transfer:OPEN action needs a token address. See the TODO on " +
-        "CONTRACTS.zeroValueNoteToken in constants.ts.",
-    );
-  }
 
   const actionLocator = generateActionLocator(channelKey);
   const ciphertextChunks = await encryptPayload(channelKey, payload);
@@ -65,6 +58,7 @@ export async function sendMessage(
   // every argument by one slot and is the actual cause of
   // INVALID_REQUEST_PAYLOAD.
   const calldata = [
+    hash.getSelectorFromName("privacy_invoke"),
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
@@ -72,21 +66,21 @@ export async function sendMessage(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // A privacy_invoke call is ONE STRK20 transaction carrying TWO actions
-  // (see the same docs page, "The two actions"):
-  //   1. a `transfer` with amount "OPEN" — opens the note slot the
-  //      helper's return value credits into (here: the zero-value replay
-  //      anchor noted in messaging_types.cairo's VinssMessageRecord doc).
-  //   2. the `invoke` naming the helper contract and its calldata.
-  // Sending only the `invoke` action (as this used to do) is a malformed
-  // request on its own — there is no open note for the pool to credit.
+  // VinssChannelHelper.privacy_invoke (see store_message in
+  // vinss_channel_helper.cairo) always returns an empty
+  // Span<OpenNoteDeposit> — "Messaging does not request an ERC-20 deposit
+  // into an open note." Per strk20-by-example.org/starknet-wallet-api/
+  // private-defi ("The two actions") and .../helpers/privacy-invoke, a
+  // `transfer` with amount "OPEN" only makes sense when the invoke's
+  // calldata references the resulting slot via an
+  // `${openNoteIds[N]}` placeholder so the wallet knows what to credit
+  // into it. This calldata never contains that placeholder — there is
+  // nothing for an open note to receive — so pairing an unreferenced
+  // transfer:OPEN action with this invoke is itself the malformed
+  // request (that combination is what produced INVALID_REQUEST_PAYLOAD).
+  // A single `invoke` action, with no funds movement at all, matches the
+  // escrow helper's own zero-token-movement pattern in the docs.
   const debugActions = [
-    {
-      type: "transfer" as const,
-      token: CONTRACTS.zeroValueNoteToken,
-      amount: "OPEN" as const,
-      recipient: account.address,
-    },
     {
       type: "invoke" as const,
       contract: CONTRACTS.channelHelper,
