@@ -1,6 +1,11 @@
 "use client";
 
-import { WalletConnectModal } from "@starknet-io/get-starknet-ui";
+import dynamic from "next/dynamic";
+
+const WalletConnectModal = dynamic(
+  () => import("@starknet-io/get-starknet-ui").then((m) => m.WalletConnectModal),
+  { ssr: false },
+);
 import { useWallet } from "@/components/providers/WalletProvider";
 
 export function WalletConnectButton() {

@@ -10,6 +10,9 @@ import {
   StarknetWalletApi,
   type WalletWithStarknetFeatures,
 } from "@starknet-io/get-starknet-wallet-standard/features";
+
+import type { WalletWithStarknetFeatures as WalletWithStarknetFeaturesV6 } from
+  "@starknet-io/get-starknet-wallet-standard-v6/features";
 import {
   createContext,
   useContext,
@@ -69,7 +72,9 @@ function WalletState({
 
       try {
         const wallet = connected as WalletWithStarknetFeatures;
-        const nextSession = await createWalletSession(wallet);
+        const nextSession = await createWalletSession(
+          wallet as unknown as WalletWithStarknetFeaturesV6,
+        );
 
         if (cancelled) return;
 

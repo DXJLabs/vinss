@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { generateRoomSecret } from "@/lib/vinss-sdk/channelKey";
 
 /**
  * VINSS rooms are local bookkeeping only.
@@ -55,8 +54,12 @@ export default function RoomsPage() {
     setRooms(loadRooms());
   }, []);
 
-  function createRoom() {
+  async function createRoom() {
     if (!label.trim()) return;
+
+    const { generateRoomSecret } = await import(
+      "@/lib/vinss-sdk/channelKey"
+    );
 
     const room: LocalRoom = {
       id: crypto.randomUUID(),
