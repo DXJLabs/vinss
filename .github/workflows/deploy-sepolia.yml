@@ -106,7 +106,7 @@ jobs:
             echo "=== DEPLOY $NAME ==="
 
             if [ "$NAME" = "VinssMessageHelper" ]; then
-              DEPLOY_ARGS="($PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS,)"
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
             else
               DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
             fi
