@@ -4,11 +4,16 @@ use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 use crate::messaging::messaging_types::VinssMessageRecord;
 
 #[starknet::interface]
-pub trait IVinssChannelHelper<TContractState> {
+pub trait IVinssMessageHelper<TContractState> {
     /// Store one encrypted VINSS message through the pinned Privacy Pool.
     ///
     /// The caller must be the Privacy Pool configured during deployment.
-    /// Successful messaging returns no open-note deposits.
+    /// `calldata`'s last felt is always the id of the open note this helper
+    /// fills (STRK20 Wallet API invoke-helper convention); everything
+    /// before it is the message envelope. Successful messaging always
+    /// returns exactly one `OpenNoteDeposit` with `amount: 0` — no real
+    /// value moves, this only satisfies the paired `transfer: "OPEN"`
+    /// action.
     fn privacy_invoke(
         ref self: TContractState,
         calldata: Span<felt252>,

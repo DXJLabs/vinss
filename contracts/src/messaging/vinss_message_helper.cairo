@@ -1,5 +1,5 @@
 #[starknet::contract]
-pub mod VinssChannelHelper {
+pub mod VinssMessageHelper {
     use crate::messaging::timeline_payload_hash;
     use starknet::storage::{
         Map,
@@ -12,7 +12,7 @@ pub mod VinssChannelHelper {
 
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
     use crate::messaging::messaging_events::MessageCommitted;
-    use crate::messaging::messaging_interfaces::IVinssChannelHelper;
+    use crate::messaging::messaging_interfaces::IVinssMessageHelper;
     use crate::messaging::messaging_types::VinssMessageRecord;
     use crate::messaging::messaging_validation;
     use crate::utils::constants::MESSAGE_ENVELOPE_HEADER_FELTS;
@@ -23,6 +23,12 @@ pub mod VinssChannelHelper {
     struct Storage {
         /// Only this Privacy Pool may invoke the encrypted messaging path.
         privacy_pool: ContractAddress,
+
+        /// Token reported on the zero-amount `OpenNoteDeposit` this helper
+        /// returns to satisfy the STRK20 Wallet API invoke-helper convention.
+        /// Messaging moves no value; this exists only so the paired
+        /// `transfer: "OPEN"` action has a token to be created against.
+        open_note_token: ContractAddress,
 
         /// Public structural record indexed by a one-time message locator.
         messages: Map<felt252, VinssMessageRecord>,
@@ -50,6 +56,7 @@ pub mod VinssChannelHelper {
     fn constructor(
         ref self: ContractState,
         privacy_pool: ContractAddress,
+        open_note_token: ContractAddress,
     ) {
         let zero_address: ContractAddress = 0.try_into().unwrap();
 
@@ -57,8 +64,13 @@ pub mod VinssChannelHelper {
             privacy_pool != zero_address,
             errors::ZERO_ADDRESS,
         );
+        assert(
+            open_note_token != zero_address,
+            errors::ZERO_ADDRESS,
+        );
 
         self.privacy_pool.write(privacy_pool);
+        self.open_note_token.write(open_note_token);
     }
 
     // -------------------------------------------------------------------------
@@ -66,7 +78,7 @@ pub mod VinssChannelHelper {
     // -------------------------------------------------------------------------
 
     #[abi(embed_v0)]
-    impl VinssChannelHelperImpl of IVinssChannelHelper<ContractState> {
+    impl VinssMessageHelperImpl of IVinssMessageHelper<ContractState> {
         /// Store one encrypted VINSS message through Privacy Pool
         /// `InvokeExternal`.
         ///
@@ -76,9 +88,22 @@ pub mod VinssChannelHelper {
         /// - the helper validates structure and ciphertext commitment only;
         /// - sender, recipient, message type, and plaintext are never accepted.
         ///
-        /// The zero-value encrypted note used by the messaging action is built
-        /// by the Privacy SDK in the same proved action batch. This helper does
-        /// not receive or independently verify that note.
+        /// Wallet-API invoke-helper convention: the LAST felt of `calldata`
+        /// is always the id of the open note this helper is expected to
+        /// fill (`${openNoteIds[N]}`, substituted by the wallet). Everything
+        /// before it is the message envelope, unchanged from before:
+        ///
+        /// 0. envelope_version
+        /// 1. message_locator
+        /// 2. claimed_payload_commitment
+        /// 3. payload_chunk_count
+        /// 4... ciphertext_chunks
+        /// last. open_note_id
+        ///
+        /// Messaging moves no real value, so the returned deposit always
+        /// carries `amount: 0` against `open_note_token` — enough to
+        /// satisfy the paired `transfer: "OPEN"` action without moving
+        /// funds.
         fn privacy_invoke(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -91,7 +116,23 @@ pub mod VinssChannelHelper {
                 errors::UNAUTHORIZED_PRIVACY_POOL,
             );
 
-            self.store_message(calldata)
+            assert(
+                calldata.len() >= 1,
+                errors::INVALID_MESSAGE_CALLDATA,
+            );
+
+            let open_note_id = *calldata.at(calldata.len() - 1);
+            let message_calldata = calldata.slice(0, calldata.len() - 1);
+
+            self.store_message(message_calldata);
+
+            let deposit = OpenNoteDeposit {
+                note_id: open_note_id,
+                token: self.open_note_token.read(),
+                amount: 0_u128,
+            };
+
+            array![deposit].span()
         }
 
         fn get_privacy_pool(
@@ -169,7 +210,7 @@ pub mod VinssChannelHelper {
         fn store_message(
             ref self: ContractState,
             calldata: Span<felt252>,
-        ) -> Span<OpenNoteDeposit> {
+        ) {
             assert(
                 calldata.len() >= MESSAGE_ENVELOPE_HEADER_FELTS,
                 errors::INVALID_MESSAGE_CALLDATA,
@@ -266,8 +307,6 @@ pub mod VinssChannelHelper {
                 ),
             );
 
-            // Messaging does not request an ERC-20 deposit into an open note.
-            ArrayTrait::<OpenNoteDeposit>::new().span()
         }
 
         /// Persist opaque ciphertext chunks.

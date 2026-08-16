@@ -11,8 +11,8 @@ use snforge_std::{
 use starknet::ContractAddress;
 
 use crate::messaging::messaging_interfaces::{
-    IVinssChannelHelperDispatcher,
-    IVinssChannelHelperDispatcherTrait,
+    IVinssMessageHelperDispatcher,
+    IVinssMessageHelperDispatcherTrait,
 };
 use crate::utils::constants::{
     MAX_PAYLOAD_CHUNKS,
@@ -22,7 +22,7 @@ use crate::utils::constants::{
 
 /// TEST SUITE SCOPE
 ///
-/// These tests prove the local Cairo behavior of `VinssChannelHelper`.
+/// These tests prove the local Cairo behavior of `VinssMessageHelper`.
 ///
 /// PROVEN HERE:
 /// - constructor configuration;
@@ -44,6 +44,7 @@ use crate::utils::constants::{
 ///
 /// Those properties require separate SDK, prover, integration, and Sepolia E2E tests.
 const PRIVACY_POOL: felt252 = 0x123;
+const OPEN_NOTE_TOKEN: felt252 = 0x789;
 const OTHER_CALLER: felt252 = 0x456;
 
 fn privacy_pool() -> ContractAddress {
@@ -55,11 +56,14 @@ fn other_caller() -> ContractAddress {
 }
 
 fn deploy_contract() -> ContractAddress {
-    let contract = declare("VinssChannelHelper")
+    let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
 
-    let constructor_calldata = array![PRIVACY_POOL];
+    let constructor_calldata = array![
+        PRIVACY_POOL,
+        OPEN_NOTE_TOKEN,
+    ];
 
     let (contract_address, _) = contract
         .deploy(@constructor_calldata)
@@ -172,7 +176,7 @@ fn make_sequential_chunks(count: u64) -> Array<felt252> {
 #[test]
 fn constructor_stores_privacy_pool() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     assert(
         dispatcher.get_privacy_pool() == privacy_pool(),
@@ -185,11 +189,14 @@ fn constructor_stores_privacy_pool() {
 /// A zero pool address would permanently break or weaken caller authorization.
 #[test]
 fn constructor_rejects_zero_privacy_pool() {
-    let contract = declare("VinssChannelHelper")
+    let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
 
-    let constructor_calldata = array![0];
+    let constructor_calldata = array![
+        0,
+        OPEN_NOTE_TOKEN,
+    ];
 
     match contract.deploy(@constructor_calldata) {
         Result::Err(_) => {},
@@ -297,7 +304,7 @@ fn message_commitment_binds_envelope_version() {
 #[test]
 fn privacy_pool_stores_encrypted_message() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 0x111;
     let chunks = array![0x222, 0x333];
@@ -320,7 +327,19 @@ fn privacy_pool_stores_encrypted_message() {
 
     let deposits = dispatcher.privacy_invoke(calldata.span());
 
-    assert(deposits.len() == 0, 'unexpected deposits');
+    assert(deposits.len() == 1, 'missing deposit');
+
+    let deposit = *deposits.at(0);
+
+    assert(
+        deposit.token == OPEN_NOTE_TOKEN.try_into().unwrap(),
+        'bad deposit token',
+    );
+
+    assert(
+        deposit.amount == 0,
+        'deposit moved value',
+    );
     assert(
         dispatcher.message_exists(message_locator),
         'message not stored',
@@ -364,7 +383,7 @@ fn privacy_pool_stores_encrypted_message() {
 #[test]
 fn different_locators_store_independent_messages() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let first_chunks = array![111];
     let second_chunks = array![222];
@@ -398,7 +417,7 @@ fn different_locators_store_independent_messages() {
 #[test]
 fn zero_valued_ciphertext_chunk_is_accepted() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 2001;
     let chunks = array![0];
@@ -423,7 +442,7 @@ fn zero_valued_ciphertext_chunk_is_accepted() {
 #[test]
 fn maximum_ciphertext_boundary_is_accepted() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 3001;
     let chunks = make_sequential_chunks(MAX_PAYLOAD_CHUNKS);
@@ -436,7 +455,19 @@ fn maximum_ciphertext_boundary_is_accepted() {
 
     let deposits = dispatcher.privacy_invoke(calldata.span());
 
-    assert(deposits.len() == 0, 'unexpected deposits');
+    assert(deposits.len() == 1, 'missing deposit');
+
+    let deposit = *deposits.at(0);
+
+    assert(
+        deposit.token == OPEN_NOTE_TOKEN.try_into().unwrap(),
+        'bad deposit token',
+    );
+
+    assert(
+        deposit.amount == 0,
+        'deposit moved value',
+    );
 
     let message = dispatcher.get_message(message_locator);
 
@@ -459,7 +490,7 @@ fn maximum_ciphertext_boundary_is_accepted() {
 #[test]
 fn message_committed_event_has_minimal_shape() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 4001;
     let chunks = array![401, 402];
@@ -497,7 +528,7 @@ fn message_committed_event_has_minimal_shape() {
 #[should_panic(expected: 'NOT_PRIVACY_POOL')]
 fn privacy_invoke_rejects_non_pool_caller() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111];
     let calldata = make_calldata(5001, chunks.span());
@@ -521,7 +552,7 @@ fn privacy_invoke_rejects_non_pool_caller() {
 #[should_panic(expected: 'BAD_MESSAGE_DATA')]
 fn privacy_invoke_rejects_truncated_header() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -544,7 +575,7 @@ fn privacy_invoke_rejects_truncated_header() {
 #[should_panic(expected: 'BAD_ENVELOPE_VER')]
 fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         0x100,
@@ -569,7 +600,7 @@ fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
 #[should_panic(expected: 'UNSUPPORTED_VER')]
 fn privacy_invoke_rejects_unsupported_version() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let unsupported_version: u8 =
         VINSS_MESSAGE_ENVELOPE_VERSION + 1;
@@ -597,7 +628,7 @@ fn privacy_invoke_rejects_unsupported_version() {
 #[should_panic(expected: 'ZERO_MSG_LOCATOR')]
 fn privacy_invoke_rejects_zero_message_locator() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111];
     let calldata = make_calldata(0, chunks.span());
@@ -617,7 +648,7 @@ fn privacy_invoke_rejects_zero_message_locator() {
 #[should_panic(expected: 'ZERO_PAYLOAD_COMMIT')]
 fn privacy_invoke_rejects_zero_commitment() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -642,7 +673,7 @@ fn privacy_invoke_rejects_zero_commitment() {
 #[should_panic(expected: 'EMPTY_CIPHERTEXT')]
 fn privacy_invoke_rejects_empty_ciphertext() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -666,7 +697,7 @@ fn privacy_invoke_rejects_empty_ciphertext() {
 #[should_panic(expected: 'COMMITMENT_MISMATCH')]
 fn privacy_invoke_rejects_invalid_commitment() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -691,7 +722,7 @@ fn privacy_invoke_rejects_invalid_commitment() {
 #[should_panic(expected: 'BAD_CHUNK_COUNT')]
 fn privacy_invoke_rejects_chunk_count_above_u64() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -715,7 +746,7 @@ fn privacy_invoke_rejects_chunk_count_above_u64() {
 #[should_panic(expected: 'TOO_MANY_CHUNKS')]
 fn privacy_invoke_rejects_oversized_ciphertext() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let oversized_count = MAX_PAYLOAD_CHUNKS + 1;
 
@@ -741,7 +772,7 @@ fn privacy_invoke_rejects_oversized_ciphertext() {
 #[should_panic(expected: 'BAD_PAYLOAD_SIZE')]
 fn privacy_invoke_rejects_missing_ciphertext_chunk() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -766,7 +797,7 @@ fn privacy_invoke_rejects_missing_ciphertext_chunk() {
 #[should_panic(expected: 'BAD_PAYLOAD_SIZE')]
 fn privacy_invoke_rejects_trailing_calldata() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
@@ -796,7 +827,7 @@ fn privacy_invoke_rejects_trailing_calldata() {
 #[should_panic(expected: 'LOCATOR_ALREADY_USED')]
 fn exact_message_replay_is_rejected() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111, 222];
     let calldata = make_calldata(7001, chunks.span());
@@ -817,7 +848,7 @@ fn exact_message_replay_is_rejected() {
 #[should_panic(expected: 'LOCATOR_ALREADY_USED')]
 fn reused_locator_with_different_ciphertext_is_rejected() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let first_chunks = array![111];
     let second_chunks = array![222];
@@ -851,7 +882,7 @@ fn reused_locator_with_different_ciphertext_is_rejected() {
 #[should_panic(expected: 'MESSAGE_NOT_FOUND')]
 fn get_message_rejects_unknown_locator() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     dispatcher.get_message(8001);
 }
@@ -863,7 +894,7 @@ fn get_message_rejects_unknown_locator() {
 #[should_panic(expected: 'MESSAGE_NOT_FOUND')]
 fn get_payload_chunk_rejects_unknown_locator() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     dispatcher.get_payload_chunk(8002, 0);
 }
@@ -875,7 +906,7 @@ fn get_payload_chunk_rejects_unknown_locator() {
 #[should_panic(expected: 'CHUNK_OOB')]
 fn get_payload_chunk_rejects_out_of_bounds_index() {
     let contract_address = deploy_contract();
-    let dispatcher = IVinssChannelHelperDispatcher { contract_address };
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 8003;
     let chunks = array![111, 222];

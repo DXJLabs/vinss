@@ -4,7 +4,7 @@
  *
  *   privacy_invoke(calldata) with calldata =
  *     [envelope_version, message_locator, payload_commitment,
- *      payload_chunk_count, ...ciphertext_chunks]
+ *      payload_chunk_count, ...ciphertext_chunks, open_note_id]
  *
  * The record intentionally carries no sender, recipient, reusable
  * conversation id, or plaintext kind/content — see messaging_types.cairo's
@@ -38,6 +38,11 @@ export async function sendMessage(
       "NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS is not set — see .env.local.example.",
     );
   }
+  if (!CONTRACTS.channelHelperOpenNoteToken) {
+    throw new Error(
+      "NEXT_PUBLIC_CHANNEL_HELPER_OPEN_NOTE_TOKEN is not set — see .env.local.example.",
+    );
+  }
 
   const actionLocator = generateActionLocator(channelKey);
   const ciphertextChunks = await encryptPayload(channelKey, payload);
@@ -49,14 +54,17 @@ export async function sendMessage(
     ciphertextChunks,
   );
 
-  // NOTE: no selector here. Confirmed against the real STRK20 Wallet API
-  // docs (strk20-by-example.org/starknet-wallet-api/private-defi): the
-  // wallet always calls the helper's `privacy_invoke` itself via the
-  // protocol's own INVOKE_SELECTOR — `calldata` is deserialized directly
-  // into that function's own parameters. Prepending
-  // hash.getSelectorFromName("privacy_invoke") (as this used to do) shifts
-  // every argument by one slot and is the actual cause of
-  // INVALID_REQUEST_PAYLOAD.
+  // No selector prepended — the STRK20 Wallet API calls the helper's
+  // `privacy_invoke` itself; `calldata` is deserialized directly into that
+  // function's own parameters (confirmed against starknet-js's
+  // WalletAccountV6 docs, "The invoke helper").
+  //
+  // VinssMessageHelper.privacy_invoke now follows the invoke-helper
+  // convention: the LAST felt is always the id of the open note to fill
+  // (`${openNoteIds[0]}`, substituted by the wallet), everything before it
+  // is the message envelope. The contract returns a single OpenNoteDeposit
+  // with amount 0 against `channelHelperOpenNoteToken` — no real value
+  // moves, this only satisfies the paired `transfer: "OPEN"` action below.
   const calldata = [
     ENVELOPE_VERSION,
     actionLocator,
@@ -65,25 +73,19 @@ export async function sendMessage(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // VinssChannelHelper.privacy_invoke (see store_message in
-  // vinss_channel_helper.cairo) always returns an empty
-  // Span<OpenNoteDeposit> — "Messaging does not request an ERC-20 deposit
-  // into an open note." Per strk20-by-example.org/starknet-wallet-api/
-  // private-defi ("The two actions") and .../helpers/privacy-invoke, a
-  // `transfer` with amount "OPEN" only makes sense when the invoke's
-  // calldata references the resulting slot via an
-  // `${openNoteIds[N]}` placeholder so the wallet knows what to credit
-  // into it. This calldata never contains that placeholder — there is
-  // nothing for an open note to receive — so pairing an unreferenced
-  // transfer:OPEN action with this invoke is itself the malformed
-  // request (that combination is what produced INVALID_REQUEST_PAYLOAD).
-  // A single `invoke` action, with no funds movement at all, matches the
-  // escrow helper's own zero-token-movement pattern in the docs.
   const debugActions = [
+    // Create the open note the invoke will fill (with amount 0):
+    {
+      type: "transfer" as const,
+      token: CONTRACTS.channelHelperOpenNoteToken,
+      amount: "OPEN" as const,
+      recipient: account.address,
+    },
+    // Store the message; last calldata felt is the open note id placeholder:
     {
       type: "invoke" as const,
       contract: CONTRACTS.channelHelper,
-      calldata,
+      calldata: [...calldata, "${openNoteIds[0]}"],
     },
   ];
 
@@ -93,10 +95,6 @@ export async function sendMessage(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
 
-    // The wallet extension's Error often carries extra fields (code, data,
-    // a nested `cause`, etc.) that aren't part of `.message`. Pull those
-    // out explicitly — generic "(UNKNOWN_ERROR)" messages are useless
-    // without them.
     const extra: Record<string, unknown> = {};
     if (err && typeof err === "object") {
       for (const key of Object.getOwnPropertyNames(err)) {

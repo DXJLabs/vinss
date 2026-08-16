@@ -26,6 +26,13 @@ export const CONTRACTS = {
   channelHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS ?? "",
   ),
+  // Must match the `open_note_token` constructor arg VinssMessageHelper was
+  // deployed with — the token the zero-amount OpenNoteDeposit is reported
+  // against. Only used to build the paired `transfer: "OPEN"` action; no
+  // real value ever moves.
+  channelHelperOpenNoteToken: normalizeAddress(
+    process.env.NEXT_PUBLIC_CHANNEL_HELPER_OPEN_NOTE_TOKEN ?? "",
+  ),
   offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? ""),
   privateEscrowHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",

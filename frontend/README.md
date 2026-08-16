@@ -26,7 +26,7 @@ privacy capability activated, and Sepolia STRK for gas.
 - `lib/starknet/` — wallet connection (`walletClient.ts`) and env-driven
   contract addresses (`constants.ts`).
 - `lib/vinss-sdk/` — one module per helper contract:
-  - `messaging.ts` → `VinssChannelHelper`
+  - `messaging.ts` → `VinssMessageHelper`
   - `offer.ts` → `VinssOffer` (includes `discoverOfferActions` for the
     Timeline's Refresh button)
   - `escrow.ts` → `VinssPrivateEscrowHelper` + `VinssPrivateEscrowSettlement`

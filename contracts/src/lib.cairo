@@ -4,7 +4,7 @@ pub mod messaging {
     pub mod timeline_payload_hash;
     pub mod messaging_types;
     pub mod messaging_validation;
-    pub mod vinss_channel_helper;
+    pub mod vinss_message_helper;
 }
 
 pub mod offers {

@@ -16,6 +16,7 @@ jobs:
       ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
       PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
       PRIVACY_POOL_ADDRESS: "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91"
+      OPEN_NOTE_TOKEN_ADDRESS: "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
 
     steps:
       - name: Checkout
@@ -104,12 +105,18 @@ jobs:
 
             echo "=== DEPLOY $NAME ==="
 
+            if [ "$NAME" = "VinssMessageHelper" ]; then
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS $OPEN_NOTE_TOKEN_ADDRESS"
+            else
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
+            fi
+
             DEPLOY_OUTPUT=$(sncast \
               --account vinss-deployer \
               deploy \
               --url "$STARKNET_RPC_URL" \
               --class-hash "$CLASS_HASH" \
-              --arguments "$PRIVACY_POOL_ADDRESS")
+              --arguments $DEPLOY_ARGS)
 
             echo "$DEPLOY_OUTPUT"
 
@@ -124,7 +131,7 @@ jobs:
           "
           }
 
-          deploy "VinssChannelHelper"
+          deploy "VinssMessageHelper"
           deploy "VinssOfferHelper"
           deploy "VinssClaimEscrow"
           deploy "VinssPrivateEscrowHelper"
