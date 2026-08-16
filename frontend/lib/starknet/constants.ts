@@ -3,25 +3,37 @@
 // See STRK20_INTEGRATION_PLAN.md §4 and contracts/README.md for current
 // Sepolia addresses.
 
+import { num } from "starknet";
+
 export const NETWORK = (process.env.NEXT_PUBLIC_STARKNET_NETWORK ??
   "sepolia") as "sepolia" | "mainnet";
 
+// Explorers and deploy output print addresses zero-padded to 64 hex digits
+// (e.g. 0x0173f5b0...), copy-pasted straight into .env.local. The STRK20
+// Wallet API validates every felt-typed field — including `contract` in an
+// `invoke` action — against ^0x(0|[a-fA-F1-9][a-fA-F0-9]{0,62})$ (see the
+// same pattern cited in vinss-sdk/envelope.ts toFelt): NO leading zero
+// digit is allowed. A zero-padded address fails that regex and the wallet
+// returns INVALID_REQUEST_PAYLOAD. calldata values already go through
+// toFelt() and come out normalized; these top-level addresses did not, so
+// normalize them once here for every consumer.
+function normalizeAddress(address: string): string {
+  return address ? num.toHex(address) : address;
+}
+
 export const CONTRACTS = {
-  privacyPool: process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? "",
-  channelHelper: process.env.NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS ?? "",
-  offerHelper: process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? "",
-  privateEscrowHelper:
+  privacyPool: normalizeAddress(process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? ""),
+  channelHelper: normalizeAddress(
+    process.env.NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS ?? "",
+  ),
+  offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? ""),
+  privateEscrowHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
-  privateEscrowSettlement:
+  ),
+  privateEscrowSettlement: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS ?? "",
-  claimEscrow: process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? "",
-  // TODO(belum diputuskan): token yang dipasangkan pada action `transfer`
-  // amount:"OPEN" untuk membuka slot zero-value note sebelum privacy_invoke
-  // (lihat strk20-by-example.org/starknet-wallet-api/private-defi, "The two
-  // actions"). Kemungkinan besar ini token STRK Sepolia, tapi belum
-  // dikonfirmasi ke pool/wallet test dapp — isi via env var di bawah.
-  zeroValueNoteToken:
-    process.env.NEXT_PUBLIC_ZERO_VALUE_NOTE_TOKEN_ADDRESS ?? "",
+  ),
+  claimEscrow: normalizeAddress(process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? ""),
 };
 
 export const RPC_URL =
