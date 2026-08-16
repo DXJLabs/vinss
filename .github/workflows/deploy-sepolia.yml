@@ -116,7 +116,7 @@ jobs:
               deploy \
               --url "$STARKNET_RPC_URL" \
               --class-hash "$CLASS_HASH" \
-              --arguments $DEPLOY_ARGS)
+              --arguments "$DEPLOY_ARGS")
 
             echo "$DEPLOY_OUTPUT"
 
