@@ -12,7 +12,7 @@
  * contract change (Opsi B), out of scope for this app-code-only plan.
  */
 
-import { CairoCustomEnum, hash, type WalletAccountV6 } from "starknet";
+import { CairoCustomEnum, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -58,7 +58,6 @@ export async function sendMessage(
   // every argument by one slot and is the actual cause of
   // INVALID_REQUEST_PAYLOAD.
   const calldata = [
-    hash.getSelectorFromName("privacy_invoke"),
     ENVELOPE_VERSION,
     actionLocator,
     payloadCommitment,
