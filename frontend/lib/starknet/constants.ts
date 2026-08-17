@@ -54,3 +54,9 @@ export const BACKEND_URL =
 // Capability must be detected via a version query, never a data call —
 // see references/concepts.md "least privilege".
 export const MIN_WALLET_API_VERSION = "0.10.3";
+
+// STRK token — same L2 address on Sepolia and mainnet (system pre-deploy),
+// but kept env-driven like every other contract here per project convention.
+export const STRK_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_STRK_ADDRESS ?? "",
+);

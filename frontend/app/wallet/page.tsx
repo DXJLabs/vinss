@@ -1,27 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
+import { getProvider } from "@/lib/starknet/walletClient";
+import { shield } from "@/lib/vinss-sdk/shield";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 
 /**
  * Shield / balance UI.
  *
- * Follows the gotchas in
- * .agents/skills/strk20-privacy-integration/references/wallet-api-route.md:
- *
  * - A deposit is TWO transactions (ERC-20 approve, then the private
- *   deposit) — the wallet prompts twice, so the UI names both steps rather
- *   than letting a "duplicate transaction" prompt surprise the user.
+ *   deposit) — the wallet prompts twice; named as two steps so it doesn't
+ *   read as a stuck/duplicate prompt.
  * - Freshly shielded notes mature ~10 blocks before they're spendable —
- *   shown as a wait state, not silently retried.
- * - The pool charges a flat per-operation fee — read live via
- *   `get_fee_amount`, never hardcode; not yet wired here (see TODO below).
+ *   tracked live against the chain head, not a fixed timer.
+ * - The pool charges a flat per-operation fee — not yet read live here
+ *   (TODO: wire `get_fee_amount` once exposed).
  * - `strk20Balances([])` is a balance READ gated behind wallet consent —
- *   never call it just to feature-detect (see walletClient.ts); it's fine
- *   to call it here because the user is explicitly asking to see balances.
+ *   only called on an explicit user press.
  */
+
+const MATURITY_BLOCKS = 10;
+
+type Step = "idle" | "submitting" | "maturing" | "done";
+
 export default function WalletPage() {
   const [session, setSession] = useState<VinssWalletSession | null>(null);
   const [balances, setBalances] = useState<{
@@ -31,10 +34,35 @@ export default function WalletPage() {
   const [loadingBalances, setLoadingBalances] = useState(false);
   const [shieldAmount, setShieldAmount] = useState("");
   const [shieldToken, setShieldToken] = useState("");
-  const [step, setStep] = useState<"idle" | "approving" | "depositing" | "maturing">(
-    "idle",
-  );
+  const [step, setStep] = useState<Step>("idle");
+  const [shieldedAtBlock, setShieldedAtBlock] = useState<number | null>(null);
+  const [currentBlock, setCurrentBlock] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll the chain head only while a note is maturing — stop as soon as it
+  // matures or the user leaves the page.
+  useEffect(() => {
+    if (step !== "maturing" || shieldedAtBlock === null) return;
+
+    const provider = getProvider();
+    pollRef.current = setInterval(async () => {
+      try {
+        const head = await provider.getBlockNumber();
+        setCurrentBlock(head);
+        if (head - shieldedAtBlock >= MATURITY_BLOCKS) {
+          setStep("done");
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch {
+        // Transient RPC hiccup — next tick retries, nothing to show the user.
+      }
+    }, 4000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [step, shieldedAtBlock]);
 
   async function loadBalances() {
     if (!session || !shieldToken.trim()) return;
@@ -66,24 +94,33 @@ export default function WalletPage() {
   async function handleShield() {
     if (!session || !shieldToken.trim() || !shieldAmount.trim()) return;
     setError(null);
+    setStep("submitting");
     try {
-      setStep("approving");
-      const anyAccount = session.account as unknown as {
-        shield: (params: { token: string; amount: string }) => Promise<{
-          transaction_hash: string;
-        }>;
-      };
-      setStep("depositing");
-      await anyAccount.shield({
-        token: shieldToken.trim(),
-        amount: shieldAmount.trim(),
-      });
+      const amount = BigInt(shieldAmount.trim());
+      await shield(session.account, amount, shieldToken.trim());
+
+      const provider = getProvider();
+      const head = await provider.getBlockNumber();
+      setShieldedAtBlock(head);
+      setCurrentBlock(head);
       setStep("maturing");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal shield.");
       setStep("idle");
     }
   }
+
+  function resetShield() {
+    setStep("idle");
+    setShieldedAtBlock(null);
+    setCurrentBlock(null);
+    setShieldAmount("");
+  }
+
+  const blocksLeft =
+    shieldedAtBlock !== null && currentBlock !== null
+      ? Math.max(0, MATURITY_BLOCKS - (currentBlock - shieldedAtBlock))
+      : MATURITY_BLOCKS;
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl px-6 py-16">
@@ -157,32 +194,60 @@ export default function WalletPage() {
             </p>
             <p className="mb-3 text-xs text-paper/40">
               Dua transaksi: approve ERC-20, lalu deposit privat. Wallet akan
-              minta tanda tangan dua kali — ini normal, bukan bug.
+              minta tanda tangan dua kali — ini normal, bukan bug. Ini juga
+              yang meregistrasi akunmu di pool: wajib sekali sebelum kirim
+              pesan/transfer privat apa pun.
             </p>
-            <div className="flex gap-2">
-              <input
-                value={shieldAmount}
-                onChange={(e) => setShieldAmount(e.target.value)}
-                placeholder="Jumlah"
-                disabled={step !== "idle"}
-                className="flex-1 border border-wire bg-transparent px-3 py-2 text-sm placeholder:text-paper/30 focus:border-signal disabled:opacity-40"
-              />
-              <button
-                onClick={handleShield}
-                disabled={step !== "idle" || !shieldToken.trim() || !shieldAmount.trim()}
-                className="border border-signal px-4 py-2 font-display text-xs uppercase tracking-widest text-signal hover:bg-signal hover:text-ink disabled:opacity-40"
-              >
-                {step === "idle" && "Shield"}
-                {step === "approving" && "Approve…"}
-                {step === "depositing" && "Deposit…"}
-                {step === "maturing" && "Menunggu ~10 block…"}
-              </button>
-            </div>
+
+            {step === "idle" && (
+              <div className="flex gap-2">
+                <input
+                  value={shieldAmount}
+                  onChange={(e) => setShieldAmount(e.target.value)}
+                  placeholder="Jumlah (raw units, mis. wei-STRK)"
+                  className="flex-1 border border-wire bg-transparent px-3 py-2 text-sm placeholder:text-paper/30 focus:border-signal"
+                />
+                <button
+                  onClick={handleShield}
+                  disabled={!shieldToken.trim() || !shieldAmount.trim()}
+                  className="border border-signal px-4 py-2 font-display text-xs uppercase tracking-widest text-signal hover:bg-signal hover:text-ink disabled:opacity-40"
+                >
+                  Shield
+                </button>
+              </div>
+            )}
+
+            {step === "submitting" && (
+              <div className="border border-wire px-4 py-3 text-xs text-paper/60">
+                Menunggu tanda tangan wallet (approve → deposit)…
+              </div>
+            )}
+
             {step === "maturing" && (
-              <p className="mt-3 text-xs text-amber">
-                Dana baru di-shield butuh ~10 block sebelum bisa dibelanjakan
-                (note maturity). Jangan langsung transfer dari saldo ini.
-              </p>
+              <div className="border border-amber/40 px-4 py-3">
+                <p className="text-xs text-amber">
+                  Deposit terkirim. Menunggu maturity: {blocksLeft} block lagi.
+                </p>
+                <p className="mt-1 text-[10px] text-paper/40">
+                  Jangan kirim pesan/transfer privat dari saldo ini sebelum
+                  matang — akan gagal.
+                </p>
+              </div>
+            )}
+
+            {step === "done" && (
+              <div className="border border-signal/40 px-4 py-3">
+                <p className="text-xs text-signal">
+                  Matang. Akun sudah teregistrasi di pool — silakan lanjut ke
+                  room untuk kirim pesan privat.
+                </p>
+                <button
+                  onClick={resetShield}
+                  className="mt-2 font-display text-[10px] uppercase tracking-widest text-paper/40 hover:text-paper"
+                >
+                  Shield lagi
+                </button>
+              </div>
             )}
           </section>
         </div>
