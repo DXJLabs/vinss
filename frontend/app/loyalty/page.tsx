@@ -93,9 +93,6 @@ export default function LoyaltyPage() {
               Rooms
             </Link>
             <span className="text-signal">Loyalty</span>
-            <Link href="/wallet" className="text-paper/45 hover:text-signal">
-              Wallet
-            </Link>
           </nav>
         </header>
 

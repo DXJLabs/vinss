@@ -123,10 +123,10 @@ export default function HomePage() {
               </Link>
 
               <Link
-                href="/wallet"
+                href="/loyalty"
                 className="inline-flex min-h-11 items-center justify-center border border-wire px-5 font-display text-xs uppercase tracking-[0.16em] text-paper/60 transition hover:border-paper/40 hover:text-paper"
               >
-                Wallet
+                Loyalty
               </Link>
             </div>
           </div>

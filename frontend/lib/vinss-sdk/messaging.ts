@@ -64,7 +64,7 @@ export async function sendMessage(
   // (`${openNoteIds[0]}`, substituted by the wallet), everything before it
   // is the message envelope. The contract returns a single OpenNoteDeposit
   // with amount 0 against `channelHelperOpenNoteToken` — no real value
-  // moves, this only satisfies the paired `transfer: "OPEN"` action below.
+  // is used as the VINSS messaging revenue token for the treasury OPEN note.
   const calldata = [
     ENVELOPE_VERSION,
     actionLocator,
@@ -73,19 +73,37 @@ export async function sendMessage(
     ...ciphertextChunks,
   ].map(toFelt);
 
+
+  const treasuryAddress =
+    process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!treasuryAddress) {
+    throw new Error(
+      "NEXT_PUBLIC_VINSS_TREASURY_ADDRESS is not configured",
+    );
+  }
+
   const debugActions = [
-    // Create the open note the invoke will fill (with amount 0):
+    {
+      type: "withdraw" as const,
+      token: CONTRACTS.channelHelperOpenNoteToken,
+      amount: "0x6f05b59d3b20000", // 0.5 STRK
+      recipient: CONTRACTS.channelHelper,
+    },
     {
       type: "transfer" as const,
       token: CONTRACTS.channelHelperOpenNoteToken,
       amount: "OPEN" as const,
-      recipient: account.address,
+      recipient: treasuryAddress,
     },
-    // Store the message; last calldata felt is the open note id placeholder:
     {
       type: "invoke" as const,
       contract: CONTRACTS.channelHelper,
-      calldata: [...calldata, "${openNoteIds[0]}"],
+      calldata: [
+        toFelt(calldata.length + 1),
+        ...calldata,
+        "${openNoteIds[0]}",
+      ],
     },
   ];
 
@@ -103,9 +121,29 @@ export async function sendMessage(
       }
     }
 
+    const rawError = JSON.stringify(
+      err,
+      (_key, value) => {
+        if (typeof value === "bigint") return value.toString();
+
+        if (value instanceof Error) {
+          return Object.fromEntries(
+            Object.getOwnPropertyNames(value).map((key) => [
+              key,
+              (value as unknown as Record<string, unknown>)[key],
+            ]),
+          );
+        }
+
+        return value;
+      },
+      2,
+    );
+
     console.error("[vinss-sdk] strk20InvokeTransaction failed", {
       message: msg,
       ...extra,
+      rawError,
       debugActions,
     });
 
@@ -114,7 +152,8 @@ export async function sendMessage(
         (Object.keys(extra).length
           ? ` | WALLET_ERROR_DETAIL=${JSON.stringify(extra)}`
           : "") +
-        ` | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}`,
+        ` | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}` +
+        ` | RAW_ERROR=${rawError}`,
     );
   }
 

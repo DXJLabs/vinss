@@ -10,6 +10,11 @@ use snforge_std::{
 };
 use starknet::ContractAddress;
 
+use crate::claim_escrow::test_mocks::mock_claim_erc20::{
+    IMockClaimERC20Dispatcher,
+    IMockClaimERC20DispatcherTrait,
+};
+
 use crate::messaging::messaging_interfaces::{
     IVinssMessageHelperDispatcher,
     IVinssMessageHelperDispatcherTrait,
@@ -32,7 +37,7 @@ use crate::utils::constants::{
 /// - one-time locator replay protection;
 /// - ciphertext storage and guarded reads;
 /// - minimal discovery event shape;
-/// - empty `OpenNoteDeposit` return.
+/// - private messaging revenue `OpenNoteDeposit` return.
 ///
 /// NOT PROVEN HERE:
 /// - `CreateEncNote(amount = 0)` construction by the official Privacy SDK;
@@ -44,7 +49,7 @@ use crate::utils::constants::{
 ///
 /// Those properties require separate SDK, prover, integration, and Sepolia E2E tests.
 const PRIVACY_POOL: felt252 = 0x123;
-const OPEN_NOTE_TOKEN: felt252 = 0x789;
+const MESSAGE_REVENUE: u128 = 500000000000000000_u128;
 const OTHER_CALLER: felt252 = 0x456;
 
 fn privacy_pool() -> ContractAddress {
@@ -55,21 +60,38 @@ fn other_caller() -> ContractAddress {
     OTHER_CALLER.try_into().unwrap()
 }
 
-fn deploy_contract() -> ContractAddress {
+fn deploy_contract() -> (ContractAddress, ContractAddress) {
+    let token_class = declare("MockClaimERC20")
+        .unwrap()
+        .contract_class();
+
+    let (token_address, _) = token_class
+        .deploy(@array![])
+        .unwrap();
+
     let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
 
     let constructor_calldata = array![
         PRIVACY_POOL,
-        OPEN_NOTE_TOKEN,
+        token_address.into(),
     ];
 
     let (contract_address, _) = contract
         .deploy(@constructor_calldata)
         .unwrap();
 
-    contract_address
+    let token = IMockClaimERC20Dispatcher {
+        contract_address: token_address,
+    };
+
+    token.mint(
+        contract_address,
+        MESSAGE_REVENUE.into(),
+    );
+
+    (contract_address, token_address)
 }
 
 /// Independent test-side implementation of the public message commitment.
@@ -175,7 +197,7 @@ fn make_sequential_chunks(count: u64) -> Array<felt252> {
 /// This address becomes the sole authorized caller of `privacy_invoke`.
 #[test]
 fn constructor_stores_privacy_pool() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     assert(
@@ -189,13 +211,21 @@ fn constructor_stores_privacy_pool() {
 /// A zero pool address would permanently break or weaken caller authorization.
 #[test]
 fn constructor_rejects_zero_privacy_pool() {
+    let token_class = declare("MockClaimERC20")
+        .unwrap()
+        .contract_class();
+
+    let (open_note_token, _) = token_class
+        .deploy(@array![])
+        .unwrap();
+
     let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
 
     let constructor_calldata = array![
         0,
-        OPEN_NOTE_TOKEN,
+        open_note_token.into(),
     ];
 
     match contract.deploy(@constructor_calldata) {
@@ -303,7 +333,7 @@ fn message_commitment_binds_envelope_version() {
 /// This is a Cairo unit/integration test and does not prove real Privacy Pool proof generation.
 #[test]
 fn privacy_pool_stores_encrypted_message() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 0x111;
@@ -332,12 +362,12 @@ fn privacy_pool_stores_encrypted_message() {
     let deposit = *deposits.at(0);
 
     assert(
-        deposit.token == OPEN_NOTE_TOKEN.try_into().unwrap(),
+        deposit.token == open_note_token,
         'bad deposit token',
     );
 
     assert(
-        deposit.amount == 0,
+        deposit.amount == MESSAGE_REVENUE,
         'deposit moved value',
     );
     assert(
@@ -382,7 +412,7 @@ fn privacy_pool_stores_encrypted_message() {
 /// The test also verifies that ciphertext chunks are not mixed between messages.
 #[test]
 fn different_locators_store_independent_messages() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let first_chunks = array![111];
@@ -416,7 +446,7 @@ fn different_locators_store_independent_messages() {
 /// The helper must not reject valid ciphertext based on plaintext-like assumptions.
 #[test]
 fn zero_valued_ciphertext_chunk_is_accepted() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 2001;
@@ -441,7 +471,7 @@ fn zero_valued_ciphertext_chunk_is_accepted() {
 /// This confirms the inclusive upper boundary of the storage and execution limit.
 #[test]
 fn maximum_ciphertext_boundary_is_accepted() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 3001;
@@ -460,12 +490,12 @@ fn maximum_ciphertext_boundary_is_accepted() {
     let deposit = *deposits.at(0);
 
     assert(
-        deposit.token == OPEN_NOTE_TOKEN.try_into().unwrap(),
+        deposit.token == open_note_token,
         'bad deposit token',
     );
 
     assert(
-        deposit.amount == 0,
+        deposit.amount == MESSAGE_REVENUE,
         'deposit moved value',
     );
 
@@ -489,7 +519,7 @@ fn maximum_ciphertext_boundary_is_accepted() {
 /// It guards against accidentally reintroducing conversation tags, event counters, or plaintext metadata.
 #[test]
 fn message_committed_event_has_minimal_shape() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 4001;
@@ -527,7 +557,7 @@ fn message_committed_event_has_minimal_shape() {
 #[test]
 #[should_panic(expected: 'NOT_PRIVACY_POOL')]
 fn privacy_invoke_rejects_non_pool_caller() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111];
@@ -551,7 +581,7 @@ fn privacy_invoke_rejects_non_pool_caller() {
 #[test]
 #[should_panic(expected: 'BAD_MESSAGE_DATA')]
 fn privacy_invoke_rejects_truncated_header() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -574,7 +604,7 @@ fn privacy_invoke_rejects_truncated_header() {
 #[test]
 #[should_panic(expected: 'BAD_ENVELOPE_VER')]
 fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -599,7 +629,7 @@ fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
 #[test]
 #[should_panic(expected: 'UNSUPPORTED_VER')]
 fn privacy_invoke_rejects_unsupported_version() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let unsupported_version: u8 =
@@ -627,7 +657,7 @@ fn privacy_invoke_rejects_unsupported_version() {
 #[test]
 #[should_panic(expected: 'ZERO_MSG_LOCATOR')]
 fn privacy_invoke_rejects_zero_message_locator() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111];
@@ -647,7 +677,7 @@ fn privacy_invoke_rejects_zero_message_locator() {
 #[test]
 #[should_panic(expected: 'ZERO_PAYLOAD_COMMIT')]
 fn privacy_invoke_rejects_zero_commitment() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -672,7 +702,7 @@ fn privacy_invoke_rejects_zero_commitment() {
 #[test]
 #[should_panic(expected: 'EMPTY_CIPHERTEXT')]
 fn privacy_invoke_rejects_empty_ciphertext() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -696,7 +726,7 @@ fn privacy_invoke_rejects_empty_ciphertext() {
 #[test]
 #[should_panic(expected: 'COMMITMENT_MISMATCH')]
 fn privacy_invoke_rejects_invalid_commitment() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -721,7 +751,7 @@ fn privacy_invoke_rejects_invalid_commitment() {
 #[test]
 #[should_panic(expected: 'BAD_CHUNK_COUNT')]
 fn privacy_invoke_rejects_chunk_count_above_u64() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -745,7 +775,7 @@ fn privacy_invoke_rejects_chunk_count_above_u64() {
 #[test]
 #[should_panic(expected: 'TOO_MANY_CHUNKS')]
 fn privacy_invoke_rejects_oversized_ciphertext() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let oversized_count = MAX_PAYLOAD_CHUNKS + 1;
@@ -771,7 +801,7 @@ fn privacy_invoke_rejects_oversized_ciphertext() {
 #[test]
 #[should_panic(expected: 'BAD_PAYLOAD_SIZE')]
 fn privacy_invoke_rejects_missing_ciphertext_chunk() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -796,7 +826,7 @@ fn privacy_invoke_rejects_missing_ciphertext_chunk() {
 #[test]
 #[should_panic(expected: 'BAD_PAYLOAD_SIZE')]
 fn privacy_invoke_rejects_trailing_calldata() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let calldata = array![
@@ -826,7 +856,7 @@ fn privacy_invoke_rejects_trailing_calldata() {
 #[test]
 #[should_panic(expected: 'LOCATOR_ALREADY_USED')]
 fn exact_message_replay_is_rejected() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let chunks = array![111, 222];
@@ -847,7 +877,7 @@ fn exact_message_replay_is_rejected() {
 #[test]
 #[should_panic(expected: 'LOCATOR_ALREADY_USED')]
 fn reused_locator_with_different_ciphertext_is_rejected() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let first_chunks = array![111];
@@ -881,7 +911,7 @@ fn reused_locator_with_different_ciphertext_is_rejected() {
 #[test]
 #[should_panic(expected: 'MESSAGE_NOT_FOUND')]
 fn get_message_rejects_unknown_locator() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     dispatcher.get_message(8001);
@@ -893,7 +923,7 @@ fn get_message_rejects_unknown_locator() {
 #[test]
 #[should_panic(expected: 'MESSAGE_NOT_FOUND')]
 fn get_payload_chunk_rejects_unknown_locator() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     dispatcher.get_payload_chunk(8002, 0);
@@ -905,7 +935,7 @@ fn get_payload_chunk_rejects_unknown_locator() {
 #[test]
 #[should_panic(expected: 'CHUNK_OOB')]
 fn get_payload_chunk_rejects_out_of_bounds_index() {
-    let contract_address = deploy_contract();
+    let (contract_address, open_note_token) = deploy_contract();
     let dispatcher = IVinssMessageHelperDispatcher { contract_address };
 
     let message_locator = 8003;

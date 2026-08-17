@@ -9,6 +9,10 @@ pub mod VinssMessageHelper {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
+    use openzeppelin_token::erc20::interface::{
+        IERC20Dispatcher,
+        IERC20DispatcherTrait,
+    };
 
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
     use crate::messaging::messaging_events::MessageCommitted;
@@ -25,9 +29,9 @@ pub mod VinssMessageHelper {
         privacy_pool: ContractAddress,
 
         /// Token reported on the zero-amount `OpenNoteDeposit` this helper
-        /// returns to satisfy the STRK20 Wallet API invoke-helper convention.
-        /// Messaging moves no value; this exists only so the paired
-        /// `transfer: "OPEN"` action has a token to be created against.
+        /// returns as VINSS private messaging revenue through an OPEN note.
+        /// Messaging charges a configured STRK revenue amount; the paired
+        /// `transfer: "OPEN"` action creates the private treasury note.
         open_note_token: ContractAddress,
 
         /// Public structural record indexed by a one-time message locator.
@@ -100,10 +104,10 @@ pub mod VinssMessageHelper {
         /// 4... ciphertext_chunks
         /// last. open_note_id
         ///
-        /// Messaging moves no real value, so the returned deposit always
-        /// carries `amount: 0` against `open_note_token` — enough to
-        /// satisfy the paired `transfer: "OPEN"` action without moving
-        /// funds.
+        /// Messaging charges VINSS revenue, so the returned deposit
+        /// carries the non-zero revenue amount against `open_note_token` to
+        /// satisfy the paired `transfer: "OPEN"` action and fund the
+        /// VINSS treasury private note.
         fn privacy_invoke(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -126,13 +130,30 @@ pub mod VinssMessageHelper {
 
             self.store_message(message_calldata);
 
-            let deposit = OpenNoteDeposit {
-                note_id: open_note_id,
-                token: self.open_note_token.read(),
-                amount: 0_u128,
+            // VINSS private messaging revenue: 0.5 STRK.
+            let revenue_amount: u128 = 500000000000000000_u128;
+            let revenue_token = self.open_note_token.read();
+
+            let erc20 = IERC20Dispatcher {
+                contract_address: revenue_token,
             };
 
-            array![deposit].span()
+            assert(
+                erc20.approve(
+                    spender: expected_privacy_pool,
+                    amount: revenue_amount.into(),
+                ),
+                'APPROVE_FAILED',
+            );
+
+            [
+                OpenNoteDeposit {
+                    note_id: open_note_id,
+                    token: revenue_token,
+                    amount: revenue_amount,
+                },
+            ]
+                .span()
         }
 
         fn get_privacy_pool(
