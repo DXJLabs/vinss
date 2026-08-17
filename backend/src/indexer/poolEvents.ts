@@ -21,7 +21,7 @@ function getProvider(): RpcProvider {
 }
 
 const CONTRACT_BY_KIND: Record<DiscoverKind, string> = {
-  message: config.contracts.channelHelper,
+  message: config.contracts.messageHelper,
   offer: config.contracts.offerHelper,
   escrow: config.contracts.privateEscrowHelper,
 };

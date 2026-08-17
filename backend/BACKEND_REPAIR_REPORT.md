@@ -12,7 +12,7 @@
 ## Deliberately not changed
 
 - Privacy Pool contract.
-- Channel Helper contract.
+- Message Helper contract.
 - Public channel identifiers.
 - Encryption envelope format.
 

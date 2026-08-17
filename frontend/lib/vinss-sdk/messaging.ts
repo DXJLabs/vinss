@@ -33,14 +33,14 @@ export async function sendMessage(
   channelKey: ChannelKey,
   payload: MessagePayload,
 ): Promise<SendActionResult> {
-  if (!CONTRACTS.channelHelper) {
+  if (!CONTRACTS.messageHelper) {
     throw new Error(
-      "NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS is not set — see .env.local.example.",
+      "NEXT_PUBLIC_MESSAGE_HELPER_ADDRESS is not set — see .env.local.example.",
     );
   }
-  if (!CONTRACTS.channelHelperOpenNoteToken) {
+  if (!CONTRACTS.messageHelperOpenNoteToken) {
     throw new Error(
-      "NEXT_PUBLIC_CHANNEL_HELPER_OPEN_NOTE_TOKEN is not set — see .env.local.example.",
+      "NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN is not set — see .env.local.example.",
     );
   }
 
@@ -63,7 +63,7 @@ export async function sendMessage(
   // convention: the LAST felt is always the id of the open note to fill
   // (`${openNoteIds[0]}`, substituted by the wallet), everything before it
   // is the message envelope. The contract returns a single OpenNoteDeposit
-  // with amount 0 against `channelHelperOpenNoteToken` — no real value
+  // with 0.5 STRK against `messageHelperOpenNoteToken` as VINSS messaging revenue
   // is used as the VINSS messaging revenue token for the treasury OPEN note.
   const calldata = [
     ENVELOPE_VERSION,
@@ -86,19 +86,19 @@ export async function sendMessage(
   const debugActions = [
     {
       type: "withdraw" as const,
-      token: CONTRACTS.channelHelperOpenNoteToken,
+      token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "0x6f05b59d3b20000", // 0.5 STRK
-      recipient: CONTRACTS.channelHelper,
+      recipient: CONTRACTS.messageHelper,
     },
     {
       type: "transfer" as const,
-      token: CONTRACTS.channelHelperOpenNoteToken,
+      token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "OPEN" as const,
       recipient: treasuryAddress,
     },
     {
       type: "invoke" as const,
-      contract: CONTRACTS.channelHelper,
+      contract: CONTRACTS.messageHelper,
       calldata: [
         toFelt(calldata.length + 1),
         ...calldata,

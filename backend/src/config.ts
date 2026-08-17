@@ -17,7 +17,7 @@ export const config = {
   network: (process.env.STARKNET_NETWORK ?? "sepolia") as "sepolia" | "mainnet",
   contracts: {
     privacyPool: process.env.PRIVACY_POOL_ADDRESS ?? "",
-    channelHelper: process.env.CHANNEL_HELPER_ADDRESS ?? "",
+    messageHelper: process.env.MESSAGE_HELPER_ADDRESS ?? "",
     offerHelper: process.env.OFFER_HELPER_ADDRESS ?? "",
     privateEscrowHelper: process.env.PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
     privateEscrowSettlement:

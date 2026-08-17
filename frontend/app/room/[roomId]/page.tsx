@@ -51,7 +51,7 @@ function humanizeError(err: unknown, fallback: string): string {
   if (
     raw.includes("NEXT_PUBLIC_") ||
     raw.includes(".env") ||
-    raw.includes("channelHelper")
+    raw.includes("messageHelper")
   ) {
     return "Private messaging is temporarily unavailable. Please try again in a moment.";
   }

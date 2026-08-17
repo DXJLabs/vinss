@@ -23,15 +23,15 @@ function normalizeAddress(address: string): string {
 
 export const CONTRACTS = {
   privacyPool: normalizeAddress(process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? ""),
-  channelHelper: normalizeAddress(
-    process.env.NEXT_PUBLIC_CHANNEL_HELPER_ADDRESS ?? "",
+  messageHelper: normalizeAddress(
+    process.env.NEXT_PUBLIC_MESSAGE_HELPER_ADDRESS ?? "",
   ),
   // Must match the `open_note_token` constructor arg VinssMessageHelper was
   // deployed with — the token the zero-amount OpenNoteDeposit is reported
   // against. Only used to build the paired `transfer: "OPEN"` action; no
   // real value ever moves.
-  channelHelperOpenNoteToken: normalizeAddress(
-    process.env.NEXT_PUBLIC_CHANNEL_HELPER_OPEN_NOTE_TOKEN ?? "",
+  messageHelperOpenNoteToken: normalizeAddress(
+    process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ?? "",
   ),
   offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? ""),
   privateEscrowHelper: normalizeAddress(
