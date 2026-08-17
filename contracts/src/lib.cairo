@@ -21,6 +21,11 @@ pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time
 
 
 pub mod claim_escrow {
+    #[cfg(test)]
+    pub mod test_mocks {
+        pub mod mock_claim_erc20;
+    }
+
     pub mod claim_escrow_commitments;
     pub mod claim_escrow_errors;
     pub mod claim_escrow_events;
@@ -46,3 +51,6 @@ pub mod private_escrow_settlement {
     pub mod private_escrow_settlement_types;
     pub mod vinss_private_escrow_settlement;
 }
+
+#[cfg(test)]
+mod tests;
