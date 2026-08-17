@@ -21,6 +21,7 @@ import { deriveChannelKeyFromRoomSecret } from "@/lib/vinss-sdk/channelKey";
 import type { MessagePayload, OfferActionPayload } from "@/lib/vinss-sdk/types";
 import { BACKEND_URL } from "@/lib/starknet/constants";
 import { AgentPanel } from "@/components/AgentPanel";
+import type { AgentProposal } from "@/lib/agent";
 import { FeeBreakdown } from "@/components/FeeBreakdown";
 import { createInviteToken } from "@/lib/vinss-sdk/invite";
 
@@ -93,6 +94,17 @@ export default function DealRoomPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
 
+  const [agentOfferDraft, setAgentOfferDraft] = useState<
+    Extract<
+      AgentProposal,
+      { type: "draft_offer" | "draft_counter_offer" }
+    > | null
+  >(null);
+
+  const [agentEscrowDraft, setAgentEscrowDraft] = useState<
+    Extract<AgentProposal, { type: "prepare_escrow" }> | null
+  >(null);
+
 
   useEffect(() => {
     const r = loadRoom(params.roomId);
@@ -145,6 +157,32 @@ export default function DealRoomPage() {
     }
 
     await copyInviteLink();
+  }
+
+  async function handleAgentProposal(
+    proposal: AgentProposal,
+  ) {
+    switch (proposal.type) {
+      case "draft_message":
+        setDraft(proposal.payload.body);
+        setTab("timeline");
+        return;
+
+      case "draft_offer":
+      case "draft_counter_offer":
+        setAgentOfferDraft(proposal);
+        setTab("offer");
+        return;
+
+      case "prepare_escrow":
+        setAgentEscrowDraft(proposal);
+        setTab("escrow");
+        return;
+
+      case "review_settlement":
+        setTab("escrow");
+        return;
+    }
   }
 
   async function handleSendMessage() {
@@ -383,7 +421,13 @@ export default function DealRoomPage() {
       <div className="mb-6">
         <AgentPanel
           roomLabel={room?.label}
-          timeline={entries.map((entry) => ({ kind: entry.kind, summary: entry.summary, sentAt: entry.sentAt }))}
+          timeline={entries.map((entry) => ({
+            kind: entry.kind,
+            summary: entry.summary,
+            sentAt: entry.sentAt,
+            actionLocator: entry.actionLocator,
+          }))}
+          onApproveProposal={handleAgentProposal}
         />
       </div>
 
@@ -562,6 +606,7 @@ export default function DealRoomPage() {
           setBusy={setBusy}
           setError={setError}
           busy={busy}
+          agentDraft={agentOfferDraft}
         />
       )}
 
@@ -573,6 +618,7 @@ export default function DealRoomPage() {
           setBusy={setBusy}
           setError={setError}
           busy={busy}
+          agentDraft={agentEscrowDraft}
         />
       )}
 
@@ -676,6 +722,7 @@ function OfferPanel({
   busy,
   setBusy,
   setError,
+  agentDraft,
 }: {
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
@@ -683,10 +730,22 @@ function OfferPanel({
   busy: boolean;
   setBusy: (v: boolean) => void;
   setError: (v: string | null) => void;
+  agentDraft?: Extract<
+    AgentProposal,
+    { type: "draft_offer" | "draft_counter_offer" }
+  > | null;
 }) {
   const [asset, setAsset] = useState("");
   const [amount, setAmount] = useState("");
   const [terms, setTerms] = useState("");
+
+  useEffect(() => {
+    if (!agentDraft) return;
+
+    setAsset(agentDraft.payload.asset);
+    setAmount(agentDraft.payload.amount);
+    setTerms(agentDraft.payload.paymentTerms);
+  }, [agentDraft]);
 
   async function handleCreateOffer() {
     if (!session || !channelKey || !asset.trim() || !amount.trim()) return;
@@ -869,6 +928,7 @@ function EscrowPanel({
   busy,
   setBusy,
   setError,
+  agentDraft,
 }: {
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
@@ -876,11 +936,29 @@ function EscrowPanel({
   busy: boolean;
   setBusy: (v: boolean) => void;
   setError: (v: string | null) => void;
+  agentDraft?: Extract<
+    AgentProposal,
+    { type: "prepare_escrow" }
+  > | null;
 }) {
   const [dealOfferLocator, setDealOfferLocator] = useState("");
   const [token, setToken] = useState("");
   const [amount, setAmount] = useState("");
   const [refundHours, setRefundHours] = useState("24");
+
+  useEffect(() => {
+    if (!agentDraft) return;
+
+    if (agentDraft.payload.dealOfferLocator) {
+      setDealOfferLocator(
+        agentDraft.payload.dealOfferLocator,
+      );
+    }
+
+    if (agentDraft.payload.refundHours) {
+      setRefundHours(agentDraft.payload.refundHours);
+    }
+  }, [agentDraft]);
   const [agreedCustodyCommitment, setAgreedCustodyCommitment] = useState<bigint | null>(null);
   const [lastSecrets, setLastSecrets] = useState<{
     custodyCommitment: bigint;
