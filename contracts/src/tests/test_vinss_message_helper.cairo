@@ -50,6 +50,7 @@ use crate::utils::constants::{
 /// Those properties require separate SDK, prover, integration, and Sepolia E2E tests.
 const PRIVACY_POOL: felt252 = 0x123;
 const MESSAGE_REVENUE: u128 = 500000000000000000_u128;
+const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
 const OTHER_CALLER: felt252 = 0x456;
 
 fn privacy_pool() -> ContractAddress {
@@ -165,11 +166,14 @@ fn make_calldata(
     message_locator: felt252,
     chunks: Span<felt252>,
 ) -> Array<felt252> {
-    make_calldata_with_version(
+    let mut calldata = make_calldata_with_version(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         message_locator,
         chunks,
-    )
+    );
+
+    calldata.append(TEST_OPEN_NOTE_ID);
+    calldata
 }
 
 fn make_sequential_chunks(count: u64) -> Array<felt252> {
@@ -588,6 +592,7 @@ fn privacy_invoke_rejects_truncated_header() {
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6001,
         1,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -613,6 +618,7 @@ fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
         1,
         1,
         111,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -641,6 +647,7 @@ fn privacy_invoke_rejects_unsupported_version() {
         1,
         1,
         111,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -686,6 +693,7 @@ fn privacy_invoke_rejects_zero_commitment() {
         0,
         1,
         111,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -710,6 +718,7 @@ fn privacy_invoke_rejects_empty_ciphertext() {
         6006,
         1,
         0,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -735,6 +744,7 @@ fn privacy_invoke_rejects_invalid_commitment() {
         1,
         1,
         111,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -759,6 +769,7 @@ fn privacy_invoke_rejects_chunk_count_above_u64() {
         6008,
         1,
         0x10000000000000000,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -785,6 +796,7 @@ fn privacy_invoke_rejects_oversized_ciphertext() {
         6009,
         1,
         oversized_count.into(),
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -810,6 +822,7 @@ fn privacy_invoke_rejects_missing_ciphertext_chunk() {
         1,
         2,
         111,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
@@ -836,6 +849,7 @@ fn privacy_invoke_rejects_trailing_calldata() {
         1,
         111,
         222,
+        TEST_OPEN_NOTE_ID,
     ];
 
     start_cheat_caller_address(
