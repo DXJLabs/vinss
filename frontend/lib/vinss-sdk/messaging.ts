@@ -3,8 +3,9 @@
  * messaging_types.cairo exactly:
  *
  *   privacy_invoke(calldata) with calldata =
- *     [envelope_version, message_locator, payload_commitment,
- *      payload_chunk_count, ...ciphertext_chunks, open_note_id]
+ *     [envelope_version, message_locator, sender_tag, recipient_tag,
+ *      payload_commitment, payload_chunk_count,
+ *      ...ciphertext_chunks, open_note_id]
  *
  * The record intentionally carries no sender, recipient, reusable
  * conversation id, or plaintext kind/content — see messaging_types.cairo's
@@ -15,23 +16,26 @@
 import { CairoCustomEnum, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
-  commitPayload,
   encryptPayload,
   decryptPayload,
   generateActionLocator,
-  ENVELOPE_VERSION,
   toFelt,
   type ChannelKey,
 } from "./envelope";
+import {
+  GROUP_RECIPIENT_IDENTITY,
+  MESSAGE_ENVELOPE_VERSION,
+  commitMessagePayloadV2,
+  deriveMessageRoutingTag,
+  type MessageRoute,
+} from "./messageRouting";
 import type { MessagePayload, SendActionResult } from "./types";
-
-const MESSAGE_COMMITMENT_DOMAIN = "VINSS_MSG_COMMIT_V1"; // must match
-// contracts/utils/constants.cairo::VINSS_MESSAGE_COMMITMENT_DOMAIN.
 
 export async function sendMessage(
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: MessagePayload,
+  route?: MessageRoute,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.messageHelper) {
     throw new Error(
@@ -44,13 +48,37 @@ export async function sendMessage(
     );
   }
 
-  const actionLocator = generateActionLocator(channelKey);
-  const ciphertextChunks = await encryptPayload(channelKey, payload);
-  const payloadCommitment = commitPayload(
-    MESSAGE_COMMITMENT_DOMAIN,
-    ENVELOPE_VERSION,
+  const encryptionKey = route?.encryptionKey ?? channelKey;
+  const routingKey = route?.routingKey ?? encryptionKey;
+  const recipientIdentity =
+    route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
+
+  const actionLocator = generateActionLocator(encryptionKey);
+
+  const [senderTag, recipientTag] = await Promise.all([
+    deriveMessageRoutingTag(
+      routingKey,
+      "sender",
+      account.address,
+      actionLocator,
+    ),
+    deriveMessageRoutingTag(
+      routingKey,
+      "recipient",
+      recipientIdentity,
+      actionLocator,
+    ),
+  ]);
+
+  const ciphertextChunks = await encryptPayload(
+    encryptionKey,
+    payload,
+  );
+
+  const payloadCommitment = commitMessagePayloadV2(
     actionLocator,
-    ciphertextChunks.length,
+    senderTag,
+    recipientTag,
     ciphertextChunks,
   );
 
@@ -66,8 +94,10 @@ export async function sendMessage(
   // with 0.5 STRK against `messageHelperOpenNoteToken` as VINSS messaging revenue
   // is used as the VINSS messaging revenue token for the treasury OPEN note.
   const calldata = [
-    ENVELOPE_VERSION,
+    MESSAGE_ENVELOPE_VERSION,
     actionLocator,
+    senderTag,
+    recipientTag,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,
@@ -171,9 +201,12 @@ export async function sendMessage(
 export async function discoverMessages(
   backendUrl: string,
   channelKey: ChannelKey,
+  route?: MessageRoute,
 ): Promise<Array<{
   actionLocator: string;
   payloadCommitment: string;
+  senderTag: string;
+  recipientTag: string;
   message: MessagePayload;
   blockNumber: number;
   transactionHash: string;
@@ -188,29 +221,61 @@ export async function discoverMessages(
   const records = (await res.json()) as Array<{
     actionLocator: string;
     payloadCommitment: string;
+    senderTag?: string;
+    recipientTag?: string;
     ciphertextChunks: string[];
     blockNumber: number;
     transactionHash: string;
   }>;
 
+  const encryptionKey = route?.encryptionKey ?? channelKey;
+  const routingKey = route?.routingKey ?? encryptionKey;
+  const recipientIdentity =
+    route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
+
   const decrypted = [];
+
   for (const record of records) {
     try {
+      // V2 records must carry the opaque routing tags emitted by
+      // MessageCommitted.
+      if (!record.senderTag || !record.recipientTag) {
+        continue;
+      }
+
+      const actionLocator = BigInt(record.actionLocator);
+
+      const expectedRecipientTag =
+        await deriveMessageRoutingTag(
+          routingKey,
+          "recipient",
+          recipientIdentity,
+          actionLocator,
+        );
+
+      if (BigInt(record.recipientTag) !== expectedRecipientTag) {
+        continue;
+      }
+
       const message = (await decryptPayload(
-        channelKey,
+        encryptionKey,
         record.ciphertextChunks.map(BigInt),
       )) as MessagePayload;
+
       decrypted.push({
         actionLocator: record.actionLocator,
         payloadCommitment: record.payloadCommitment,
+        senderTag: record.senderTag,
+        recipientTag: record.recipientTag,
         message,
         blockNumber: record.blockNumber,
         transactionHash: record.transactionHash,
       });
     } catch {
-      // Unrelated channel / invalid ciphertext: discard locally.
+      // Not addressed to this routing context / invalid ciphertext.
     }
   }
+
   return decrypted;
 }
 

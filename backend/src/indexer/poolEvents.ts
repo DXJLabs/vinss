@@ -40,6 +40,8 @@ const EVENT_KEY_BY_KIND: Record<DiscoverKind, string> = {
 export interface RawCommittedAction {
   actionLocator: string; // hex felt
   payloadCommitment: string; // hex felt
+  senderTag?: string; // Messaging V2 only
+  recipientTag?: string; // Messaging V2 only
   blockNumber: number;
   transactionHash: string;
 }
@@ -76,10 +78,28 @@ export async function scanCommittedActions(
     // keys[0] = event selector, keys[1] = the #[key] felt (the locator).
     const actionLocator = event.keys[1];
     const payloadCommitment = event.data[0];
+
     if (!actionLocator || !payloadCommitment) continue;
+
+    const senderTag =
+      kind === "message" ? event.data[1] : undefined;
+
+    const recipientTag =
+      kind === "message" ? event.data[2] : undefined;
+
+    // Messaging V2 requires both routing tags.
+    if (
+      kind === "message" &&
+      (!senderTag || !recipientTag)
+    ) {
+      continue;
+    }
+
     results.push({
       actionLocator,
       payloadCommitment,
+      senderTag,
+      recipientTag,
       blockNumber: event.block_number ?? 0,
       transactionHash: event.transaction_hash,
     });
@@ -111,8 +131,9 @@ export async function fetchCiphertextChunks(
     entrypoint: getterByKind[kind],
     calldata: [actionLocator],
   });
-  // Record layout matches *ActionRecord structs: [envelope_version,
-  // locator, payload_commitment, payload_chunk_count].
+  // The payload chunk count remains the final field for every action
+  // record. Messaging V2 additionally stores sender_tag + recipient_tag
+  // before payload_commitment.
   const chunkCount = Number(BigInt(record[record.length - 1] ?? "0"));
 
   const chunks: bigint[] = [];

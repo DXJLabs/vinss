@@ -48,6 +48,8 @@ discoverRouter.post("/discover", async (req: Request, res: Response) => {
         return {
           actionLocator: action.actionLocator,
           payloadCommitment: action.payloadCommitment,
+          senderTag: action.senderTag,
+          recipientTag: action.recipientTag,
           ciphertextChunks: ciphertextChunks.map(String),
           blockNumber: action.blockNumber,
           transactionHash: action.transactionHash,

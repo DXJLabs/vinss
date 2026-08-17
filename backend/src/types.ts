@@ -16,6 +16,8 @@ export interface DiscoverRequest {
 export interface DiscoveredAction<TPayload = unknown> {
   actionLocator: string;
   payloadCommitment: string;
+  senderTag?: string;
+  recipientTag?: string;
   ciphertextChunks: string[];
   blockNumber: number;
   transactionHash: string;
