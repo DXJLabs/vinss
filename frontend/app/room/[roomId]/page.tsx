@@ -157,19 +157,30 @@ export default function DealRoomPage() {
     };
   }, [room, session]);
 
-  function createInviteLink() {
+  async function createInviteLink() {
     if (!room) return;
 
-    const token = createInviteToken({
-      v: 1,
-      roomId: room.id,
-      roomSecret: room.roomSecret,
-      label: room.label,
-    });
+    setError(null);
 
-    const link = `${window.location.origin}/invite/${token}`;
-    setInviteLink(link);
-    setInviteCopied(false);
+    try {
+      const invite = await createInviteToken({
+        roomId: room.id,
+        roomSecret: room.roomSecret,
+        label: room.label,
+      });
+
+      // The AES key lives only in the URL fragment. Browsers do not send
+      // fragments as part of HTTP requests to Vercel/backend.
+      const link =
+        `${window.location.origin}/invite/${invite.token}` +
+        `#k=${invite.key}`;
+
+      setInviteLink(link);
+      setInviteCopied(false);
+    } catch (err) {
+      console.error("[VINSS INVITE CREATE]", err);
+      setError("Could not create the private invitation.");
+    }
   }
 
   async function copyInviteLink() {
@@ -625,7 +636,8 @@ export default function DealRoomPage() {
               </div>
 
               <p className="mt-4 border-t border-wire/60 pt-3 text-[10px] leading-relaxed text-paper/25">
-                Anyone with this link can join this private room. Share it
+                This encrypted invitation expires after 30 minutes.
+                Anyone holding the complete link can use it, so share it
                 only with your intended counterparty.
               </p>
             </div>
