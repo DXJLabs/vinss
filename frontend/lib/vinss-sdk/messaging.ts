@@ -201,7 +201,7 @@ export async function sendMessage(
 export async function discoverMessages(
   backendUrl: string,
   channelKey: ChannelKey,
-  route?: MessageRoute,
+  route?: MessageRoute | MessageRoute[],
 ): Promise<Array<{
   actionLocator: string;
   payloadCommitment: string;
@@ -228,51 +228,82 @@ export async function discoverMessages(
     transactionHash: string;
   }>;
 
-  const encryptionKey = route?.encryptionKey ?? channelKey;
-  const routingKey = route?.routingKey ?? encryptionKey;
-  const recipientIdentity =
-    route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
+  const candidateRoutes: MessageRoute[] =
+    route == null
+      ? [
+          {
+            recipientIdentity: GROUP_RECIPIENT_IDENTITY,
+            encryptionKey: channelKey,
+            routingKey: channelKey,
+          },
+        ]
+      : Array.isArray(route)
+        ? route
+        : [route];
 
   const decrypted = [];
 
   for (const record of records) {
-    try {
-      // V2 records must carry the opaque routing tags emitted by
-      // MessageCommitted.
-      if (!record.senderTag || !record.recipientTag) {
-        continue;
+    if (!record.senderTag || !record.recipientTag) {
+      continue;
+    }
+
+    const actionLocator = BigInt(record.actionLocator);
+
+    for (const candidate of candidateRoutes) {
+      try {
+        const encryptionKey =
+          candidate.encryptionKey ?? channelKey;
+
+        const routingKey =
+          candidate.routingKey ?? encryptionKey;
+
+        const expectedRecipientTag =
+          await deriveMessageRoutingTag(
+            routingKey,
+            "recipient",
+            candidate.recipientIdentity,
+            actionLocator,
+          );
+
+        if (BigInt(record.recipientTag) !== expectedRecipientTag) {
+          continue;
+        }
+
+        const message = (await decryptPayload(
+          encryptionKey,
+          record.ciphertextChunks.map(BigInt),
+        )) as MessagePayload;
+
+        // Bind the encrypted sender identity back to the public opaque tag.
+        if (message.senderIdentity?.address) {
+          const expectedSenderTag =
+            await deriveMessageRoutingTag(
+              routingKey,
+              "sender",
+              message.senderIdentity.address,
+              actionLocator,
+            );
+
+          if (BigInt(record.senderTag) !== expectedSenderTag) {
+            continue;
+          }
+        }
+
+        decrypted.push({
+          actionLocator: record.actionLocator,
+          payloadCommitment: record.payloadCommitment,
+          senderTag: record.senderTag,
+          recipientTag: record.recipientTag,
+          message,
+          blockNumber: record.blockNumber,
+          transactionHash: record.transactionHash,
+        });
+
+        break;
+      } catch {
+        // Try the next private routing context.
       }
-
-      const actionLocator = BigInt(record.actionLocator);
-
-      const expectedRecipientTag =
-        await deriveMessageRoutingTag(
-          routingKey,
-          "recipient",
-          recipientIdentity,
-          actionLocator,
-        );
-
-      if (BigInt(record.recipientTag) !== expectedRecipientTag) {
-        continue;
-      }
-
-      const message = (await decryptPayload(
-        encryptionKey,
-        record.ciphertextChunks.map(BigInt),
-      )) as MessagePayload;
-
-      decrypted.push({
-        actionLocator: record.actionLocator,
-        payloadCommitment: record.payloadCommitment,
-        senderTag: record.senderTag,
-        recipientTag: record.recipientTag,
-        message,
-        blockNumber: record.blockNumber,
-        transactionHash: record.transactionHash,
-      });
-    } catch {
-      // Not addressed to this routing context / invalid ciphertext.
     }
   }
 

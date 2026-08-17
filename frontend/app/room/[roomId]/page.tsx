@@ -18,7 +18,14 @@ import {
   depositEscrow,
 } from "@/lib/vinss-sdk/escrow";
 import { deriveChannelKeyFromRoomSecret } from "@/lib/vinss-sdk/channelKey";
+import {
+  deriveDirectMessageKey,
+  getOrCreateMessagingIdentity,
+  type MessagingIdentity,
+  type RoomParticipant,
+} from "@/lib/vinss-sdk/participantKeys";
 import type { MessagePayload, OfferActionPayload } from "@/lib/vinss-sdk/types";
+import type { MessageRoute } from "@/lib/vinss-sdk/messageRouting";
 import { BACKEND_URL } from "@/lib/starknet/constants";
 import { AgentPanel } from "@/components/AgentPanel";
 import type { AgentProposal } from "@/lib/agent";
@@ -91,6 +98,16 @@ export default function DealRoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [room, setRoom] = useState<LocalRoom | null>(null);
   const [channelKey, setChannelKey] = useState<Uint8Array | null>(null);
+
+  const [messagingIdentity, setMessagingIdentity] =
+    useState<MessagingIdentity | null>(null);
+
+  const [participants, setParticipants] =
+    useState<RoomParticipant[]>([]);
+
+  const [messageTarget, setMessageTarget] =
+    useState<string>("group");
+
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
 
@@ -113,6 +130,32 @@ export default function DealRoomPage() {
       deriveChannelKeyFromRoomSecret(r.roomSecret).then(setChannelKey);
     }
   }, [params.roomId]);
+
+  useEffect(() => {
+    if (!room || !session) {
+      setMessagingIdentity(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    getOrCreateMessagingIdentity(
+      room.id,
+      session.account.address,
+    )
+      .then((identity) => {
+        if (!cancelled) {
+          setMessagingIdentity(identity);
+        }
+      })
+      .catch((err) => {
+        console.error("[VINSS MESSAGING IDENTITY]", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [room, session]);
 
   function createInviteLink() {
     if (!room) return;
@@ -186,16 +229,70 @@ export default function DealRoomPage() {
   }
 
   async function handleSendMessage() {
-    if (!session || !channelKey || !draft.trim()) return;
+    if (
+      !session ||
+      !room ||
+      !channelKey ||
+      !messagingIdentity ||
+      !draft.trim()
+    ) {
+      return;
+    }
+
     setBusy(true);
     setError(null);
+
     try {
+      let route: MessageRoute | undefined;
+      let recipientAddress: string | undefined;
+
+      if (messageTarget !== "group") {
+        const participant = participants.find(
+          (item) =>
+            item.address.toLowerCase() ===
+            messageTarget.toLowerCase(),
+        );
+
+        if (!participant) {
+          throw new Error(
+            "Direct recipient is not available in this room yet.",
+          );
+        }
+
+        const directKey = await deriveDirectMessageKey(
+          room.id,
+          messagingIdentity.privateKey,
+          participant.publicKey,
+        );
+
+        recipientAddress = participant.address;
+
+        route = {
+          recipientIdentity: participant.address,
+          encryptionKey: directKey,
+          routingKey: directKey,
+        };
+      }
+
       const payload: MessagePayload = {
         kind: "text",
+        scope: route ? "direct" : "group",
         body: draft.trim(),
+        senderIdentity: {
+          address: session.account.address,
+          messagingPublicKey: messagingIdentity.publicKey,
+        },
+        recipientAddress,
         sentAt: new Date().toISOString(),
       };
-      const result = await sendMessage(session.account, channelKey, payload);
+
+      const result = await sendMessage(
+        session.account,
+        channelKey,
+        payload,
+        route,
+      );
+
       setEntries((prev) => [
         {
           id: crypto.randomUUID(),
@@ -207,9 +304,12 @@ export default function DealRoomPage() {
         },
         ...prev,
       ]);
+
       setDraft("");
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
+      const raw =
+        err instanceof Error ? err.message : String(err);
+
       console.error("[VINSS SEND ERROR]", err);
       setError(raw || "Unknown send error");
     } finally {
@@ -219,45 +319,160 @@ export default function DealRoomPage() {
 
   async function handleRefresh() {
     if (!channelKey) return;
+
     setBusy(true);
     setError(null);
+
     try {
-      const [messages, offers] = await Promise.all([
-        discoverMessages(BACKEND_URL, channelKey).catch(() => []),
-        discoverOfferActions(BACKEND_URL, channelKey).catch(() => []),
-      ]);
+      // Pass 1: decrypt GROUP messages.
+      //
+      // Group messages are also the private participant-key exchange:
+      // sender wallet + messaging public key live inside ciphertext.
+      const groupMessages = await discoverMessages(
+        BACKEND_URL,
+        channelKey,
+      ).catch(() => []);
+
+      const participantMap = new Map<
+        string,
+        RoomParticipant
+      >();
+
+      for (const item of groupMessages) {
+        const sender = item.message.senderIdentity;
+
+        if (
+          !sender?.address ||
+          !sender.messagingPublicKey
+        ) {
+          continue;
+        }
+
+        if (
+          session &&
+          sender.address.toLowerCase() ===
+            session.account.address.toLowerCase()
+        ) {
+          continue;
+        }
+
+        participantMap.set(
+          sender.address.toLowerCase(),
+          {
+            address: sender.address,
+            publicKey: sender.messagingPublicKey,
+          },
+        );
+      }
+
+      const discoveredParticipants = [
+        ...participantMap.values(),
+      ];
+
+      setParticipants(discoveredParticipants);
+
+      // Pass 2: now that participant public keys are known from the
+      // encrypted group conversation, derive pairwise Alice<->Bob keys
+      // and discover messages addressed specifically to THIS wallet.
+      let directMessages: Awaited<
+        ReturnType<typeof discoverMessages>
+      > = [];
+
+      if (
+        room &&
+        session &&
+        messagingIdentity &&
+        discoveredParticipants.length > 0
+      ) {
+        const routes: MessageRoute[] = [];
+
+        for (const participant of discoveredParticipants) {
+          const directKey = await deriveDirectMessageKey(
+            room.id,
+            messagingIdentity.privateKey,
+            participant.publicKey,
+          );
+
+          routes.push({
+            // For receive-side matching the recipient is ME,
+            // not the peer.
+            recipientIdentity: session.account.address,
+            encryptionKey: directKey,
+            routingKey: directKey,
+          });
+        }
+
+        directMessages = await discoverMessages(
+          BACKEND_URL,
+          channelKey,
+          routes,
+        ).catch(() => []);
+      }
+
+      const messages = [
+        ...groupMessages,
+        ...directMessages,
+      ].filter(
+        (item, index, all) =>
+          all.findIndex(
+            (other) =>
+              other.actionLocator === item.actionLocator,
+          ) === index,
+      );
+
+      const offers = await discoverOfferActions(
+        BACKEND_URL,
+        channelKey,
+      ).catch(() => []);
 
       console.log("[VINSS DISCOVERY]", {
-        messages,
-        messagesIsArray: Array.isArray(messages),
+        groupMessages,
+        directMessages,
+        participants: discoveredParticipants,
         offers,
-        offersIsArray: Array.isArray(offers),
       });
 
-      const messageEntries: TimelineEntry[] = messages.map((m) => ({
-        id: crypto.randomUUID(),
-        kind: "message",
-        summary: m.message.body,
-        transactionHash: m.transactionHash,
-        actionLocator: m.actionLocator.replace(/^0x/, ""),
-        sentAt: m.message.sentAt,
-      }));
-      const offerEntries: TimelineEntry[] = offers.map((o) => ({
-        id: crypto.randomUUID(),
-        kind: "offer",
-        summary: `${o.action.kind} — ${o.action.amount} ${o.action.asset}`,
-        transactionHash: o.transactionHash,
-        actionLocator: o.actionLocator.replace(/^0x/, ""),
-        sentAt: new Date(o.blockNumber * 1000).toISOString(),
-      }));
+      const messageEntries: TimelineEntry[] =
+        messages.map((m) => ({
+          id: crypto.randomUUID(),
+          kind: "message",
+          summary: m.message.body,
+          transactionHash: m.transactionHash,
+          actionLocator:
+            m.actionLocator.replace(/^0x/, ""),
+          sentAt: m.message.sentAt,
+        }));
+
+      const offerEntries: TimelineEntry[] = offers.map(
+        (o) => ({
+          id: crypto.randomUUID(),
+          kind: "offer",
+          summary: `${o.action.kind} — ${o.action.amount} ${o.action.asset}`,
+          transactionHash: o.transactionHash,
+          actionLocator:
+            o.actionLocator.replace(/^0x/, ""),
+          sentAt: new Date(
+            o.blockNumber * 1000,
+          ).toISOString(),
+        }),
+      );
 
       setEntries((prev) => {
-        const seen = new Set(prev.map((e) => e.actionLocator));
-        const fresh = [...messageEntries, ...offerEntries].filter(
+        const seen = new Set(
+          prev.map((e) => e.actionLocator),
+        );
+
+        const fresh = [
+          ...messageEntries,
+          ...offerEntries,
+        ].filter(
           (e) => !seen.has(e.actionLocator),
         );
+
         return [...fresh, ...prev].sort(
-          (a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
+          (a, b) =>
+            new Date(b.sentAt).getTime() -
+            new Date(a.sentAt).getTime(),
         );
       });
     } catch (err) {
@@ -555,6 +770,33 @@ export default function DealRoomPage() {
 
           {/* MESSAGE COMPOSER */}
           <div className="border border-wire bg-vault/20 p-2">
+
+            <div className="mb-2 flex items-center gap-2 border-b border-wire/60 px-2 pb-2">
+              <span className="font-display text-[9px] uppercase tracking-widest text-paper/30">
+                To
+              </span>
+
+              <select
+                value={messageTarget}
+                onChange={(e) => setMessageTarget(e.target.value)}
+                disabled={!session || busy}
+                className="min-w-0 flex-1 bg-transparent text-xs text-paper/65 outline-none"
+              >
+                <option value="group">
+                  Group · everyone in this room
+                </option>
+
+                {participants.map((participant) => (
+                  <option
+                    key={participant.address}
+                    value={participant.address}
+                  >
+                    Direct · {participant.address.slice(0, 8)}…
+                    {participant.address.slice(-6)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="flex items-end gap-2">
 

@@ -15,9 +15,25 @@ export interface VinssSdkContext {
 
 export type MessageKind = "text" | "attachment_ref" | "system_note";
 
+export type MessageScope = "group" | "direct";
+
+export interface MessageSenderIdentity {
+  address: string;
+  messagingPublicKey: string;
+}
+
 export interface MessagePayload {
   kind: MessageKind;
+  scope?: MessageScope;
   body: string;
+
+  /**
+   * Encrypted application metadata.
+   * None of these fields are exposed by MessageHelper V2.
+   */
+  senderIdentity?: MessageSenderIdentity;
+  recipientAddress?: string;
+
   attachmentUri?: string;
   sentAt: string; // ISO timestamp, part of the encrypted payload by choice —
   // block timestamp is already public, but an app-level timestamp lets the

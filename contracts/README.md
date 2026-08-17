@@ -62,3 +62,23 @@ snforge test
 ```
 
 Do not push if build or tests fail.
+
+
+## Messaging V2 — Sepolia
+
+Recipient-bound VINSS Messaging V2.
+
+- Envelope version: `2`
+- Commitment domain: `VINSS_MSG_COMMIT_V2`
+- Sender routing: ephemeral `sender_tag`
+- Recipient routing: ephemeral `recipient_tag`
+- Messaging revenue: `0.5 STRK`
+- Contract tests: `30 passed, 0 failed`
+
+### VinssMessageHelper V2
+
+- Class hash: `0x24d79a702988adaba91e92f23f176ab25c1c242e65bb98417172169e535fbdb`
+- Contract: `0x00ae9bf8a22166fc766bd010a4e3bf763b0ab927b26b3d03fb09a8a01b47b6ce`
+- Deploy transaction: `0x006d1c41960e65f0707731361046e6a0f4a82a294082d29f2973004617757a2b`
+
+V1 remains preserved separately as the known-working pre-V2 E2E backup.
