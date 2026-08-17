@@ -99,9 +99,11 @@ pub mod VinssMessageHelper {
         ///
         /// 0. envelope_version
         /// 1. message_locator
-        /// 2. claimed_payload_commitment
-        /// 3. payload_chunk_count
-        /// 4... ciphertext_chunks
+        /// 2. sender_tag
+        /// 3. recipient_tag
+        /// 4. claimed_payload_commitment
+        /// 5. payload_chunk_count
+        /// 6... ciphertext_chunks
         /// last. open_note_id
         ///
         /// Messaging charges VINSS revenue, so the returned deposit
@@ -225,9 +227,11 @@ pub mod VinssMessageHelper {
         ///
         /// 0. envelope_version
         /// 1. message_locator
-        /// 2. claimed_payload_commitment
-        /// 3. payload_chunk_count
-        /// 4... ciphertext_chunks
+        /// 2. sender_tag
+        /// 3. recipient_tag
+        /// 4. claimed_payload_commitment
+        /// 5. payload_chunk_count
+        /// 6... ciphertext_chunks
         fn store_message(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -242,15 +246,19 @@ pub mod VinssMessageHelper {
                 .expect(errors::INVALID_ENVELOPE_VERSION);
 
             let message_locator = *calldata.at(1);
-            let claimed_payload_commitment = *calldata.at(2);
+            let sender_tag = *calldata.at(2);
+            let recipient_tag = *calldata.at(3);
+            let claimed_payload_commitment = *calldata.at(4);
 
-            let payload_chunk_count: u64 = (*calldata.at(3))
+            let payload_chunk_count: u64 = (*calldata.at(5))
                 .try_into()
                 .expect(errors::INVALID_CHUNK_COUNT);
 
             messaging_validation::assert_valid_message_header(
                 envelope_version,
                 message_locator,
+                sender_tag,
+                recipient_tag,
                 claimed_payload_commitment,
                 payload_chunk_count,
             );
@@ -271,6 +279,8 @@ pub mod VinssMessageHelper {
                 timeline_payload_hash::compute_message_commitment(
                     envelope_version,
                     message_locator,
+                    sender_tag,
+                    recipient_tag,
                     payload_chunk_count,
                     calldata,
                 );
@@ -299,6 +309,8 @@ pub mod VinssMessageHelper {
             let message = VinssMessageRecord {
                 envelope_version,
                 message_locator,
+                sender_tag,
+                recipient_tag,
                 payload_commitment: computed_payload_commitment,
                 payload_chunk_count,
             };
@@ -324,6 +336,8 @@ pub mod VinssMessageHelper {
                     MessageCommitted {
                         message_locator,
                         payload_commitment: computed_payload_commitment,
+                        sender_tag,
+                        recipient_tag,
                     },
                 ),
             );

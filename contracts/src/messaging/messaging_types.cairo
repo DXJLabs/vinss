@@ -2,6 +2,7 @@
 ///
 /// The record contains no sender address, recipient address, reusable
 /// conversation identifier, plaintext message kind, or plaintext content.
+/// Sender/recipient routing is represented only by one-time opaque tags.
 ///
 /// Ciphertext chunks are stored separately under:
 /// `(message_locator, chunk_index)`.
@@ -20,6 +21,14 @@ pub struct VinssMessageRecord {
 
     /// One-time opaque locator used to retrieve this message.
     pub message_locator: felt252,
+
+    /// One-time sender-routing tag derived privately by the client.
+    /// This is NOT a wallet address and must change for every message.
+    pub sender_tag: felt252,
+
+    /// One-time recipient-routing tag derived privately by the client.
+    /// This is NOT a wallet address and must change for every message.
+    pub recipient_tag: felt252,
 
     /// Domain-separated Poseidon commitment to the envelope fields and all
     /// ciphertext chunks.

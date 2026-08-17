@@ -51,6 +51,8 @@ use crate::utils::constants::{
 const PRIVACY_POOL: felt252 = 0x123;
 const MESSAGE_REVENUE: u128 = 500000000000000000_u128;
 const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
+const TEST_SENDER_TAG: felt252 = 0xabc123;
+const TEST_RECIPIENT_TAG: felt252 = 0xdef456;
 const OTHER_CALLER: felt252 = 0x456;
 
 fn privacy_pool() -> ContractAddress {
@@ -102,6 +104,8 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
 fn compute_message_commitment(
     envelope_version: u8,
     message_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     chunks: Span<felt252>,
 ) -> felt252 {
     let payload_chunk_count: u64 = chunks
@@ -114,6 +118,8 @@ fn compute_message_commitment(
     hash_input.append(VINSS_MESSAGE_COMMITMENT_DOMAIN);
     hash_input.append(envelope_version.into());
     hash_input.append(message_locator);
+    hash_input.append(sender_tag);
+    hash_input.append(recipient_tag);
     hash_input.append(payload_chunk_count.into());
 
     let mut chunk_index: usize = 0;
@@ -138,12 +144,16 @@ fn make_calldata_with_version(
     let payload_commitment = compute_message_commitment(
         envelope_version,
         message_locator,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks,
     );
 
     let mut calldata = array![
         envelope_version.into(),
         message_locator,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         payload_commitment,
         chunks.len().into(),
     ];
@@ -248,12 +258,16 @@ fn message_commitment_is_deterministic() {
     let first = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
     let second = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
@@ -270,12 +284,16 @@ fn message_commitment_binds_locator() {
     let first = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
     let second = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1002,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
@@ -293,12 +311,16 @@ fn message_commitment_binds_ciphertext_order() {
     let first = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         first_chunks.span(),
     );
 
     let second = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         second_chunks.span(),
     );
 
@@ -315,12 +337,16 @@ fn message_commitment_binds_envelope_version() {
     let first = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
     let second = compute_message_commitment(
         VINSS_MESSAGE_ENVELOPE_VERSION + 1,
         1001,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         chunks.span(),
     );
 
@@ -343,7 +369,7 @@ fn privacy_pool_stores_encrypted_message() {
     let message_locator = 0x111;
     let chunks = array![0x222, 0x333];
     let calldata = make_calldata(message_locator, chunks.span());
-    let payload_commitment = *calldata.at(2);
+    let payload_commitment = *calldata.at(4);
 
     assert(
         !dispatcher.message_exists(message_locator),
@@ -392,6 +418,14 @@ fn privacy_pool_stores_encrypted_message() {
     assert(
         message.message_locator == message_locator,
         'bad locator',
+    );
+    assert(
+        message.sender_tag == TEST_SENDER_TAG,
+        'bad sender tag',
+    );
+    assert(
+        message.recipient_tag == TEST_RECIPIENT_TAG,
+        'bad recipient tag',
     );
     assert(
         message.payload_commitment == payload_commitment,
@@ -529,7 +563,7 @@ fn message_committed_event_has_minimal_shape() {
     let message_locator = 4001;
     let chunks = array![401, 402];
     let calldata = make_calldata(message_locator, chunks.span());
-    let payload_commitment = *calldata.at(2);
+    let payload_commitment = *calldata.at(4);
 
     let mut spy = spy_events();
 
@@ -545,7 +579,11 @@ fn message_committed_event_has_minimal_shape() {
             selector!("MessageCommitted"),
             message_locator,
         ],
-        data: array![payload_commitment],
+        data: array![
+            payload_commitment,
+            TEST_SENDER_TAG,
+            TEST_RECIPIENT_TAG,
+        ],
     };
 
     spy.assert_emitted(@array![(contract_address, expected)]);
@@ -615,6 +653,8 @@ fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
     let calldata = array![
         0x100,
         6002,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         1,
         111,
@@ -644,6 +684,8 @@ fn privacy_invoke_rejects_unsupported_version() {
     let calldata = array![
         unsupported_version.into(),
         6003,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         1,
         111,
@@ -690,6 +732,8 @@ fn privacy_invoke_rejects_zero_commitment() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6005,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         0,
         1,
         111,
@@ -716,6 +760,8 @@ fn privacy_invoke_rejects_empty_ciphertext() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6006,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         0,
         TEST_OPEN_NOTE_ID,
@@ -741,6 +787,8 @@ fn privacy_invoke_rejects_invalid_commitment() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6007,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         1,
         111,
@@ -767,6 +815,8 @@ fn privacy_invoke_rejects_chunk_count_above_u64() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6008,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         0x10000000000000000,
         TEST_OPEN_NOTE_ID,
@@ -794,6 +844,8 @@ fn privacy_invoke_rejects_oversized_ciphertext() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6009,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         oversized_count.into(),
         TEST_OPEN_NOTE_ID,
@@ -819,6 +871,8 @@ fn privacy_invoke_rejects_missing_ciphertext_chunk() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6010,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         2,
         111,
@@ -845,10 +899,63 @@ fn privacy_invoke_rejects_trailing_calldata() {
     let calldata = array![
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6011,
+        TEST_SENDER_TAG,
+        TEST_RECIPIENT_TAG,
         1,
         1,
         111,
         222,
+        TEST_OPEN_NOTE_ID,
+    ];
+
+    start_cheat_caller_address(
+        contract_address,
+        privacy_pool(),
+    );
+
+    dispatcher.privacy_invoke(calldata.span());
+}
+
+
+#[test]
+#[should_panic(expected: 'ZERO_SENDER_TAG')]
+fn privacy_invoke_rejects_zero_sender_tag() {
+    let (contract_address, open_note_token) = deploy_contract();
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
+
+    let calldata = array![
+        VINSS_MESSAGE_ENVELOPE_VERSION.into(),
+        6012,
+        0,
+        TEST_RECIPIENT_TAG,
+        1,
+        1,
+        111,
+        TEST_OPEN_NOTE_ID,
+    ];
+
+    start_cheat_caller_address(
+        contract_address,
+        privacy_pool(),
+    );
+
+    dispatcher.privacy_invoke(calldata.span());
+}
+
+#[test]
+#[should_panic(expected: 'ZERO_RECIPIENT_TAG')]
+fn privacy_invoke_rejects_zero_recipient_tag() {
+    let (contract_address, open_note_token) = deploy_contract();
+    let dispatcher = IVinssMessageHelperDispatcher { contract_address };
+
+    let calldata = array![
+        VINSS_MESSAGE_ENVELOPE_VERSION.into(),
+        6013,
+        TEST_SENDER_TAG,
+        0,
+        1,
+        1,
+        111,
         TEST_OPEN_NOTE_ID,
     ];
 

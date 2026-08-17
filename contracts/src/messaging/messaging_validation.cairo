@@ -11,6 +11,8 @@ use crate::utils::errors;
 pub fn assert_valid_message_header(
     envelope_version: u8,
     message_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     payload_commitment: felt252,
     payload_chunk_count: u64,
 ) {
@@ -22,6 +24,16 @@ pub fn assert_valid_message_header(
     assert(
         message_locator != 0,
         errors::ZERO_MESSAGE_LOCATOR,
+    );
+
+    assert(
+        sender_tag != 0,
+        errors::ZERO_MESSAGE_SENDER_TAG,
+    );
+
+    assert(
+        recipient_tag != 0,
+        errors::ZERO_MESSAGE_RECIPIENT_TAG,
     );
 
     assert(

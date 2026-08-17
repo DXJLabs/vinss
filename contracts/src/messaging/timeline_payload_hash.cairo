@@ -12,6 +12,8 @@ use crate::utils::constants::{
 ///     VINSS_MESSAGE_COMMITMENT_DOMAIN,
 ///     envelope_version,
 ///     message_locator,
+///     sender_tag,
+///     recipient_tag,
 ///     payload_chunk_count,
 ///     ...ciphertext_chunks
 /// )
@@ -24,16 +26,20 @@ use crate::utils::constants::{
 /// - changing any ciphertext chunk changes the resulting commitment.
 ///
 /// The caller must validate the exact calldata length before invoking this
-/// function. Ciphertext chunks begin after the fixed four-felt header:
+/// function. Ciphertext chunks begin after the fixed six-felt header:
 ///
 /// 0. envelope_version
 /// 1. message_locator
-/// 2. claimed payload_commitment
-/// 3. payload_chunk_count
-/// 4... ciphertext_chunks
+/// 2. sender_tag
+/// 3. recipient_tag
+/// 4. claimed payload_commitment
+/// 5. payload_chunk_count
+/// 6... ciphertext_chunks
 pub fn compute_message_commitment(
     envelope_version: u8,
     message_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     payload_chunk_count: u64,
     calldata: Span<felt252>,
 ) -> felt252 {
@@ -42,6 +48,8 @@ pub fn compute_message_commitment(
     hash_input.append(VINSS_MESSAGE_COMMITMENT_DOMAIN);
     hash_input.append(envelope_version.into());
     hash_input.append(message_locator);
+    hash_input.append(sender_tag);
+    hash_input.append(recipient_tag);
     hash_input.append(payload_chunk_count.into());
 
     let mut chunk_index: u64 = 0;

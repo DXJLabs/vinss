@@ -25,6 +25,12 @@ pub const UNSUPPORTED_ENVELOPE_VERSION: felt252 = 'UNSUPPORTED_VER';
 /// A one-time message locator must not be zero.
 pub const ZERO_MESSAGE_LOCATOR: felt252 = 'ZERO_MSG_LOCATOR';
 
+/// Ephemeral sender routing tag must not be zero.
+pub const ZERO_MESSAGE_SENDER_TAG: felt252 = 'ZERO_SENDER_TAG';
+
+/// Ephemeral recipient routing tag must not be zero.
+pub const ZERO_MESSAGE_RECIPIENT_TAG: felt252 = 'ZERO_RECIPIENT_TAG';
+
 /// The claimed encrypted-message commitment must not be zero.
 pub const ZERO_PAYLOAD_COMMITMENT: felt252 = 'ZERO_PAYLOAD_COMMIT';
 

@@ -21,4 +21,10 @@ pub struct MessageCommitted {
 
     /// Domain-separated Poseidon commitment to the complete encrypted envelope.
     pub payload_commitment: felt252,
+
+    /// Ephemeral sender-routing tag. Never a public wallet address.
+    pub sender_tag: felt252,
+
+    /// Ephemeral recipient-routing tag. Never a public wallet address.
+    pub recipient_tag: felt252,
 }
