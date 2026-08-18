@@ -109,7 +109,8 @@ jobs:
           echo "class_hash=$CLASS_HASH" >> "$GITHUB_OUTPUT"
 
           if [ "$CONTRACT_NAME" = "VinssMessageHelper" ] || \
-             [ "$CONTRACT_NAME" = "VinssOfferHelper" ]; then
+             [ "$CONTRACT_NAME" = "VinssOfferHelper" ] || \
+             [ "$CONTRACT_NAME" = "VinssInvite" ]; then
             DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
           else
             DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"

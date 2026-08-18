@@ -41,6 +41,11 @@ pub mod VinssInvite {
         StoragePointerWriteAccess,
     };
 
+    use openzeppelin_token::erc20::interface::{
+        IERC20Dispatcher,
+        IERC20DispatcherTrait,
+    };
+
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 
     use crate::invite::invite_events::{
@@ -61,6 +66,7 @@ pub mod VinssInvite {
     #[storage]
     struct Storage {
         privacy_pool: ContractAddress,
+        open_note_token: ContractAddress,
         invites: Map<felt252, InviteEntry>,
     }
 
@@ -75,6 +81,7 @@ pub mod VinssInvite {
     fn constructor(
         ref self: ContractState,
         privacy_pool: ContractAddress,
+        open_note_token: ContractAddress,
     ) {
         let zero_address: ContractAddress =
             0.try_into().unwrap();
@@ -84,7 +91,13 @@ pub mod VinssInvite {
             errors::ZERO_ADDRESS,
         );
 
+        assert(
+            open_note_token != zero_address,
+            errors::ZERO_ADDRESS,
+        );
+
         self.privacy_pool.write(privacy_pool);
+        self.open_note_token.write(open_note_token);
     }
 
     #[abi(embed_v0)]
@@ -93,29 +106,52 @@ pub mod VinssInvite {
             ref self: ContractState,
             calldata: Span<felt252>,
         ) -> Span<OpenNoteDeposit> {
+            let expected_privacy_pool =
+                self.privacy_pool.read();
+
             assert(
                 get_caller_address()
-                    == self.privacy_pool.read(),
+                    == expected_privacy_pool,
                 errors::UNAUTHORIZED_POOL,
             );
 
+            // Final felt follows the STRK20 invoke-helper convention:
+            // ${openNoteIds[0]}.
             assert(
-                calldata.len() >= 1,
+                calldata.len() >= 2,
                 errors::BAD_CALLDATA,
             );
 
-            let operation = *calldata.at(0);
+            let open_note_id =
+                *calldata.at(calldata.len() - 1);
+
+            let invite_calldata =
+                calldata.slice(
+                    0,
+                    calldata.len() - 1,
+                );
+
+            assert(
+                invite_calldata.len() >= 1,
+                errors::BAD_CALLDATA,
+            );
+
+            let operation =
+                *invite_calldata.at(0);
 
             if operation == INVITE_OP_CREATE {
                 assert(
-                    calldata.len() == 3,
+                    invite_calldata.len() == 3,
                     errors::BAD_CALLDATA,
                 );
 
-                let commitment = *calldata.at(1);
-                let expires_at: u64 = (*calldata.at(2))
-                    .try_into()
-                    .expect(errors::BAD_CALLDATA);
+                let commitment =
+                    *invite_calldata.at(1);
+
+                let expires_at: u64 =
+                    (*invite_calldata.at(2))
+                        .try_into()
+                        .expect(errors::BAD_CALLDATA);
 
                 assert(
                     commitment != 0,
@@ -164,11 +200,12 @@ pub mod VinssInvite {
                 );
 
                 assert(
-                    calldata.len() == 2,
+                    invite_calldata.len() == 2,
                     errors::BAD_CALLDATA,
                 );
 
-                let secret = *calldata.at(1);
+                let secret =
+                    *invite_calldata.at(1);
 
                 assert(
                     secret != 0,
@@ -192,7 +229,8 @@ pub mod VinssInvite {
                 );
 
                 assert(
-                    get_block_timestamp() <= entry.expires_at,
+                    get_block_timestamp()
+                        <= entry.expires_at,
                     errors::INVITE_EXPIRED,
                 );
 
@@ -214,7 +252,31 @@ pub mod VinssInvite {
                 );
             }
 
-            ArrayTrait::<OpenNoteDeposit>::new().span()
+            // Exactly 1 smallest STRK unit.
+            // This is replay plumbing, NOT VINSS revenue.
+            let open_note_amount: u128 = 1_u128;
+            let token = self.open_note_token.read();
+
+            let erc20 = IERC20Dispatcher {
+                contract_address: token,
+            };
+
+            assert(
+                erc20.approve(
+                    spender: expected_privacy_pool,
+                    amount: open_note_amount.into(),
+                ),
+                'APPROVE_FAILED',
+            );
+
+            [
+                OpenNoteDeposit {
+                    note_id: open_note_id,
+                    token,
+                    amount: open_note_amount,
+                },
+            ]
+                .span()
         }
 
         fn get_privacy_pool(

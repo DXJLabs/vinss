@@ -105,20 +105,27 @@ async function invokeInvite(
 
   const actions = [
     {
-      // Minimal private self-transfer = WriteOnce replay anchor.
-      // Wallet API compiler requires created-note amount > 0.
-      // 0x1 = one smallest STRK unit, not 1 STRK.
-      type: "transfer" as const,
+      // Helper temporarily receives 1 smallest STRK unit.
+      type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "0x1",
+      recipient: CONTRACTS.invite,
+    },
+    {
+      // OPEN note belongs to the current user, not VINSS treasury.
+      // Therefore Invite has no revenue.
+      type: "transfer" as const,
+      token: CONTRACTS.messageHelperOpenNoteToken,
+      amount: "OPEN" as const,
       recipient: toFelt(account.address),
     },
     {
       type: "invoke" as const,
       contract: CONTRACTS.invite,
       calldata: [
-        toFelt(calldata.length),
+        toFelt(calldata.length + 1),
         ...calldata,
+        "${openNoteIds[0]}",
       ],
     },
   ];
