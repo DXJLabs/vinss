@@ -113,7 +113,9 @@ pub mod VinssInvite {
                 );
 
                 let commitment = *calldata.at(1);
-                let expires_at = *calldata.at(2);
+                let expires_at: u64 = (*calldata.at(2))
+                    .try_into()
+                    .expect(errors::BAD_CALLDATA);
 
                 assert(
                     commitment != 0,
@@ -125,11 +127,8 @@ pub mod VinssInvite {
                     errors::ZERO_EXPIRY,
                 );
 
-                let now: felt252 =
-                    get_block_timestamp().into();
-
                 assert(
-                    expires_at > now,
+                    expires_at > get_block_timestamp(),
                     errors::INVITE_EXPIRED,
                 );
 
@@ -192,11 +191,8 @@ pub mod VinssInvite {
                     errors::INVITE_CONSUMED,
                 );
 
-                let now: felt252 =
-                    get_block_timestamp().into();
-
                 assert(
-                    now <= entry.expires_at,
+                    get_block_timestamp() <= entry.expires_at,
                     errors::INVITE_EXPIRED,
                 );
 
@@ -218,7 +214,7 @@ pub mod VinssInvite {
                 );
             }
 
-            [].span()
+            ArrayTrait::<OpenNoteDeposit>::new().span()
         }
 
         fn get_privacy_pool(
