@@ -40,7 +40,6 @@ export const CONTRACTS = {
   escrowRekber: normalizeAddress(
     process.env.NEXT_PUBLIC_ESCROW_REKBER_ADDRESS ?? "",
   ),
-  claimEscrow: normalizeAddress(process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? ""),
 };
 
 export const RPC_URL =

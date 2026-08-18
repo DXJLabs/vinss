@@ -7,7 +7,7 @@ use snforge_std::{
 
 use starknet::ContractAddress;
 
-use crate::claim_escrow::test_mocks::mock_claim_erc20::{
+use crate::test_mocks::mock_erc20::{
     IMockClaimERC20Dispatcher,
     IMockClaimERC20DispatcherTrait,
 };

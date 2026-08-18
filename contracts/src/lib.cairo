@@ -20,18 +20,9 @@ pub mod interfaces { pub mod privacy_pool_types; }
 pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time; pub mod validation; }
 
 
-pub mod claim_escrow {
-    #[cfg(test)]
-    pub mod test_mocks {
-        pub mod mock_claim_erc20;
-    }
-
-    pub mod claim_escrow_commitments;
-    pub mod claim_escrow_errors;
-    pub mod claim_escrow_events;
-    pub mod claim_escrow_interfaces;
-    pub mod claim_escrow_types;
-    pub mod vinss_claim_escrow;
+#[cfg(test)]
+pub mod test_mocks {
+    pub mod mock_erc20;
 }
 
 pub mod private_escrow {

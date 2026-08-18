@@ -30,7 +30,6 @@ privacy capability activated, and Sepolia STRK for gas.
   - `offer.ts` → `VinssOffer` (includes `discoverOfferActions` for the
     Timeline's Refresh button)
   - `escrow.ts` → `VinssPrivateEscrowHelper` + `VinssEscrowRekber`
-  - `claim.ts` → `VinssClaimEscrow`
   - `envelope.ts` — shared encryption/commitment helpers used by all of the
     above; calldata shapes match the Cairo interfaces field-for-field.
   - `channelKey.ts` — key derivation. See "Channel key" below.

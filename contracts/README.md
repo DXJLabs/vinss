@@ -8,7 +8,6 @@ VINSS does not replace or modify the Starknet Canonical Privacy Pool. Privacy Po
 
 - `contracts/messaging/` - `VINSSChannelHelper`, encrypted timeline storage, and `privacy_invoke` compatibility.
 - `contracts/offers/` - `VINSSOffer`, offer lifecycle, counter-offers, acceptance, cancellation, and escrow binding.
-- `contracts/claim_escrow/` - private claim-link custody and claim validation.
 - `contracts/private_escrow/` - private escrow action commitments.
 - `contracts/escrow_rekber/` - private custody rekber through the Privacy Pool.
 - `contracts/interfaces/` - shared Cairo interfaces and Privacy Pool-compatible return types.
@@ -23,7 +22,6 @@ Last updated: 2026-08-15.
 | --- | --- | --- | --- |
 | `VinssMessageHelper` | `0x0536349c3587e9c8d103082a9e60ce1fb0fb4f6d010586a79d92b0dee3eaab21` | `0x070e8f3a92176e691fadd96329fb13542b3d0b2f39487563da3b9d8a9558d744` | `0x028239c55570771c3e487d697f052d9fa198dc32bcfa0fa9ed82c491c913998a` |
 | `VinssOfferHelper` | `0x0184a7c69e83f9b2ef9e6a0e0cf7f8680308e4701b715b8281037b91b3732bb9` | `0x05d6fec1f155f10666c97be54130cd55b4b808ad1fccc8c8d13d5fc65e7543d6` | `0x04d7de9b5dc7e38b3516daea9a5a3632adf2893306ff0fe1510d814ce0cf6030` |
-| `VinssClaimEscrow` | `0x0345e61ed5e046ed4a7670b2a8a8b16c889f489cf95c6a326ae9b22253639280` | `0x04efbe39dd1ac0b77db29cdd6fab7b018b6d2876e2a3306b3ad0abbe0ef05946` | `0x0187c0b98d78d0c78d0f93d3a0c6639510f1d4b78196e795c845421fe41e454a` |
 | `VinssPrivateEscrowHelper` | `0x01038379f1b0f876f719116eddc9c41d97e9e968f5dbec3ba603a9eb2211664a` | `0x033402e23b912c0b88528b223653c73472cef9ca597adaa2afafde2c5aa4a004` | `0x024cd65ac31f67aa6368885d732e15148b5410d16a6e512eeab4a959e91d077f` |
 | `VinssEscrowRekber` | `0x06973364950e28379b8784ac36fed200770aac9bd16502392a16e88e023ae6c7` | `0x04c84494c21f92d19979df307f1a4170983c1fa276a72c71e98d8760ced9e2de` | `0x025fe8dc77e247a3b5c26e715bab6564ca1e5c7b390628f8b0445c9a8636fb1d` |
 
@@ -31,7 +29,7 @@ Last updated: 2026-08-15.
 
 `0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91`
 
-All five VINSS application contracts above were successfully deployed on Starknet Sepolia using the configured Privacy Pool address.
+All VINSS application contracts above were successfully deployed on Starknet Sepolia using the configured Privacy Pool address.
 
 These addresses are **Sepolia testnet deployments only** and must not be used as Starknet Mainnet addresses.
 

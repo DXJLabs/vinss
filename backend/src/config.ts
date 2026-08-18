@@ -22,7 +22,6 @@ export const config = {
     privateEscrowHelper: process.env.PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
     escrowRekber:
       process.env.ESCROW_REKBER_ADDRESS ?? "",
-    claimEscrow: process.env.CLAIM_ESCROW_ADDRESS ?? "",
   },
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
 };
