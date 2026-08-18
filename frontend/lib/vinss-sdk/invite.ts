@@ -85,6 +85,51 @@ function getInviteAad(): ArrayBuffer {
   );
 }
 
+async function invokeInvite(
+  account: WalletAccountV6,
+  inviteCalldata: Array<bigint | number | string>,
+): Promise<{ transaction_hash: string }> {
+  if (!CONTRACTS.invite) {
+    throw new Error(
+      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
+    );
+  }
+
+  if (!CONTRACTS.messageHelperOpenNoteToken) {
+    throw new Error(
+      "NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN is not configured.",
+    );
+  }
+
+  const calldata = inviteCalldata.map(toFelt);
+
+  const actions = [
+    {
+      // Zero-value encrypted note = WriteOnce replay anchor.
+      // No real token value moves.
+      type: "transfer" as const,
+      token: CONTRACTS.messageHelperOpenNoteToken,
+      amount: "0x0",
+      recipient: toFelt(account.address),
+    },
+    {
+      type: "invoke" as const,
+      contract: CONTRACTS.invite,
+      calldata: [
+        toFelt(calldata.length),
+        ...calldata,
+      ],
+    },
+  ];
+
+  try {
+    return await account.strk20InvokeTransaction(actions);
+  } catch (err) {
+    console.error("[VINSS INVITE ACTIONS]", actions);
+    throw err;
+  }
+}
+
 /**
  * Invite V2:
  *
@@ -133,18 +178,14 @@ export async function createInviteToken(
   // VinssInvite privacy_invoke calldata:
   // CREATE = [0, commitment, expires_at].
   // STRK20 selects privacy_invoke; first felt serializes Span length.
-  await account.strk20InvokeTransaction([
-    {
-      type: "invoke",
-      contract: CONTRACTS.invite,
-      calldata: [
-        toFelt(3),
-        toFelt(0),
-        toFelt(commitment),
-        toFelt(expiresAtSeconds),
-      ],
-    },
-  ]);
+  await invokeInvite(
+    account,
+    [
+      0,
+      commitment,
+      expiresAtSeconds,
+    ],
+  );
 
   const payload: InvitePayload = {
     v: INVITE_VERSION,
@@ -283,17 +324,13 @@ export async function consumeInviteOnchain(
   }
 
   // CONSUME = [1, secret].
-  const response = await account.strk20InvokeTransaction([
-    {
-      type: "invoke",
-      contract: CONTRACTS.invite,
-      calldata: [
-        toFelt(2),
-        toFelt(1),
-        toFelt(onchainSecret),
-      ],
-    },
-  ]);
+  const response = await invokeInvite(
+    account,
+    [
+      1,
+      onchainSecret,
+    ],
+  );
 
   return {
     transactionHash: response.transaction_hash,
