@@ -1,5 +1,8 @@
 name: VINSS Contracts Test
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -94,6 +97,58 @@ jobs:
           name: vinss-contract-test-report
           path: contracts/contracts-test-report.md
           retention-days: 30
+
+      - name: Update permanent test history
+        if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git pull --rebase origin main
+
+          mkdir -p reports
+
+          if [ ! -f reports/TESTS.md ]; then
+            printf '%s\n' \
+              '# VINSS Contract Test History' \
+              '' \
+              '| Date | Result | Build | Tests | Commit | Run |' \
+              '|---|---|---|---|---|---|' \
+              > reports/TESTS.md
+          fi
+
+          BUILD="${{ steps.build.outcome }}"
+          TEST="${{ steps.test.outcome }}"
+
+          if [ "$BUILD" = "success" ] && [ "$TEST" = "success" ]; then
+            RESULT="✅ PASS"
+          else
+            RESULT="❌ FAIL"
+          fi
+
+          DATE="$(TZ=Asia/Makassar date '+%Y-%m-%d %H:%M WITA')"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+
+          if ! grep -q "| ${GITHUB_RUN_ID} |" reports/TESTS.md 2>/dev/null; then
+            printf '| %s | %s | %s | %s | `%s` | [Run](%s) <!-- | %s | -->\n' \
+              "$DATE" \
+              "$RESULT" \
+              "$BUILD" \
+              "$TEST" \
+              "$SHORT_SHA" \
+              "$RUN_URL" \
+              "$GITHUB_RUN_ID" \
+              >> reports/TESTS.md
+          fi
+
+          git add reports/TESTS.md
+
+          git diff --cached --quiet || \
+            git commit -m "docs: update contract test report"
+
+          git push origin HEAD:main
 
       - name: Fail workflow when checks fail
         if: always() && (steps.build.outcome != 'success' || steps.test.outcome != 'success')
