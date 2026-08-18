@@ -124,17 +124,24 @@ jobs:
             deploy \
             --url "$STARKNET_RPC_URL" \
             --class-hash "$CLASS_HASH" \
-            --arguments "$DEPLOY_ARGS")
+            --arguments "$DEPLOY_ARGS" 2>&1) || true
 
           echo "$DEPLOY_OUTPUT" | tee deploy-output.txt
 
           CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" \
             | grep -i "Contract Address:" \
-            | awk '{print $3}')
+            | awk '{print $3}' \
+            | tail -1)
 
           TX_HASH=$(echo "$DEPLOY_OUTPUT" \
             | grep -i "Transaction Hash:" \
-            | awk '{print $3}')
+            | awk '{print $3}' \
+            | tail -1)
+
+          if [ -z "$CONTRACT_ADDRESS" ] || [ -z "$TX_HASH" ]; then
+            echo "Deployment did not produce contract address / tx hash"
+            exit 1
+          fi
 
           echo "contract_address=$CONTRACT_ADDRESS" >> "$GITHUB_OUTPUT"
           echo "transaction_hash=$TX_HASH" >> "$GITHUB_OUTPUT"
