@@ -109,6 +109,8 @@ export default function DealRoomPage() {
     useState<string>("group");
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [inviteNow, setInviteNow] = useState(Date.now());
   const [inviteCopied, setInviteCopied] = useState(false);
 
   const [agentOfferDraft, setAgentOfferDraft] = useState<
@@ -176,12 +178,45 @@ export default function DealRoomPage() {
         `#k=${invite.key}`;
 
       setInviteLink(link);
+      setInviteExpiresAt(invite.expiresAt);
+      setInviteNow(Date.now());
       setInviteCopied(false);
     } catch (err) {
       console.error("[VINSS INVITE CREATE]", err);
       setError("Could not create the private invitation.");
     }
   }
+
+  useEffect(() => {
+    if (!inviteExpiresAt) return;
+
+    const timer = window.setInterval(() => {
+      setInviteNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [inviteExpiresAt]);
+
+  const inviteRemainingMs = inviteExpiresAt
+    ? Math.max(0, Date.parse(inviteExpiresAt) - inviteNow)
+    : 0;
+
+  const inviteExpired =
+    Boolean(inviteExpiresAt) && inviteRemainingMs <= 0;
+
+  const inviteRemainingSeconds =
+    Math.ceil(inviteRemainingMs / 1000);
+
+  const inviteMinutes =
+    Math.floor(inviteRemainingSeconds / 60);
+
+  const inviteSeconds =
+    inviteRemainingSeconds % 60;
+
+  const inviteCountdown =
+    `${inviteMinutes}:${inviteSeconds.toString().padStart(2, "0")}`;
 
   async function copyInviteLink() {
     if (!inviteLink) return;
@@ -635,11 +670,28 @@ export default function DealRoomPage() {
                 </button>
               </div>
 
-              <p className="mt-4 border-t border-wire/60 pt-3 text-[10px] leading-relaxed text-paper/25">
-                This encrypted invitation expires after 30 minutes.
-                Anyone holding the complete link can use it, so share it
-                only with your intended counterparty.
-              </p>
+              <div className="mt-4 border-t border-wire/60 pt-3">
+                <p className="text-[10px] uppercase tracking-widest text-paper/35">
+                  {inviteExpired
+                    ? "Invite expired"
+                    : `Expires in ${inviteCountdown}`}
+                </p>
+
+                <p className="mt-2 text-[10px] leading-relaxed text-paper/25">
+                  Anyone holding the complete link can use it, so share it
+                  only with your intended counterparty.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => void createInviteLink()}
+                  className="mt-3 flex h-9 w-full items-center justify-center border border-wire px-4 font-display text-[10px] uppercase tracking-[0.16em] text-paper/50 transition hover:border-signal hover:text-signal"
+                >
+                  {inviteExpired
+                    ? "Generate new private link"
+                    : "Create new invite"}
+                </button>
+              </div>
             </div>
           )}
         </section>
