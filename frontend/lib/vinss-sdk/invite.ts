@@ -105,10 +105,10 @@ async function invokeInvite(
 
   const actions = [
     {
-      // Helper temporarily receives 1 smallest STRK unit.
+      // Helper temporarily receives 10 smallest STRK units.
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
-      amount: "0x1",
+      amount: "0xa",
       recipient: CONTRACTS.invite,
     },
     {

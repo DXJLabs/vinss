@@ -22,7 +22,7 @@ const PRIVACY_POOL: felt252 = 0x123;
 const OTHER_CALLER: felt252 = 0x456;
 const TEST_SECRET: felt252 = 0xabcdef;
 const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
-const OPEN_NOTE_AMOUNT: u128 = 1_u128;
+const OPEN_NOTE_AMOUNT: u128 = 10_u128;
 
 fn privacy_pool() -> ContractAddress {
     PRIVACY_POOL.try_into().unwrap()
@@ -154,7 +154,7 @@ fn create_invite_stores_commitment() {
 }
 
 #[test]
-fn create_returns_one_wei_open_note_deposit() {
+fn create_returns_ten_wei_open_note_deposit() {
     let (contract_address, token_address) =
         deploy_contract();
 

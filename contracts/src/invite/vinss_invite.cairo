@@ -252,9 +252,9 @@ pub mod VinssInvite {
                 );
             }
 
-            // Exactly 1 smallest STRK unit.
-            // This is replay plumbing, NOT VINSS revenue.
-            let open_note_amount: u128 = 1_u128;
+            // Minimal positive STRK amount used for replay plumbing.
+            // 10 wei is returned to the same user; NOT VINSS revenue.
+            let open_note_amount: u128 = 10_u128;
             let token = self.open_note_token.read();
 
             let erc20 = IERC20Dispatcher {
