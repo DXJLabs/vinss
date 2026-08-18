@@ -176,12 +176,20 @@ export default function DealRoomPage() {
 
     setError(null);
 
+    if (!session) {
+      setError("Connect your wallet before creating an invite.");
+      return;
+    }
+
     try {
-      const invite = await createInviteToken({
-        roomId: room.id,
-        roomSecret: room.roomSecret,
-        label: room.label,
-      });
+      const invite = await createInviteToken(
+        session.account,
+        {
+          roomId: room.id,
+          roomSecret: room.roomSecret,
+          label: room.label,
+        },
+      );
 
       // The AES key lives only in the URL fragment. Browsers do not send
       // fragments as part of HTTP requests to Vercel/backend.

@@ -1,12 +1,21 @@
+import { hash, type WalletAccountV6 } from "starknet";
+import { CONTRACTS } from "../starknet/constants";
+import {
+  shortStringToFelt,
+  toFelt,
+} from "./envelope";
+
 const INVITE_VERSION = 2 as const;
 const INVITE_TTL_MS = 30 * 60 * 1000;
 const INVITE_AAD_TEXT = "VINSS_INVITE_V2";
+const INVITE_COMMITMENT_TAG = "VINSS_INVITE_V1";
 
 export interface InvitePayload {
   v: 2;
   inviteId: string;
   roomId: string;
   roomSecret: string;
+  onchainSecret: string;
   label: string;
   expiresAt: string;
 }
@@ -86,8 +95,14 @@ function getInviteAad(): ArrayBuffer {
  * - VINSS backend/Vercel never needs the plaintext roomSecret.
  */
 export async function createInviteToken(
+  account: WalletAccountV6,
   input: CreateInvitePayload,
 ): Promise<EncryptedInviteToken> {
+  if (!CONTRACTS.invite) {
+    throw new Error(
+      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
+    );
+  }
   const keyBytes = crypto.getRandomValues(
     new Uint8Array(32),
   );
@@ -100,11 +115,43 @@ export async function createInviteToken(
     Date.now() + INVITE_TTL_MS,
   ).toISOString();
 
+  let onchainSecret = BigInt("0x" + randomHex(31));
+  if (onchainSecret === 0n) {
+    onchainSecret = 1n;
+  }
+
+  const commitment = BigInt(
+    hash.computePoseidonHashOnElements([
+      String(shortStringToFelt(INVITE_COMMITMENT_TAG)),
+      String(onchainSecret),
+    ]),
+  );
+
+  const expiresAtSeconds =
+    Math.floor(Date.parse(expiresAt) / 1000);
+
+  // VinssInvite privacy_invoke calldata:
+  // CREATE = [0, commitment, expires_at].
+  // STRK20 selects privacy_invoke; first felt serializes Span length.
+  await account.strk20InvokeTransaction([
+    {
+      type: "invoke",
+      contract: CONTRACTS.invite,
+      calldata: [
+        toFelt(3),
+        toFelt(0),
+        toFelt(commitment),
+        toFelt(expiresAtSeconds),
+      ],
+    },
+  ]);
+
   const payload: InvitePayload = {
     v: INVITE_VERSION,
     inviteId: randomHex(16),
     roomId: input.roomId,
     roomSecret: input.roomSecret,
+    onchainSecret: toFelt(onchainSecret),
     label: input.label,
     expiresAt,
   };
@@ -193,6 +240,7 @@ export async function decodeInviteToken(
       typeof payload.inviteId !== "string" ||
       typeof payload.roomId !== "string" ||
       typeof payload.roomSecret !== "string" ||
+      typeof payload.onchainSecret !== "string" ||
       typeof payload.label !== "string" ||
       typeof payload.expiresAt !== "string"
     ) {
@@ -202,7 +250,8 @@ export async function decodeInviteToken(
     if (
       !payload.inviteId ||
       !payload.roomId ||
-      !payload.roomSecret
+      !payload.roomSecret ||
+      !payload.onchainSecret
     ) {
       return null;
     }
@@ -220,4 +269,33 @@ export async function decodeInviteToken(
   } catch {
     return null;
   }
+}
+
+
+export async function consumeInviteOnchain(
+  account: WalletAccountV6,
+  onchainSecret: string,
+): Promise<{ transactionHash: string }> {
+  if (!CONTRACTS.invite) {
+    throw new Error(
+      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
+    );
+  }
+
+  // CONSUME = [1, secret].
+  const response = await account.strk20InvokeTransaction([
+    {
+      type: "invoke",
+      contract: CONTRACTS.invite,
+      calldata: [
+        toFelt(2),
+        toFelt(1),
+        toFelt(onchainSecret),
+      ],
+    },
+  ]);
+
+  return {
+    transactionHash: response.transaction_hash,
+  };
 }

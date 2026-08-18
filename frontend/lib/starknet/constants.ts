@@ -33,7 +33,13 @@ export const CONTRACTS = {
   messageHelperOpenNoteToken: normalizeAddress(
     process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ?? "",
   ),
+  invite: normalizeAddress(process.env.NEXT_PUBLIC_INVITE_ADDRESS ?? ""),
   offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? ""),
+  offerHelperOpenNoteToken: normalizeAddress(
+    process.env.NEXT_PUBLIC_OFFER_HELPER_OPEN_NOTE_TOKEN ??
+      process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ??
+      "",
+  ),
   privateEscrowHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
   ),

@@ -40,8 +40,8 @@ const EVENT_KEY_BY_KIND: Record<DiscoverKind, string> = {
 export interface RawCommittedAction {
   actionLocator: string; // hex felt
   payloadCommitment: string; // hex felt
-  senderTag?: string; // Messaging V2 only
-  recipientTag?: string; // Messaging V2 only
+  senderTag?: string;
+  recipientTag?: string;
   blockNumber: number;
   transactionHash: string;
 }
@@ -65,10 +65,27 @@ export async function scanCommittedActions(
     );
   }
 
-  const events = await getProvider().getEvents({
+  const rp = getProvider();
+
+  let effectiveFromBlock = fromBlock;
+  let effectiveToBlock: number | "latest" = toBlock;
+
+  // Some RPC providers return an empty result for extremely wide event
+  // ranges instead of paginating the full history. Messaging V2 only needs
+  // recent discovery for the live client when no explicit range is supplied.
+  if (kind === "message" && fromBlock === 0 && toBlock === "latest") {
+    const latest = await rp.getBlockNumber();
+    effectiveFromBlock = Math.max(0, latest - 10_000);
+    effectiveToBlock = latest;
+  }
+
+  const events = await rp.getEvents({
     address: contractAddress,
-    from_block: { block_number: fromBlock },
-    to_block: toBlock === "latest" ? "latest" : { block_number: toBlock },
+    from_block: { block_number: effectiveFromBlock },
+    to_block:
+      effectiveToBlock === "latest"
+        ? "latest"
+        : { block_number: effectiveToBlock },
     keys: [[EVENT_KEY_BY_KIND[kind]]],
     chunk_size: 100,
   });
@@ -81,17 +98,14 @@ export async function scanCommittedActions(
 
     if (!actionLocator || !payloadCommitment) continue;
 
-    const senderTag =
-      kind === "message" ? event.data[1] : undefined;
+    // V2 Message, Offer, and Private Escrow events all expose:
+    // data[0] payload_commitment
+    // data[1] sender_tag
+    // data[2] recipient_tag
+    const senderTag = event.data[1];
+    const recipientTag = event.data[2];
 
-    const recipientTag =
-      kind === "message" ? event.data[2] : undefined;
-
-    // Messaging V2 requires both routing tags.
-    if (
-      kind === "message" &&
-      (!senderTag || !recipientTag)
-    ) {
+    if (!senderTag || !recipientTag) {
       continue;
     }
 

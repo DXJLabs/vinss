@@ -7,11 +7,17 @@ import {
 } from "next/navigation";
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
+
 import {
   decodeInviteToken,
+  consumeInviteOnchain,
+  type InvitePayload,
 } from "@/lib/vinss-sdk/invite";
+import { useWallet } from "@/components/providers/WalletProvider";
+import { WalletConnectButton } from "@/components/WalletConnectButton";
 
 interface LocalRoom {
   id: string;
@@ -55,6 +61,12 @@ function markInviteConsumed(inviteId: string) {
 export default function InvitePage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
+  const { session } = useWallet();
+
+  const attempted = useRef(false);
+
+  const [invite, setInvite] =
+    useState<InvitePayload | null>(null);
 
   const [error, setError] =
     useState<string | null>(null);
@@ -70,15 +82,12 @@ export default function InvitePage() {
         return;
       }
 
-      // #k never reached the HTTP server. Read it only in the browser.
       const fragment = new URLSearchParams(
         window.location.hash.replace(/^#/, ""),
       );
 
       const inviteKey = fragment.get("k");
 
-      // Remove the secret fragment from the visible address/history as
-      // early as possible after reading it.
       window.history.replaceState(
         null,
         "",
@@ -92,30 +101,61 @@ export default function InvitePage() {
         return;
       }
 
-      const invite = await decodeInviteToken(
+      const decoded = await decodeInviteToken(
         token,
         inviteKey,
       );
 
       if (cancelled) return;
 
-      if (!invite) {
+      if (!decoded) {
         setError(
           "This invitation is invalid, corrupted, or expired.",
         );
         return;
       }
 
-      const consumed = loadConsumedInviteIds();
-
-      if (consumed.includes(invite.inviteId)) {
+      if (
+        loadConsumedInviteIds().includes(
+          decoded.inviteId,
+        )
+      ) {
         setError(
           "This invitation has already been used on this device.",
         );
         return;
       }
 
+      setInvite(decoded);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.token]);
+
+  useEffect(() => {
+    if (
+      !invite ||
+      !session ||
+      attempted.current
+    ) {
+      return;
+    }
+
+    attempted.current = true;
+    let cancelled = false;
+
+    void (async () => {
       try {
+        // On-chain one-time + expiry validation happens first.
+        await consumeInviteOnchain(
+          session.account,
+          invite.onchainSecret,
+        );
+
+        if (cancelled) return;
+
         const room: LocalRoom = {
           id: invite.roomId,
           label: invite.label || "Joined room",
@@ -134,7 +174,8 @@ export default function InvitePage() {
         const next = [
           room,
           ...rooms.filter(
-            (existing) => existing.id !== room.id,
+            (existing) =>
+              existing.id !== room.id,
           ),
         ];
 
@@ -147,16 +188,20 @@ export default function InvitePage() {
 
         router.replace(`/room/${room.id}`);
       } catch {
-        setError(
-          "The invitation was decrypted but could not be stored.",
-        );
+        attempted.current = false;
+
+        if (!cancelled) {
+          setError(
+            "This invite could not be validated on-chain. It may already be used or expired.",
+          );
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [params.token, router]);
+  }, [invite, session, router]);
 
   if (error) {
     return (
@@ -176,11 +221,31 @@ export default function InvitePage() {
 
           <Link
             href="/"
-            className="mt-7 inline-flex h-11 items-center justify-center border border-wire px-5 font-display text-xs uppercase tracking-widest text-paper/60 transition hover:border-signal hover:text-signal"
+            className="mt-7 inline-flex h-11 items-center justify-center border border-wire px-5 font-display text-xs uppercase tracking-widest text-paper/60"
           >
             Back to VINSS
           </Link>
         </section>
+      </main>
+    );
+  }
+
+  if (invite && !session) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-5">
+        <div className="max-w-md text-center">
+          <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
+            Private invitation
+          </p>
+
+          <p className="mt-3 text-sm text-paper/40">
+            Connect Ready X to validate and consume this one-time invite.
+          </p>
+
+          <div className="mt-6 flex justify-center">
+            <WalletConnectButton />
+          </div>
+        </div>
       </main>
     );
   }
@@ -193,7 +258,9 @@ export default function InvitePage() {
         </p>
 
         <p className="mt-3 font-display text-xs uppercase tracking-widest text-paper/30">
-          Decrypting private room access…
+          {invite
+            ? "Validating one-time invite on-chain…"
+            : "Decrypting private room access…"}
         </p>
       </div>
     </main>

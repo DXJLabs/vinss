@@ -32,17 +32,42 @@ import type { WalletAccountV6 } from "starknet";
 import { hash, num } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
-  commitPayload,
   encryptPayload,
   generateActionLocator,
-  ENVELOPE_VERSION,
+  shortStringToFelt,
   toFelt,
   type ChannelKey,
 } from "./envelope";
 import type { EscrowActionPayload, SendActionResult } from "./types";
+import {
+  GROUP_RECIPIENT_IDENTITY,
+  deriveMessageRoutingTag,
+} from "./messageRouting";
 
-const ESCROW_COMMITMENT_DOMAIN = "VINSS_ESCROW_COMMIT_V1"; // confirm exact
-// name in contracts/utils/constants.cairo at build time.
+const PRIVATE_ESCROW_ENVELOPE_VERSION = 2;
+const ESCROW_COMMITMENT_DOMAIN =
+  "VINSS_PRIVATE_ESCROW_COMMIT_V2";
+
+function commitPrivateEscrowPayloadV2(
+  actionLocator: bigint,
+  senderTag: bigint,
+  recipientTag: bigint,
+  ciphertextChunks: bigint[],
+): bigint {
+  const inputs = [
+    shortStringToFelt(ESCROW_COMMITMENT_DOMAIN),
+    BigInt(PRIVATE_ESCROW_ENVELOPE_VERSION),
+    actionLocator,
+    senderTag,
+    recipientTag,
+    BigInt(ciphertextChunks.length),
+    ...ciphertextChunks,
+  ];
+
+  return BigInt(
+    hash.computePoseidonHashOnElements(inputs.map(String)),
+  );
+}
 
 async function invokeHelper(
   account: WalletAccountV6,
@@ -53,8 +78,11 @@ async function invokeHelper(
     {
       type: "invoke",
       contract: contractAddress,
+      // privacy_invoke(calldata: Span<felt252>)
+      // requires Cairo Span length serialization.
+      // STRK20 itself selects privacy_invoke — no selector here.
       calldata: [
-        hash.getSelectorFromName("privacy_invoke"),
+        toFelt(calldata.length),
         ...calldata,
       ],
     },
@@ -75,21 +103,36 @@ export async function sendEscrowCoordinationAction(
   }
 
   const actionLocator = generateActionLocator(channelKey);
+
+  const [senderTag, recipientTag] = await Promise.all([
+    deriveMessageRoutingTag(
+      channelKey,
+      "sender",
+      account.address,
+      actionLocator,
+    ),
+    deriveMessageRoutingTag(
+      channelKey,
+      "recipient",
+      GROUP_RECIPIENT_IDENTITY,
+      actionLocator,
+    ),
+  ]);
+
   const ciphertextChunks = await encryptPayload(channelKey, payload);
-  const payloadCommitment = commitPayload(
-    ESCROW_COMMITMENT_DOMAIN,
-    ENVELOPE_VERSION,
+
+  const payloadCommitment = commitPrivateEscrowPayloadV2(
     actionLocator,
-    ciphertextChunks.length,
+    senderTag,
+    recipientTag,
     ciphertextChunks,
   );
 
-  // Every calldata item must be a 0x-prefixed FELT string — plain
-  // .map(String) on a bigint produced decimal strings and was the actual
-  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
   const calldata = [
-    ENVELOPE_VERSION,
+    PRIVATE_ESCROW_ENVELOPE_VERSION,
     actionLocator,
+    senderTag,
+    recipientTag,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,

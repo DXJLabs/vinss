@@ -11,23 +11,45 @@
  * root/parent relationships live only inside ciphertext (offer_types.cairo).
  */
 
-import { hash, type WalletAccountV6 } from "starknet";
+import { hash, num, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
-  commitPayload,
   encryptPayload,
   decryptPayload,
   generateActionLocator,
-  ENVELOPE_VERSION,
+  shortStringToFelt,
   toFelt,
   type ChannelKey,
 } from "./envelope";
 import type { OfferActionPayload, SendActionResult } from "./types";
+import {
+  GROUP_RECIPIENT_IDENTITY,
+  deriveMessageRoutingTag,
+} from "./messageRouting";
 
-const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V1"; // confirm exact
-// name in contracts/utils/constants.cairo for the offer
-// module — confirm exact name at build time (not shown in the excerpt
-// reviewed while scaffolding; the messaging domain constant is confirmed).
+const OFFER_ENVELOPE_VERSION = 2;
+const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
+
+function commitOfferPayloadV2(
+  actionLocator: bigint,
+  senderTag: bigint,
+  recipientTag: bigint,
+  ciphertextChunks: bigint[],
+): bigint {
+  const inputs = [
+    shortStringToFelt(OFFER_COMMITMENT_DOMAIN),
+    BigInt(OFFER_ENVELOPE_VERSION),
+    actionLocator,
+    senderTag,
+    recipientTag,
+    BigInt(ciphertextChunks.length),
+    ...ciphertextChunks,
+  ];
+
+  return BigInt(
+    hash.computePoseidonHashOnElements(inputs.map(String)),
+  );
+}
 
 export async function sendOfferAction(
   account: WalletAccountV6,
@@ -40,34 +62,80 @@ export async function sendOfferAction(
     );
   }
 
+  if (!CONTRACTS.offerHelperOpenNoteToken) {
+    throw new Error(
+      "NEXT_PUBLIC_OFFER_HELPER_OPEN_NOTE_TOKEN is not configured.",
+    );
+  }
+
+  const treasury =
+    process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!treasury) {
+    throw new Error(
+      "NEXT_PUBLIC_VINSS_TREASURY_ADDRESS is not configured.",
+    );
+  }
+
   const actionLocator = generateActionLocator(channelKey);
+
+  const [senderTag, recipientTag] = await Promise.all([
+    deriveMessageRoutingTag(
+      channelKey,
+      "sender",
+      account.address,
+      actionLocator,
+    ),
+    deriveMessageRoutingTag(
+      channelKey,
+      "recipient",
+      GROUP_RECIPIENT_IDENTITY,
+      actionLocator,
+    ),
+  ]);
+
   const ciphertextChunks = await encryptPayload(channelKey, payload);
-  const payloadCommitment = commitPayload(
-    OFFER_COMMITMENT_DOMAIN,
-    ENVELOPE_VERSION,
+
+  const payloadCommitment = commitOfferPayloadV2(
     actionLocator,
-    ciphertextChunks.length,
+    senderTag,
+    recipientTag,
     ciphertextChunks,
   );
 
-  // Every calldata item must be a 0x-prefixed FELT string
-  // (STRK20_CALLDATA_ITEM per @starknet-io/starknet-types-0104) — plain
-  // .map(String) on a bigint produced decimal strings and was the actual
-  // cause of INVALID_REQUEST_PAYLOAD. toFelt() fixes that.
   const calldata = [
-    hash.getSelectorFromName("privacy_invoke"),
-    ENVELOPE_VERSION,
+    OFFER_ENVELOPE_VERSION,
     actionLocator,
+    senderTag,
+    recipientTag,
     payloadCommitment,
     ciphertextChunks.length,
     ...ciphertextChunks,
   ].map(toFelt);
 
+  // VinssOfferHelper returns one OpenNoteDeposit worth 1 STRK.
+  // No selector is prepended: STRK20 invokes privacy_invoke itself.
   const response = await account.strk20InvokeTransaction([
+    {
+      type: "withdraw",
+      token: CONTRACTS.offerHelperOpenNoteToken,
+      amount: "0xde0b6b3a7640000",
+      recipient: CONTRACTS.offerHelper,
+    },
+    {
+      type: "transfer",
+      token: CONTRACTS.offerHelperOpenNoteToken,
+      amount: "OPEN",
+      recipient: num.toHex(treasury),
+    },
     {
       type: "invoke",
       contract: CONTRACTS.offerHelper,
-      calldata,
+      calldata: [
+        toFelt(calldata.length + 1),
+        ...calldata,
+        "${openNoteIds[0]}",
+      ],
     },
   ]);
 
