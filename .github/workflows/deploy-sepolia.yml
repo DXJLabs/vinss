@@ -132,6 +132,7 @@ jobs:
           }
 
           deploy "VinssMessageHelper"
+          deploy "VinssInvite"
           deploy "VinssOfferHelper"
           deploy "VinssClaimEscrow"
           deploy "VinssPrivateEscrowHelper"
