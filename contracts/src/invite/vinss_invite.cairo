@@ -1,15 +1,13 @@
-use privacy::objects::OpenNoteDeposit;
-use starknet::ContractAddress;
-
-use crate::invite::invite_types::{
-    InviteEntry,
-    InviteOperation,
-};
-
 pub const INVITE_COMMITMENT_TAG: felt252 = 'VINSS_INVITE_V1';
 
+pub const INVITE_OP_CREATE: felt252 = 0;
+pub const INVITE_OP_CONSUME: felt252 = 1;
+
 pub mod errors {
-    pub const CALLER_NOT_PRIVACY: felt252 = 'CALLER_NOT_PRIVACY';
+    pub const ZERO_ADDRESS: felt252 = 'ZERO_ADDRESS';
+    pub const UNAUTHORIZED_POOL: felt252 = 'UNAUTHORIZED_POOL';
+    pub const BAD_CALLDATA: felt252 = 'BAD_CALLDATA';
+    pub const BAD_OPERATION: felt252 = 'BAD_OPERATION';
     pub const ZERO_COMMITMENT: felt252 = 'ZERO_COMMITMENT';
     pub const ZERO_SECRET: felt252 = 'ZERO_SECRET';
     pub const ZERO_EXPIRY: felt252 = 'ZERO_EXPIRY';
@@ -17,7 +15,6 @@ pub mod errors {
     pub const INVITE_NOT_FOUND: felt252 = 'INVITE_NOT_FOUND';
     pub const INVITE_CONSUMED: felt252 = 'INVITE_CONSUMED';
     pub const INVITE_EXPIRED: felt252 = 'INVITE_EXPIRED';
-    pub const BAD_SECRET: felt252 = 'BAD_SECRET';
 }
 
 pub fn compute_invite_commitment(
@@ -30,10 +27,6 @@ pub fn compute_invite_commitment(
 
 #[starknet::contract]
 pub mod VinssInvite {
-    use core::num::traits::Zero;
-
-    use privacy::objects::OpenNoteDeposit;
-
     use starknet::{
         ContractAddress,
         get_block_timestamp,
@@ -48,26 +41,26 @@ pub mod VinssInvite {
         StoragePointerWriteAccess,
     };
 
+    use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
+
     use crate::invite::invite_events::{
         InviteConsumed,
         InviteCreated,
     };
 
     use crate::invite::invite_interfaces::IVinssInvite;
-
-    use crate::invite::invite_types::{
-        InviteEntry,
-        InviteOperation,
-    };
+    use crate::invite::invite_types::InviteEntry;
 
     use super::{
+        INVITE_OP_CONSUME,
+        INVITE_OP_CREATE,
         compute_invite_commitment,
         errors,
     };
 
     #[storage]
     struct Storage {
-        privacy_contract: ContractAddress,
+        privacy_pool: ContractAddress,
         invites: Map<felt252, InviteEntry>,
     }
 
@@ -81,136 +74,164 @@ pub mod VinssInvite {
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        privacy_contract: ContractAddress,
+        privacy_pool: ContractAddress,
     ) {
+        let zero_address: ContractAddress =
+            0.try_into().unwrap();
+
         assert(
-            privacy_contract.is_non_zero(),
-            errors::CALLER_NOT_PRIVACY,
+            privacy_pool != zero_address,
+            errors::ZERO_ADDRESS,
         );
 
-        self.privacy_contract.write(privacy_contract);
+        self.privacy_pool.write(privacy_pool);
     }
 
     #[abi(embed_v0)]
     impl VinssInviteImpl of IVinssInvite<ContractState> {
+        fn privacy_invoke(
+            ref self: ContractState,
+            calldata: Span<felt252>,
+        ) -> Span<OpenNoteDeposit> {
+            assert(
+                get_caller_address()
+                    == self.privacy_pool.read(),
+                errors::UNAUTHORIZED_POOL,
+            );
+
+            assert(
+                calldata.len() >= 1,
+                errors::BAD_CALLDATA,
+            );
+
+            let operation = *calldata.at(0);
+
+            if operation == INVITE_OP_CREATE {
+                assert(
+                    calldata.len() == 3,
+                    errors::BAD_CALLDATA,
+                );
+
+                let commitment = *calldata.at(1);
+                let expires_at = *calldata.at(2);
+
+                assert(
+                    commitment != 0,
+                    errors::ZERO_COMMITMENT,
+                );
+
+                assert(
+                    expires_at != 0,
+                    errors::ZERO_EXPIRY,
+                );
+
+                let now: felt252 =
+                    get_block_timestamp().into();
+
+                assert(
+                    expires_at > now,
+                    errors::INVITE_EXPIRED,
+                );
+
+                let existing =
+                    self.invites.read(commitment);
+
+                assert(
+                    !existing.exists,
+                    errors::INVITE_EXISTS,
+                );
+
+                self.invites.write(
+                    commitment,
+                    InviteEntry {
+                        expires_at,
+                        consumed: false,
+                        exists: true,
+                    },
+                );
+
+                self.emit(
+                    Event::InviteCreated(
+                        InviteCreated {
+                            commitment,
+                            expires_at,
+                        },
+                    ),
+                );
+            } else {
+                assert(
+                    operation == INVITE_OP_CONSUME,
+                    errors::BAD_OPERATION,
+                );
+
+                assert(
+                    calldata.len() == 2,
+                    errors::BAD_CALLDATA,
+                );
+
+                let secret = *calldata.at(1);
+
+                assert(
+                    secret != 0,
+                    errors::ZERO_SECRET,
+                );
+
+                let commitment =
+                    compute_invite_commitment(secret);
+
+                let entry =
+                    self.invites.read(commitment);
+
+                assert(
+                    entry.exists,
+                    errors::INVITE_NOT_FOUND,
+                );
+
+                assert(
+                    !entry.consumed,
+                    errors::INVITE_CONSUMED,
+                );
+
+                let now: felt252 =
+                    get_block_timestamp().into();
+
+                assert(
+                    now <= entry.expires_at,
+                    errors::INVITE_EXPIRED,
+                );
+
+                self.invites.write(
+                    commitment,
+                    InviteEntry {
+                        expires_at: entry.expires_at,
+                        consumed: true,
+                        exists: true,
+                    },
+                );
+
+                self.emit(
+                    Event::InviteConsumed(
+                        InviteConsumed {
+                            commitment,
+                        },
+                    ),
+                );
+            }
+
+            [].span()
+        }
+
+        fn get_privacy_pool(
+            self: @ContractState,
+        ) -> ContractAddress {
+            self.privacy_pool.read()
+        }
+
         fn get_invite(
             self: @ContractState,
             commitment: felt252,
         ) -> InviteEntry {
             self.invites.read(commitment)
-        }
-
-        fn privacy_invoke(
-            ref self: ContractState,
-            operation: InviteOperation,
-            commitment: felt252,
-            expires_at: u64,
-            secret: felt252,
-        ) -> Span<OpenNoteDeposit> {
-            assert(
-                get_caller_address()
-                    == self.privacy_contract.read(),
-                errors::CALLER_NOT_PRIVACY,
-            );
-
-            match operation {
-                InviteOperation::Create => {
-                    assert(
-                        commitment != 0,
-                        errors::ZERO_COMMITMENT,
-                    );
-
-                    assert(
-                        expires_at != 0,
-                        errors::ZERO_EXPIRY,
-                    );
-
-                    assert(
-                        expires_at > get_block_timestamp(),
-                        errors::INVITE_EXPIRED,
-                    );
-
-                    let existing =
-                        self.invites.read(commitment);
-
-                    assert(
-                        !existing.exists,
-                        errors::INVITE_EXISTS,
-                    );
-
-                    self.invites.write(
-                        commitment,
-                        InviteEntry {
-                            expires_at,
-                            consumed: false,
-                            exists: true,
-                        },
-                    );
-
-                    self.emit(
-                        Event::InviteCreated(
-                            InviteCreated {
-                                commitment,
-                                expires_at,
-                            },
-                        ),
-                    );
-
-                    [].span()
-                },
-
-                InviteOperation::Consume => {
-                    assert(
-                        secret != 0,
-                        errors::ZERO_SECRET,
-                    );
-
-                    let computed =
-                        compute_invite_commitment(secret);
-
-                    assert(
-                        commitment == computed,
-                        errors::BAD_SECRET,
-                    );
-
-                    let entry =
-                        self.invites.read(computed);
-
-                    assert(
-                        entry.exists,
-                        errors::INVITE_NOT_FOUND,
-                    );
-
-                    assert(
-                        !entry.consumed,
-                        errors::INVITE_CONSUMED,
-                    );
-
-                    assert(
-                        get_block_timestamp()
-                            <= entry.expires_at,
-                        errors::INVITE_EXPIRED,
-                    );
-
-                    self.invites.write(
-                        computed,
-                        InviteEntry {
-                            consumed: true,
-                            ..entry
-                        },
-                    );
-
-                    self.emit(
-                        Event::InviteConsumed(
-                            InviteConsumed {
-                                commitment: computed,
-                            },
-                        ),
-                    );
-
-                    [].span()
-                },
-            }
         }
     }
 }

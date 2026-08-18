@@ -1,14 +1,6 @@
-use starknet::Store;
-
-#[derive(Serde, Copy, Drop, PartialEq, Debug, Store)]
+#[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct InviteEntry {
-    pub expires_at: u64,
+    pub expires_at: felt252,
     pub consumed: bool,
     pub exists: bool,
-}
-
-#[derive(Serde, Copy, Drop, PartialEq, Debug)]
-pub enum InviteOperation {
-    Create,
-    Consume,
 }

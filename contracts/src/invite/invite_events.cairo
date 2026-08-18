@@ -2,7 +2,7 @@
 pub struct InviteCreated {
     #[key]
     pub commitment: felt252,
-    pub expires_at: u64,
+    pub expires_at: felt252,
 }
 
 #[derive(Drop, starknet::Event)]

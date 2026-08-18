@@ -1,22 +1,28 @@
-use privacy::objects::OpenNoteDeposit;
+use starknet::ContractAddress;
 
-use crate::invite::invite_types::{
-    InviteEntry,
-    InviteOperation,
-};
+use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
+use crate::invite::invite_types::InviteEntry;
 
 #[starknet::interface]
-pub trait IVinssInvite<T> {
+pub trait IVinssInvite<TContractState> {
+    /// InvokeExternal calldata:
+    ///
+    /// Create:
+    /// [0, commitment, expires_at]
+    ///
+    /// Consume:
+    /// [1, secret]
+    fn privacy_invoke(
+        ref self: TContractState,
+        calldata: Span<felt252>,
+    ) -> Span<OpenNoteDeposit>;
+
+    fn get_privacy_pool(
+        self: @TContractState,
+    ) -> ContractAddress;
+
     fn get_invite(
-        self: @T,
+        self: @TContractState,
         commitment: felt252,
     ) -> InviteEntry;
-
-    fn privacy_invoke(
-        ref self: T,
-        operation: InviteOperation,
-        commitment: felt252,
-        expires_at: u64,
-        secret: felt252,
-    ) -> Span<OpenNoteDeposit>;
 }
