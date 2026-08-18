@@ -82,6 +82,8 @@ jobs:
 
           OUTPUT=$(sncast \
             --account vinss-deployer \
+            --wait \
+            --wait-timeout 180 \
             declare \
             --url "$STARKNET_RPC_URL" \
             --contract-name "$CONTRACT_NAME" 2>&1) || true
@@ -117,6 +119,8 @@ jobs:
 
           DEPLOY_OUTPUT=$(sncast \
             --account vinss-deployer \
+            --wait \
+            --wait-timeout 180 \
             deploy \
             --url "$STARKNET_RPC_URL" \
             --class-hash "$CLASS_HASH" \
