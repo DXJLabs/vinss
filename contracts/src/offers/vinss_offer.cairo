@@ -8,6 +8,10 @@ pub mod VinssOfferHelper {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
+    use openzeppelin_token::erc20::interface::{
+        IERC20Dispatcher,
+        IERC20DispatcherTrait,
+    };
 
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 
@@ -28,6 +32,9 @@ pub mod VinssOfferHelper {
     struct Storage {
         /// Only this Privacy Pool may invoke the encrypted Offer path.
         privacy_pool: ContractAddress,
+
+        /// STRK token used for flat VINSS Offer revenue.
+        open_note_token: ContractAddress,
 
         /// Public structural records indexed by one-time action locators.
         offer_actions: Map<felt252, EncryptedOfferActionRecord>,
@@ -68,6 +75,7 @@ pub mod VinssOfferHelper {
     fn constructor(
         ref self: ContractState,
         privacy_pool: ContractAddress,
+        open_note_token: ContractAddress,
     ) {
         let zero_address: ContractAddress = 0.try_into().unwrap();
 
@@ -76,7 +84,13 @@ pub mod VinssOfferHelper {
             errors::ZERO_ADDRESS,
         );
 
+        assert(
+            open_note_token != zero_address,
+            errors::ZERO_ADDRESS,
+        );
+
         self.privacy_pool.write(privacy_pool);
+        self.open_note_token.write(open_note_token);
     }
 
     // -------------------------------------------------------------------------
@@ -110,7 +124,53 @@ pub mod VinssOfferHelper {
                 errors::UNAUTHORIZED_PRIVACY_POOL,
             );
 
-            self.store_offer_action(calldata)
+            assert(
+                calldata.len() >= 1,
+                errors::INVALID_OFFER_CALLDATA,
+            );
+
+            // Wallet invoke-helper convention:
+            // final felt = ${openNoteIds[0]}.
+            let open_note_id =
+                *calldata.at(calldata.len() - 1);
+
+            let offer_calldata =
+                calldata.slice(
+                    0,
+                    calldata.len() - 1,
+                );
+
+            self.store_offer_action(
+                offer_calldata,
+            );
+
+            // Flat VINSS Offer revenue = 0.5 STRK.
+            let revenue_amount: u128 =
+                1000000000000000000_u128;
+
+            let revenue_token =
+                self.open_note_token.read();
+
+            let erc20 = IERC20Dispatcher {
+                contract_address: revenue_token,
+            };
+
+            assert(
+                erc20.approve(
+                    spender: expected_privacy_pool,
+                    amount: revenue_amount.into(),
+                ),
+                'APPROVE_FAILED',
+            );
+
+            [
+                OpenNoteDeposit {
+                    note_id: open_note_id,
+                    token: revenue_token,
+                    amount: revenue_amount,
+                },
+            ]
+                .span()
         }
 
         fn get_privacy_pool(
@@ -202,15 +262,19 @@ pub mod VinssOfferHelper {
                 .expect(errors::INVALID_OFFER_ENVELOPE_VERSION);
 
             let offer_action_locator = *calldata.at(1);
-            let claimed_payload_commitment = *calldata.at(2);
+            let sender_tag = *calldata.at(2);
+            let recipient_tag = *calldata.at(3);
+            let claimed_payload_commitment = *calldata.at(4);
 
-            let payload_chunk_count: u64 = (*calldata.at(3))
+            let payload_chunk_count: u64 = (*calldata.at(5))
                 .try_into()
                 .expect(errors::INVALID_OFFER_CHUNK_COUNT);
 
             offer_validation::assert_valid_offer_action_header(
                 envelope_version,
                 offer_action_locator,
+                sender_tag,
+                recipient_tag,
                 claimed_payload_commitment,
                 payload_chunk_count,
             );
@@ -231,6 +295,8 @@ pub mod VinssOfferHelper {
                 compute_offer_action_commitment(
                     envelope_version,
                     offer_action_locator,
+                    sender_tag,
+                    recipient_tag,
                     payload_chunk_count,
                     calldata,
                 );
@@ -260,6 +326,8 @@ pub mod VinssOfferHelper {
             let offer_action = EncryptedOfferActionRecord {
                 envelope_version,
                 offer_action_locator,
+                sender_tag,
+                recipient_tag,
                 payload_commitment: computed_payload_commitment,
                 payload_chunk_count,
             };
@@ -288,6 +356,8 @@ pub mod VinssOfferHelper {
                         offer_action_locator,
                         payload_commitment:
                             computed_payload_commitment,
+                        sender_tag,
+                        recipient_tag,
                     },
                 ),
             );

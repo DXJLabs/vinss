@@ -82,6 +82,9 @@ pub const UNSUPPORTED_OFFER_ENVELOPE_VERSION: felt252 =
 /// A one-time encrypted Offer action locator must not be zero.
 pub const ZERO_OFFER_ACTION_LOCATOR: felt252 = 'ZERO_OFFER_LOCATOR';
 
+pub const ZERO_OFFER_SENDER_TAG: felt252 = 'ZERO_OFFER_SENDER';
+pub const ZERO_OFFER_RECIPIENT_TAG: felt252 = 'ZERO_OFFER_RECIPIENT';
+
 /// The claimed encrypted Offer commitment must not be zero.
 pub const ZERO_OFFER_PAYLOAD_COMMITMENT: felt252 = 'ZERO_OFFER_COMMIT';
 

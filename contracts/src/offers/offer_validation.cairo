@@ -4,27 +4,11 @@ use crate::utils::constants::{
 };
 use crate::utils::errors;
 
-/// Validate the public structure of one encrypted VINSS Offer action.
-///
-/// This function validates only:
-///
-/// - supported envelope version;
-/// - required non-zero public fields;
-/// - non-empty ciphertext;
-/// - ciphertext storage bounds.
-///
-/// It does not:
-///
-/// - decrypt the payload;
-/// - identify maker or taker;
-/// - interpret the encrypted action kind;
-/// - validate offer lifecycle transitions;
-/// - validate private expiry;
-/// - authorize negotiation participants;
-/// - establish Privacy Pool replay protection.
 pub fn assert_valid_offer_action_header(
     envelope_version: u8,
     offer_action_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     payload_commitment: felt252,
     payload_chunk_count: u64,
 ) {
@@ -32,34 +16,32 @@ pub fn assert_valid_offer_action_header(
         envelope_version == VINSS_OFFER_ENVELOPE_VERSION,
         errors::UNSUPPORTED_OFFER_ENVELOPE_VERSION,
     );
-
     assert(
         offer_action_locator != 0,
         errors::ZERO_OFFER_ACTION_LOCATOR,
     );
-
+    assert(
+        sender_tag != 0,
+        errors::ZERO_OFFER_SENDER_TAG,
+    );
+    assert(
+        recipient_tag != 0,
+        errors::ZERO_OFFER_RECIPIENT_TAG,
+    );
     assert(
         payload_commitment != 0,
         errors::ZERO_OFFER_PAYLOAD_COMMITMENT,
     );
-
     assert(
         payload_chunk_count > 0,
         errors::EMPTY_OFFER_PAYLOAD,
     );
-
     assert(
         payload_chunk_count <= MAX_OFFER_PAYLOAD_CHUNKS,
         errors::TOO_MANY_OFFER_PAYLOAD_CHUNKS,
     );
 }
 
-/// Require that an encrypted Offer action exists before its record or
-/// ciphertext chunks are returned.
-///
-/// Cairo storage maps return default values for keys that were never written,
-/// so an explicit existence map is required to distinguish a missing action
-/// from an all-zero record.
 pub fn assert_offer_action_exists(
     offer_action_exists: bool,
 ) {
@@ -69,10 +51,6 @@ pub fn assert_offer_action_exists(
     );
 }
 
-/// Reject reuse of a one-time encrypted Offer action locator.
-///
-/// A locator identifies exactly one encrypted action. It must never be
-/// overwritten or reused for another payload.
 pub fn assert_offer_action_not_stored(
     offer_action_exists: bool,
 ) {
@@ -82,11 +60,6 @@ pub fn assert_offer_action_not_stored(
     );
 }
 
-/// Reject reuse of an encrypted Offer envelope commitment.
-///
-/// This is helper-level duplicate protection only. It does not replace the
-/// official Privacy Pool requirement that the containing transaction obtain
-/// replay protection through a protocol WriteOnce action.
 pub fn assert_offer_payload_not_committed(
     is_committed: bool,
 ) {
@@ -96,7 +69,6 @@ pub fn assert_offer_payload_not_committed(
     );
 }
 
-/// Validate an index into the ciphertext chunks of an existing Offer action.
 pub fn assert_valid_offer_chunk_index(
     chunk_index: u64,
     payload_chunk_count: u64,

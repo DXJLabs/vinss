@@ -74,7 +74,7 @@ pub const MAX_OFFER_PAYLOAD_CHUNKS: u64 = 64;
 /// This version describes only the public encrypted-envelope format. It does
 /// not prove that a standalone Offer-only Privacy Pool transaction satisfies
 /// the pool's WriteOnce replay-protection requirement.
-pub const VINSS_OFFER_ENVELOPE_VERSION: u8 = 1;
+pub const VINSS_OFFER_ENVELOPE_VERSION: u8 = 2;
 
 /// Number of fixed felt fields before encrypted Offer ciphertext chunks.
 ///
@@ -85,7 +85,7 @@ pub const VINSS_OFFER_ENVELOPE_VERSION: u8 = 1;
 /// 2. claimed_payload_commitment
 /// 3. payload_chunk_count
 /// 4... ciphertext_chunks
-pub const OFFER_ENVELOPE_HEADER_FELTS: usize = 4;
+pub const OFFER_ENVELOPE_HEADER_FELTS: usize = 6;
 
 /// Domain separator for encrypted VINSS Offer action commitments.
 ///
@@ -102,7 +102,7 @@ pub const OFFER_ENVELOPE_HEADER_FELTS: usize = 4;
 /// Offer action type, participant context, lifecycle relationships, terms,
 /// expiry, and escrow coordination remain inside ciphertext.
 pub const VINSS_OFFER_COMMITMENT_DOMAIN: felt252 =
-    'VINSS_OFFER_COMMIT_V1';
+    'VINSS_OFFER_COMMIT_V2';
 
 // -----------------------------------------------------------------------------
 // Encrypted Private Escrow helper
