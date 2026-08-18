@@ -1,7 +1,19 @@
-name: Deploy VINSS Contracts - Sepolia
+name: Deploy VINSS Contract - Sepolia
 
 on:
   workflow_dispatch:
+    inputs:
+      contract:
+        description: "Contract to deploy"
+        required: true
+        type: choice
+        options:
+          - VinssMessageHelper
+          - VinssInvite
+          - VinssOfferHelper
+          - VinssClaimEscrow
+          - VinssPrivateEscrowHelper
+          - VinssEscrowRekber
 
 jobs:
   deploy:
@@ -33,19 +45,29 @@ jobs:
           starknet-foundry-version: 0.56.0
 
       - name: Build
-        run: scarb build
-
-      - name: Test
-        run: snforge test
-
-      - name: Validate secrets
+        id: build
+        continue-on-error: true
         run: |
+          set -o pipefail
+          scarb build 2>&1 | tee build-output.txt
+
+      - name: Declare and deploy
+        id: deploy
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        env:
+          CONTRACT_NAME: ${{ inputs.contract }}
+        run: |
+          set -e
+
+          echo "class_hash=" >> "$GITHUB_OUTPUT"
+          echo "contract_address=" >> "$GITHUB_OUTPUT"
+          echo "transaction_hash=" >> "$GITHUB_OUTPUT"
+
           test -n "$STARKNET_RPC_URL"
           test -n "$ACCOUNT_ADDRESS"
           test -n "$PRIVATE_KEY"
 
-      - name: Create deploy account
-        run: |
           sncast account import \
             --url "$STARKNET_RPC_URL" \
             --name vinss-deployer \
@@ -54,94 +76,103 @@ jobs:
             --type oz \
             --silent
 
-      - name: Declare and deploy VINSS contracts
+          echo "=== DECLARE $CONTRACT_NAME ==="
+
+          OUTPUT=$(sncast \
+            --account vinss-deployer \
+            declare \
+            --url "$STARKNET_RPC_URL" \
+            --contract-name "$CONTRACT_NAME" 2>&1) || true
+
+          echo "$OUTPUT" | tee declare-output.txt
+
+          CLASS_HASH=$(echo "$OUTPUT" \
+            | grep -i "Class Hash:" \
+            | awk '{print $3}' \
+            | head -1)
+
+          if [ -z "$CLASS_HASH" ]; then
+            CLASS_HASH=$(echo "$OUTPUT" \
+              | grep -oE '0x[0-9a-fA-F]{50,66}' \
+              | head -1)
+          fi
+
+          if [ -z "$CLASS_HASH" ]; then
+            echo "Could not determine class hash"
+            exit 1
+          fi
+
+          echo "class_hash=$CLASS_HASH" >> "$GITHUB_OUTPUT"
+
+          if [ "$CONTRACT_NAME" = "VinssMessageHelper" ] || \
+             [ "$CONTRACT_NAME" = "VinssOfferHelper" ]; then
+            DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
+          else
+            DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
+          fi
+
+          echo "=== DEPLOY $CONTRACT_NAME ==="
+
+          DEPLOY_OUTPUT=$(sncast \
+            --account vinss-deployer \
+            deploy \
+            --url "$STARKNET_RPC_URL" \
+            --class-hash "$CLASS_HASH" \
+            --arguments "$DEPLOY_ARGS")
+
+          echo "$DEPLOY_OUTPUT" | tee deploy-output.txt
+
+          CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" \
+            | grep -i "Contract Address:" \
+            | awk '{print $3}')
+
+          TX_HASH=$(echo "$DEPLOY_OUTPUT" \
+            | grep -i "Transaction Hash:" \
+            | awk '{print $3}')
+
+          echo "contract_address=$CONTRACT_ADDRESS" >> "$GITHUB_OUTPUT"
+          echo "transaction_hash=$TX_HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Create Markdown report
+        if: always()
         run: |
-          DEPLOY_REPORT=""
+          BUILD="${{ steps.build.outcome }}"
+          DEPLOY="${{ steps.deploy.outcome }}"
 
-          deploy() {
-            NAME="$1"
+          [ "$BUILD" = "success" ] && BUILD_ICON="✅" || BUILD_ICON="❌"
+          [ "$DEPLOY" = "success" ] && DEPLOY_ICON="✅" || DEPLOY_ICON="❌"
 
-            echo "=== DECLARE $NAME ==="
+          {
+            echo "# VINSS Sepolia Deployment Report"
+            echo ""
+            echo "## ${{ inputs.contract }}"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Build | $BUILD_ICON $BUILD |"
+            echo "| Deploy | $DEPLOY_ICON $DEPLOY |"
+            echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Network | Sepolia |"
+            echo "| Class Hash | \`${{ steps.deploy.outputs.class_hash }}\` |"
+            echo "| Contract | \`${{ steps.deploy.outputs.contract_address }}\` |"
+            echo "| Transaction | \`${{ steps.deploy.outputs.transaction_hash }}\` |"
+            echo ""
+            echo "## Build log"
+            echo '```text'
+            tail -60 build-output.txt 2>/dev/null || echo "No build output"
+            echo '```'
+          } > deploy-report.md
 
-            sleep 15
+          cat deploy-report.md >> "$GITHUB_STEP_SUMMARY"
 
-            OUTPUT=$(sncast \
-              --account vinss-deployer \
-              declare \
-              --url "$STARKNET_RPC_URL" \
-              --contract-name "$NAME" 2>&1) || true
+      - name: Upload Markdown report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vinss-${{ inputs.contract }}-deployment-report
+          path: contracts/deploy-report.md
+          retention-days: 30
 
-            echo "$OUTPUT"
-
-            CLASS_HASH=$(echo "$OUTPUT" | grep -i "Class Hash:" | awk '{print $3}')
-
-            if echo "$OUTPUT" | grep -qi "already declared"; then
-              echo "$NAME already declared."
-            elif [ -z "$CLASS_HASH" ]; then
-              echo "Declaration failed for $NAME"
-              exit 1
-            else
-              TX_HASH=$(echo "$OUTPUT" | grep -i "Transaction Hash:" | awk '{print $3}')
-              echo "Waiting for declaration transaction: $TX_HASH"
-
-              for i in {1..30}; do
-                RECEIPT=$(sncast receipt \
-                  --url "$STARKNET_RPC_URL" \
-                  --transaction-hash "$TX_HASH" 2>/dev/null || true)
-
-                echo "$RECEIPT" | grep -qi "ACCEPTED" && break
-                sleep 5
-              done
-            fi
-
-            if [ -z "$CLASS_HASH" ]; then
-              CLASS_HASH=$(echo "$OUTPUT" | grep -oE '0x[0-9a-fA-F]{50,66}' | head -1)
-            fi
-
-            if [ -z "$CLASS_HASH" ]; then
-              echo "Could not determine class hash for $NAME"
-              exit 1
-            fi
-
-            echo "=== DEPLOY $NAME ==="
-
-            if [ "$NAME" = "VinssMessageHelper" ] || [ "$NAME" = "VinssOfferHelper" ]; then
-              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
-            else
-              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
-            fi
-
-            DEPLOY_OUTPUT=$(sncast \
-              --account vinss-deployer \
-              deploy \
-              --url "$STARKNET_RPC_URL" \
-              --class-hash "$CLASS_HASH" \
-              --arguments "$DEPLOY_ARGS")
-
-            echo "$DEPLOY_OUTPUT"
-
-            CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep -i "Contract Address:" | awk '{print $3}')
-            DEPLOY_TX=$(echo "$DEPLOY_OUTPUT" | grep -i "Transaction Hash:" | awk '{print $3}')
-
-            DEPLOY_REPORT="${DEPLOY_REPORT}
-          $NAME
-            Class Hash: $CLASS_HASH
-            Contract:   $CONTRACT_ADDRESS
-            Tx:         $DEPLOY_TX
-          "
-          }
-
-          deploy "VinssMessageHelper"
-          deploy "VinssInvite"
-          deploy "VinssOfferHelper"
-          deploy "VinssClaimEscrow"
-          deploy "VinssPrivateEscrowHelper"
-          deploy "VinssEscrowRekber"
-
-          echo ""
-          echo "=========================================="
-          echo "       VINSS SEPOLIA DEPLOYMENT DONE"
-          echo "=========================================="
-          echo "$DEPLOY_REPORT"
-          echo "Privacy Pool: $PRIVACY_POOL_ADDRESS"
-          echo "=========================================="
+      - name: Fail workflow when deployment fails
+        if: always() && (steps.build.outcome != 'success' || steps.deploy.outcome != 'success')
+        run: exit 1

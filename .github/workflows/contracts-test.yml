@@ -1,0 +1,100 @@
+name: VINSS Contracts Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contracts-test.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contracts-test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Scarb
+        uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.17.0
+
+      - name: Setup Starknet Foundry
+        uses: foundry-rs/setup-snfoundry@v3
+        with:
+          starknet-foundry-version: 0.56.0
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          scarb build 2>&1 | tee build-output.txt
+
+      - name: Test
+        id: test
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          snforge test 2>&1 | tee test-output.txt
+
+      - name: Create Markdown report
+        if: always()
+        run: |
+          BUILD="${{ steps.build.outcome }}"
+          TEST="${{ steps.test.outcome }}"
+
+          [ "$BUILD" = "success" ] && BUILD_ICON="✅" || BUILD_ICON="❌"
+
+          if [ "$TEST" = "success" ]; then
+            TEST_ICON="✅"
+          elif [ "$TEST" = "skipped" ]; then
+            TEST_ICON="⏭️"
+          else
+            TEST_ICON="❌"
+          fi
+
+          {
+            echo "# VINSS Contract Test Report"
+            echo ""
+            echo "| Item | Result |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Build | $BUILD_ICON $BUILD |"
+            echo "| Tests | $TEST_ICON $TEST |"
+            echo "| Branch | \`${GITHUB_REF_NAME}\` |"
+            echo ""
+            echo "## Build log"
+            echo '```text'
+            tail -80 build-output.txt 2>/dev/null || echo "No build output"
+            echo '```'
+            echo ""
+            echo "## Test log"
+            echo '```text'
+            tail -120 test-output.txt 2>/dev/null || echo "Tests were not executed"
+            echo '```'
+          } > contracts-test-report.md
+
+          cat contracts-test-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Markdown report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vinss-contract-test-report
+          path: contracts/contracts-test-report.md
+          retention-days: 30
+
+      - name: Fail workflow when checks fail
+        if: always() && (steps.build.outcome != 'success' || steps.test.outcome != 'success')
+        run: exit 1
