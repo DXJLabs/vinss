@@ -54,3 +54,10 @@ pub mod private_escrow_settlement {
 
 #[cfg(test)]
 mod tests;
+
+pub mod invite {
+    pub mod invite_types;
+    pub mod invite_events;
+    pub mod invite_interfaces;
+    pub mod vinss_invite;
+}
