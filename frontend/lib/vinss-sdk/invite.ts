@@ -103,29 +103,30 @@ async function invokeInvite(
 
   const calldata = inviteCalldata.map(toFelt);
 
+  const treasuryAddress =
+    process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!treasuryAddress) {
+    throw new Error(
+      "NEXT_PUBLIC_VINSS_TREASURY_ADDRESS is not configured.",
+    );
+  }
+
   const actions = [
     {
-      // Helper temporarily receives 10 smallest STRK units.
+      // Consumes a private note, providing pool replay protection.
+      // 10 wei goes to VINSS treasury; Invite itself has no token output.
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "0xa",
-      recipient: CONTRACTS.invite,
-    },
-    {
-      // OPEN note belongs to the current user, not VINSS treasury.
-      // Therefore Invite has no revenue.
-      type: "transfer" as const,
-      token: CONTRACTS.messageHelperOpenNoteToken,
-      amount: "OPEN" as const,
-      recipient: toFelt(account.address),
+      recipient: treasuryAddress,
     },
     {
       type: "invoke" as const,
       contract: CONTRACTS.invite,
       calldata: [
-        toFelt(calldata.length + 1),
+        toFelt(calldata.length),
         ...calldata,
-        "${openNoteIds[0]}",
       ],
     },
   ];
@@ -136,6 +137,7 @@ async function invokeInvite(
     console.error("[VINSS INVITE ACTIONS]", actions);
     throw err;
   }
+
 }
 
 /**

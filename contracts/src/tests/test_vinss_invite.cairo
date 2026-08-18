@@ -13,16 +13,9 @@ use crate::invite::invite_interfaces::{
 };
 use crate::invite::vinss_invite::compute_invite_commitment;
 
-use crate::test_mocks::mock_erc20::{
-    IMockClaimERC20Dispatcher,
-    IMockClaimERC20DispatcherTrait,
-};
-
 const PRIVACY_POOL: felt252 = 0x123;
 const OTHER_CALLER: felt252 = 0x456;
 const TEST_SECRET: felt252 = 0xabcdef;
-const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
-const OPEN_NOTE_AMOUNT: u128 = 10_u128;
 
 fn privacy_pool() -> ContractAddress {
     PRIVACY_POOL.try_into().unwrap()
@@ -54,16 +47,6 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
         .deploy(@constructor_calldata)
         .unwrap();
 
-    // Give the helper enough balance for the OpenNoteDeposit path.
-    let token = IMockClaimERC20Dispatcher {
-        contract_address: token_address,
-    };
-
-    token.mint(
-        contract_address,
-        10_u128.into(),
-    );
-
     (contract_address, token_address)
 }
 
@@ -84,7 +67,6 @@ fn create_invite(
         0,
         commitment,
         expires_at.into(),
-        TEST_OPEN_NOTE_ID,
     ];
 
     dispatcher.privacy_invoke(calldata.span());
@@ -103,7 +85,6 @@ fn consume_invite(
     let calldata = array![
         1,
         secret,
-        TEST_OPEN_NOTE_ID,
     ];
 
     dispatcher.privacy_invoke(calldata.span());
@@ -154,9 +135,8 @@ fn create_invite_stores_commitment() {
 }
 
 #[test]
-fn create_returns_ten_wei_open_note_deposit() {
-    let (contract_address, token_address) =
-        deploy_contract();
+fn create_returns_no_open_note_deposit() {
+    let (contract_address, _) = deploy_contract();
 
     let dispatcher = IVinssInviteDispatcher {
         contract_address,
@@ -179,30 +159,12 @@ fn create_returns_ten_wei_open_note_deposit() {
         0,
         commitment,
         2000,
-        TEST_OPEN_NOTE_ID,
     ];
 
     let deposits =
         dispatcher.privacy_invoke(calldata.span());
 
-    assert(deposits.len() == 1, 'missing deposit');
-
-    let deposit = *deposits.at(0);
-
-    assert(
-        deposit.note_id == TEST_OPEN_NOTE_ID,
-        'bad note id',
-    );
-
-    assert(
-        deposit.token == token_address,
-        'bad token',
-    );
-
-    assert(
-        deposit.amount == OPEN_NOTE_AMOUNT,
-        'bad amount',
-    );
+    assert(deposits.len() == 0, 'unexpected deposit');
 }
 
 #[test]
@@ -405,7 +367,6 @@ fn non_privacy_pool_caller_is_rejected() {
         0,
         commitment,
         2000,
-        TEST_OPEN_NOTE_ID,
     ];
 
     dispatcher.privacy_invoke(calldata.span());

@@ -41,11 +41,6 @@ pub mod VinssInvite {
         StoragePointerWriteAccess,
     };
 
-    use openzeppelin_token::erc20::interface::{
-        IERC20Dispatcher,
-        IERC20DispatcherTrait,
-    };
-
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 
     use crate::invite::invite_events::{
@@ -115,41 +110,28 @@ pub mod VinssInvite {
                 errors::UNAUTHORIZED_POOL,
             );
 
-            // Final felt follows the STRK20 invoke-helper convention:
-            // ${openNoteIds[0]}.
+            // Invite has no token output, so there is no OPEN note.
+            // Replay protection comes from the private note consumed by
+            // the accompanying STRK20 withdrawal.
             assert(
-                calldata.len() >= 2,
-                errors::BAD_CALLDATA,
-            );
-
-            let open_note_id =
-                *calldata.at(calldata.len() - 1);
-
-            let invite_calldata =
-                calldata.slice(
-                    0,
-                    calldata.len() - 1,
-                );
-
-            assert(
-                invite_calldata.len() >= 1,
+                calldata.len() >= 1,
                 errors::BAD_CALLDATA,
             );
 
             let operation =
-                *invite_calldata.at(0);
+                *calldata.at(0);
 
             if operation == INVITE_OP_CREATE {
                 assert(
-                    invite_calldata.len() == 3,
+                    calldata.len() == 3,
                     errors::BAD_CALLDATA,
                 );
 
                 let commitment =
-                    *invite_calldata.at(1);
+                    *calldata.at(1);
 
                 let expires_at: u64 =
-                    (*invite_calldata.at(2))
+                    (*calldata.at(2))
                         .try_into()
                         .expect(errors::BAD_CALLDATA);
 
@@ -200,12 +182,12 @@ pub mod VinssInvite {
                 );
 
                 assert(
-                    invite_calldata.len() == 2,
+                    calldata.len() == 2,
                     errors::BAD_CALLDATA,
                 );
 
                 let secret =
-                    *invite_calldata.at(1);
+                    *calldata.at(1);
 
                 assert(
                     secret != 0,
@@ -252,31 +234,8 @@ pub mod VinssInvite {
                 );
             }
 
-            // Minimal positive STRK amount used for replay plumbing.
-            // 10 wei is returned to the same user; NOT VINSS revenue.
-            let open_note_amount: u128 = 10_u128;
-            let token = self.open_note_token.read();
-
-            let erc20 = IERC20Dispatcher {
-                contract_address: token,
-            };
-
-            assert(
-                erc20.approve(
-                    spender: expected_privacy_pool,
-                    amount: open_note_amount.into(),
-                ),
-                'APPROVE_FAILED',
-            );
-
-            [
-                OpenNoteDeposit {
-                    note_id: open_note_id,
-                    token,
-                    amount: open_note_amount,
-                },
-            ]
-                .span()
+            // No asset output from Invite.
+            array![].span()
         }
 
         fn get_privacy_pool(
