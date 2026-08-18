@@ -202,15 +202,19 @@ pub mod VinssPrivateEscrowHelper {
                 .expect(errors::INVALID_PRIVATE_ESCROW_ENVELOPE_VERSION);
 
             let private_escrow_action_locator = *calldata.at(1);
-            let claimed_payload_commitment = *calldata.at(2);
+            let sender_tag = *calldata.at(2);
+            let recipient_tag = *calldata.at(3);
+            let claimed_payload_commitment = *calldata.at(4);
 
-            let payload_chunk_count: u64 = (*calldata.at(3))
+            let payload_chunk_count: u64 = (*calldata.at(5))
                 .try_into()
                 .expect(errors::INVALID_PRIVATE_ESCROW_CHUNK_COUNT);
 
             private_escrow_validation::assert_valid_private_escrow_action_header(
                 envelope_version,
                 private_escrow_action_locator,
+                sender_tag,
+                recipient_tag,
                 claimed_payload_commitment,
                 payload_chunk_count,
             );
@@ -231,6 +235,8 @@ pub mod VinssPrivateEscrowHelper {
                 compute_private_escrow_action_commitment(
                     envelope_version,
                     private_escrow_action_locator,
+                    sender_tag,
+                    recipient_tag,
                     payload_chunk_count,
                     calldata,
                 );
@@ -260,6 +266,8 @@ pub mod VinssPrivateEscrowHelper {
             let private_escrow_action = EncryptedPrivateEscrowActionRecord {
                 envelope_version,
                 private_escrow_action_locator,
+                sender_tag,
+                recipient_tag,
                 payload_commitment: computed_payload_commitment,
                 payload_chunk_count,
             };
@@ -288,6 +296,8 @@ pub mod VinssPrivateEscrowHelper {
                         private_escrow_action_locator,
                         payload_commitment:
                             computed_payload_commitment,
+                        sender_tag,
+                        recipient_tag,
                     },
                 ),
             );

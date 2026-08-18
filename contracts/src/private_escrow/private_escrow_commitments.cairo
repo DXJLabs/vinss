@@ -43,6 +43,8 @@ use crate::utils::constants::{
 pub fn compute_private_escrow_action_commitment(
     envelope_version: u8,
     private_escrow_action_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     payload_chunk_count: u64,
     calldata: Span<felt252>,
 ) -> felt252 {
@@ -51,6 +53,8 @@ pub fn compute_private_escrow_action_commitment(
     hash_input.append(VINSS_PRIVATE_ESCROW_COMMITMENT_DOMAIN);
     hash_input.append(envelope_version.into());
     hash_input.append(private_escrow_action_locator);
+    hash_input.append(sender_tag);
+    hash_input.append(recipient_tag);
     hash_input.append(payload_chunk_count.into());
 
     let mut chunk_index: u64 = 0;

@@ -25,6 +25,8 @@ use crate::utils::errors;
 pub fn assert_valid_private_escrow_action_header(
     envelope_version: u8,
     private_escrow_action_locator: felt252,
+    sender_tag: felt252,
+    recipient_tag: felt252,
     payload_commitment: felt252,
     payload_chunk_count: u64,
 ) {
@@ -36,6 +38,16 @@ pub fn assert_valid_private_escrow_action_header(
     assert(
         private_escrow_action_locator != 0,
         errors::ZERO_PRIVATE_ESCROW_ACTION_LOCATOR,
+    );
+
+    assert(
+        sender_tag != 0,
+        errors::ZERO_PRIVATE_ESCROW_SENDER_TAG,
+    );
+
+    assert(
+        recipient_tag != 0,
+        errors::ZERO_PRIVATE_ESCROW_RECIPIENT_TAG,
     );
 
     assert(

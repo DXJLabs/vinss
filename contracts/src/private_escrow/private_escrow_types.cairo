@@ -46,6 +46,12 @@ pub struct EncryptedPrivateEscrowActionRecord {
     /// One-time opaque locator used to retrieve this encrypted Private Escrow action.
     pub private_escrow_action_locator: felt252,
 
+    /// Ephemeral opaque sender routing tag.
+    pub sender_tag: felt252,
+
+    /// Ephemeral opaque recipient routing tag.
+    pub recipient_tag: felt252,
+
     /// Domain-separated Poseidon commitment to the envelope fields and every
     /// ciphertext chunk.
     pub payload_commitment: felt252,

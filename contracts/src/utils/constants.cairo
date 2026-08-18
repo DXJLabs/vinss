@@ -112,7 +112,7 @@ pub const VINSS_OFFER_COMMITMENT_DOMAIN: felt252 =
 pub const MAX_PRIVATE_ESCROW_PAYLOAD_CHUNKS: u64 = 64;
 
 /// Current encrypted Private Escrow envelope version.
-pub const VINSS_PRIVATE_ESCROW_ENVELOPE_VERSION: u8 = 1;
+pub const VINSS_PRIVATE_ESCROW_ENVELOPE_VERSION: u8 = 2;
 
 /// Fixed fields before encrypted Escrow ciphertext chunks.
 ///
@@ -122,11 +122,11 @@ pub const VINSS_PRIVATE_ESCROW_ENVELOPE_VERSION: u8 = 1;
 /// 2. claimed_payload_commitment
 /// 3. payload_chunk_count
 /// 4... ciphertext_chunks
-pub const PRIVATE_ESCROW_ENVELOPE_HEADER_FELTS: usize = 4;
+pub const PRIVATE_ESCROW_ENVELOPE_HEADER_FELTS: usize = 6;
 
 /// Domain separator for encrypted Private Escrow action commitments.
 pub const VINSS_PRIVATE_ESCROW_COMMITMENT_DOMAIN: felt252 =
-    'VINSS_PRIVATE_ESCROW_COMMIT_V1';
+    'VINSS_PRIVATE_ESCROW_COMMIT_V2';
 
 // -----------------------------------------------------------------------------
 // Escrow and settlement

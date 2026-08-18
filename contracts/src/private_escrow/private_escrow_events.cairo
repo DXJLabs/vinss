@@ -35,4 +35,7 @@ pub struct PrivateEscrowActionCommitted {
     /// Domain-separated Poseidon commitment to the full encrypted envelope,
     /// including its ciphertext chunks.
     pub payload_commitment: felt252,
+
+    pub sender_tag: felt252,
+    pub recipient_tag: felt252,
 }
