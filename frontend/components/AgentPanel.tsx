@@ -22,7 +22,7 @@ function stageLabel(stage: DealStage | null) {
       return "Escrow menunggu";
     case "funded":
       return "Escrow terisi";
-    case "settlement_pending":
+    case "rekber_pending":
       return "Settlement menunggu";
     case "completed":
       return "Selesai";
@@ -54,7 +54,7 @@ function proposalLines(proposal: AgentProposal): string[] {
         `Refund window: ${proposal.payload.refundHours ?? "24"} jam`,
       ];
 
-    case "review_settlement":
+    case "review_rekber":
       return [proposal.payload.reason];
   }
 }

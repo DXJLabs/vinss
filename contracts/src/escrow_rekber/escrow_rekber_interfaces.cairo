@@ -1,10 +1,10 @@
 use starknet::ContractAddress;
 
 use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
-use crate::private_escrow_settlement::
-    private_escrow_settlement_types::PrivateEscrowCustody;
+use crate::escrow_rekber::
+    escrow_rekber_types::EscrowRekberCustody;
 
-/// ERC-20 custody and private-output settlement for encrypted VINSS Escrow.
+/// ERC-20 custody and private-output rekber for encrypted VINSS Escrow.
 ///
 /// Only the configured Privacy Pool may call `privacy_invoke`.
 ///
@@ -14,7 +14,7 @@ use crate::private_escrow_settlement::
 ///
 /// ```text
 /// [1, custody_commitment, release_commitment, refund_commitment,
-///  refund_after, token, amount]
+///  refund_after, token, amount, revenue_open_note_id]
 /// ```
 ///
 /// Release before the refund boundary:
@@ -29,7 +29,7 @@ use crate::private_escrow_settlement::
 /// [3, custody_commitment, refund_secret, output_note_id]
 /// ```
 #[starknet::interface]
-pub trait IVinssPrivateEscrowSettlement<TState> {
+pub trait IVinssEscrowRekber<TState> {
     fn privacy_invoke(
         ref self: TState,
         calldata: Span<felt252>,
@@ -64,7 +64,7 @@ pub trait IVinssPrivateEscrowSettlement<TState> {
     fn get_custody(
         self: @TState,
         custody_commitment: felt252,
-    ) -> PrivateEscrowCustody;
+    ) -> EscrowRekberCustody;
 
     fn get_reserved_amount(
         self: @TState,

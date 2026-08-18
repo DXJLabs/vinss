@@ -57,3 +57,5 @@ pub const STALE_ALLOWANCE: felt252 =
 
 pub const RESERVE_INVARIANT: felt252 =
     'RESERVE_INVARIANT';
+
+pub const FEE_TOO_SMALL: felt252 = 'ESCROW_FEE_TOO_SMALL';

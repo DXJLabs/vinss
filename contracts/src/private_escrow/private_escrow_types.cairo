@@ -13,7 +13,7 @@
 /// - conversation or deal-room identifier;
 /// - root or parent escrow action relationship;
 /// - public lifecycle status;
-/// - asset, payment, funding, settlement terms, or expiry;
+/// - asset, payment, funding, rekber terms, or expiry;
 /// - escrow identifier or participant relationship.
 ///
 /// Ciphertext chunks are stored separately under:

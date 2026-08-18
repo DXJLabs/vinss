@@ -1,6 +1,6 @@
 use starknet::ContractAddress;
 
-/// Public custody record for one private Escrow settlement.
+/// Public custody record for one private Escrow rekber.
 ///
 /// This record deliberately does not contain:
 ///
@@ -10,10 +10,10 @@ use starknet::ContractAddress;
 /// - plaintext Escrow terms;
 /// - a public participant relationship.
 ///
-/// Token, amount, refund boundary, commitments, and settlement state remain
+/// Token, amount, refund boundary, commitments, and rekber state remain
 /// public because they are required by this ERC-20 custody primitive.
 #[derive(Copy, Drop, Serde, starknet::Store, PartialEq, Debug)]
-pub struct PrivateEscrowCustody {
+pub struct EscrowRekberCustody {
     pub custody_commitment: felt252,
     pub release_commitment: felt252,
     pub refund_commitment: felt252,

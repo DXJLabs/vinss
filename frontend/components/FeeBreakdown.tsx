@@ -1,7 +1,15 @@
 import { quoteVinssFee } from "@/lib/agent";
 
-export function FeeBreakdown({ amount, label = "Estimated service fee" }: { amount: string; label?: string }) {
-  const quote = quoteVinssFee(amount);
+export function FeeBreakdown({
+  amount,
+  label = "Estimated service fee",
+  feeBps,
+}: {
+  amount: string;
+  label?: string;
+  feeBps?: number;
+}) {
+  const quote = quoteVinssFee(amount, feeBps);
   if (!quote) return null;
   return (
     <div className="border border-wire bg-vault/50 px-3 py-3 text-xs" data-testid="fee-breakdown">

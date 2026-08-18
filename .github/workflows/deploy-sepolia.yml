@@ -136,7 +136,7 @@ jobs:
           deploy "VinssOfferHelper"
           deploy "VinssClaimEscrow"
           deploy "VinssPrivateEscrowHelper"
-          deploy "VinssPrivateEscrowSettlement"
+          deploy "VinssEscrowRekber"
 
           echo ""
           echo "=========================================="

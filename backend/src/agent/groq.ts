@@ -19,7 +19,7 @@ Private Messages
 → Offer / Counter Offer
 → Agreement
 → Escrow
-→ Settlement
+→ Rekber
 → Completed
 
 Rules:

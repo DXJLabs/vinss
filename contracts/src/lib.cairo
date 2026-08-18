@@ -43,13 +43,13 @@ pub mod private_escrow {
     pub mod vinss_private_escrow_helper;
 }
 
-pub mod private_escrow_settlement {
-    pub mod private_escrow_settlement_commitments;
-    pub mod private_escrow_settlement_errors;
-    pub mod private_escrow_settlement_events;
-    pub mod private_escrow_settlement_interfaces;
-    pub mod private_escrow_settlement_types;
-    pub mod vinss_private_escrow_settlement;
+pub mod escrow_rekber {
+    pub mod escrow_rekber_commitments;
+    pub mod escrow_rekber_errors;
+    pub mod escrow_rekber_events;
+    pub mod escrow_rekber_interfaces;
+    pub mod escrow_rekber_types;
+    pub mod vinss_escrow_rekber;
 }
 
 #[cfg(test)]

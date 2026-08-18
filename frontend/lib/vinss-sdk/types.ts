@@ -40,6 +40,15 @@ export interface MessagePayload {
   // UI show "sent at" without depending on indexer latency.
 }
 
+export type DealType =
+  | "otc"
+  | "freelance"
+  | "goods"
+  | "digital_goods"
+  | "bounty"
+  | "nft"
+  | "other";
+
 export type OfferActionKind =
   | "create"
   | "counter"
@@ -51,6 +60,9 @@ export type OfferActionKind =
 
 export interface OfferActionPayload {
   kind: OfferActionKind;
+
+  // Encrypted deal classification. Never exposed by OfferHelper.
+  dealType?: DealType;
   rootOfferLocator?: string; // hex string of a prior actionLocator, if any.
   parentOfferLocator?: string;
   asset: string;

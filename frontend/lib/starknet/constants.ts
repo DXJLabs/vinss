@@ -37,8 +37,8 @@ export const CONTRACTS = {
   privateEscrowHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
   ),
-  privateEscrowSettlement: normalizeAddress(
-    process.env.NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS ?? "",
+  escrowRekber: normalizeAddress(
+    process.env.NEXT_PUBLIC_ESCROW_REKBER_ADDRESS ?? "",
   ),
   claimEscrow: normalizeAddress(process.env.NEXT_PUBLIC_CLAIM_ESCROW_ADDRESS ?? ""),
 };

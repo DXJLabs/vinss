@@ -26,7 +26,7 @@ export type DealStage =
   | "agreed"
   | "escrow_pending"
   | "funded"
-  | "settlement_pending"
+  | "rekber_pending"
   | "completed";
 
 export type AgentProposal =
@@ -64,7 +64,7 @@ export type AgentProposal =
       };
     }
   | {
-      type: "review_settlement";
+      type: "review_rekber";
       title: string;
       description: string;
       requiresApproval: true;
@@ -99,17 +99,17 @@ export function inferDealStage(context: DealContext): DealStage {
 
   if (
     text.includes("complete deal") ||
-    text.includes("settlement complete") ||
+    text.includes("rekber complete") ||
     text.includes("released")
   ) {
     return "completed";
   }
 
   if (
-    text.includes("settlement") ||
+    text.includes("rekber") ||
     text.includes("release escrow")
   ) {
-    return "settlement_pending";
+    return "rekber_pending";
   }
 
   if (
@@ -248,7 +248,7 @@ export function draftCounterOffer(
       paymentTerms: nextTerms,
       conditions:
         offer.conditions ||
-        "Confirm settlement deadline before signing.",
+        "Confirm rekber deadline before signing.",
     },
   };
 }
@@ -281,17 +281,17 @@ export function prepareEscrow(
   };
 }
 
-export function reviewSettlement(reason: string): AgentProposal {
+export function reviewRekber(reason: string): AgentProposal {
   return {
-    type: "review_settlement",
-    title: "Review settlement",
+    type: "review_rekber",
+    title: "Review rekber",
     description:
-      "Review whether the current deal is ready for settlement.",
+      "Review whether the current deal is ready for rekber.",
     requiresApproval: true,
     payload: {
       reason:
         reason.trim() ||
-        "Review the current deal state before settlement.",
+        "Review the current deal state before rekber.",
     },
   };
 }
@@ -412,9 +412,9 @@ export function getToolDefinitions() {
     {
       type: "function" as const,
       function: {
-        name: "review_settlement",
+        name: "review_rekber",
         description:
-          "Prepare a settlement review. Never releases funds.",
+          "Prepare a rekber review. Never releases funds.",
         parameters: {
           type: "object",
           properties: {
@@ -495,8 +495,8 @@ export function executeTool(
             : String(args.refundHours),
       });
 
-    case "review_settlement":
-      return reviewSettlement(String(args.reason ?? ""));
+    case "review_rekber":
+      return reviewRekber(String(args.reason ?? ""));
 
     case "calculate_fee":
       return calculateFee(

@@ -1,10 +1,10 @@
 use starknet::ContractAddress;
 
 #[starknet::interface]
-pub trait IMockPrivateEscrowSettlementPrivacyPool<TState> {
+pub trait IMockEscrowRekberPrivacyPool<TState> {
     fn deposit_custody(
         ref self: TState,
-        settlement: ContractAddress,
+        rekber: ContractAddress,
         token: ContractAddress,
         amount: u128,
         custody_commitment: felt252,
@@ -15,7 +15,7 @@ pub trait IMockPrivateEscrowSettlementPrivacyPool<TState> {
 
     fn release_custody(
         ref self: TState,
-        settlement: ContractAddress,
+        rekber: ContractAddress,
         custody_commitment: felt252,
         release_secret: felt252,
         output_note_id: felt252,
@@ -23,7 +23,7 @@ pub trait IMockPrivateEscrowSettlementPrivacyPool<TState> {
 
     fn refund_custody(
         ref self: TState,
-        settlement: ContractAddress,
+        rekber: ContractAddress,
         custody_commitment: felt252,
         refund_secret: felt252,
         output_note_id: felt252,
@@ -33,7 +33,7 @@ pub trait IMockPrivateEscrowSettlementPrivacyPool<TState> {
         self: @TState,
     ) -> u64;
 
-    fn get_last_settlement_return_count(
+    fn get_last_rekber_return_count(
         self: @TState,
     ) -> u64;
 
@@ -55,7 +55,7 @@ pub trait IMockPrivateEscrowSettlementPrivacyPool<TState> {
 }
 
 #[starknet::contract]
-pub mod MockPrivateEscrowSettlementPrivacyPool {
+pub mod MockEscrowRekberPrivacyPool {
     use openzeppelin_token::erc20::interface::{
         IERC20Dispatcher,
         IERC20DispatcherTrait,
@@ -69,15 +69,15 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
         StoragePointerWriteAccess,
     };
 
-    use super::IMockPrivateEscrowSettlementPrivacyPool;
-    use crate::private_escrow_settlement::
-        private_escrow_settlement_interfaces::{
-            IVinssPrivateEscrowSettlementDispatcher,
-            IVinssPrivateEscrowSettlementDispatcherTrait,
+    use super::IMockEscrowRekberPrivacyPool;
+    use crate::escrow_rekber::
+        escrow_rekber_interfaces::{
+            IVinssEscrowRekberDispatcher,
+            IVinssEscrowRekberDispatcherTrait,
         };
-    use crate::private_escrow_settlement::
-        vinss_private_escrow_settlement::
-            VinssPrivateEscrowSettlement::{
+    use crate::escrow_rekber::
+        vinss_escrow_rekber::
+            VinssEscrowRekber::{
                 DEPOSIT_ACTION,
                 REFUND_ACTION,
                 RELEASE_ACTION,
@@ -86,7 +86,7 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
     #[storage]
     struct Storage {
         last_deposit_return_count: u64,
-        last_settlement_return_count: u64,
+        last_rekber_return_count: u64,
         last_note_id: felt252,
         last_token: ContractAddress,
         last_amount: u128,
@@ -94,12 +94,12 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
     }
 
     #[abi(embed_v0)]
-    impl MockPrivateEscrowSettlementPrivacyPoolImpl
-        of IMockPrivateEscrowSettlementPrivacyPool<ContractState>
+    impl MockEscrowRekberPrivacyPoolImpl
+        of IMockEscrowRekberPrivacyPool<ContractState>
     {
         fn deposit_custody(
             ref self: ContractState,
-            settlement: ContractAddress,
+            rekber: ContractAddress,
             token: ContractAddress,
             amount: u128,
             custody_commitment: felt252,
@@ -112,15 +112,15 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
             };
             assert(
                 erc20.transfer(
-                    recipient: settlement,
+                    recipient: rekber,
                     amount: amount.into(),
                 ),
                 'MOCK_TRANSFER_FAILED',
             );
 
             let dispatcher =
-                IVinssPrivateEscrowSettlementDispatcher {
-                    contract_address: settlement,
+                IVinssEscrowRekberDispatcher {
+                    contract_address: rekber,
                 };
 
             let calldata = array![
@@ -153,14 +153,14 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
 
         fn release_custody(
             ref self: ContractState,
-            settlement: ContractAddress,
+            rekber: ContractAddress,
             custody_commitment: felt252,
             release_secret: felt252,
             output_note_id: felt252,
         ) {
             let dispatcher =
-                IVinssPrivateEscrowSettlementDispatcher {
-                    contract_address: settlement,
+                IVinssEscrowRekberDispatcher {
+                    contract_address: rekber,
                 };
 
             let calldata = array![
@@ -173,19 +173,19 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
             let deposits =
                 dispatcher.privacy_invoke(calldata.span());
 
-            self.consume_output(settlement, deposits);
+            self.consume_output(rekber, deposits);
         }
 
         fn refund_custody(
             ref self: ContractState,
-            settlement: ContractAddress,
+            rekber: ContractAddress,
             custody_commitment: felt252,
             refund_secret: felt252,
             output_note_id: felt252,
         ) {
             let dispatcher =
-                IVinssPrivateEscrowSettlementDispatcher {
-                    contract_address: settlement,
+                IVinssEscrowRekberDispatcher {
+                    contract_address: rekber,
                 };
 
             let calldata = array![
@@ -198,7 +198,7 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
             let deposits =
                 dispatcher.privacy_invoke(calldata.span());
 
-            self.consume_output(settlement, deposits);
+            self.consume_output(rekber, deposits);
         }
 
         fn get_last_deposit_return_count(
@@ -207,10 +207,10 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
             self.last_deposit_return_count.read()
         }
 
-        fn get_last_settlement_return_count(
+        fn get_last_rekber_return_count(
             self: @ContractState,
         ) -> u64 {
-            self.last_settlement_return_count.read()
+            self.last_rekber_return_count.read()
         }
 
         fn get_last_note_id(
@@ -242,14 +242,14 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
     impl InternalImpl of InternalTrait {
         fn consume_output(
             ref self: ContractState,
-            settlement: ContractAddress,
+            rekber: ContractAddress,
             deposits: Span<
                 crate::interfaces::
                     privacy_pool_types::OpenNoteDeposit,
             >,
         ) {
             self
-                .last_settlement_return_count
+                .last_rekber_return_count
                 .write(
                     deposits
                         .len()
@@ -275,14 +275,14 @@ pub mod MockPrivateEscrowSettlementPrivacyPool {
 
             self.observed_allowance.write(
                 erc20.allowance(
-                    owner: settlement,
+                    owner: rekber,
                     spender: pool,
                 ),
             );
 
             assert(
                 erc20.transfer_from(
-                    sender: settlement,
+                    sender: rekber,
                     recipient: pool,
                     amount: deposit.amount.into(),
                 ),

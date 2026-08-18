@@ -14,7 +14,7 @@ export type DealStage =
   | "agreed"
   | "escrow_pending"
   | "funded"
-  | "settlement_pending"
+  | "rekber_pending"
   | "completed";
 
 export type AgentProposal =
@@ -52,7 +52,7 @@ export type AgentProposal =
       };
     }
   | {
-      type: "review_settlement";
+      type: "review_rekber";
       title: string;
       description: string;
       requiresApproval: true;

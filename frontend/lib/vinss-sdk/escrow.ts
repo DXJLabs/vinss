@@ -8,8 +8,8 @@
  *    Used for: create, funding intent, accept, funding confirmation, cancel,
  *    refund, dispute/resolution — all encrypted, action kind stays hidden.
  *
- * 2) Settlement (contracts/private_escrow_settlement/
- *    private_escrow_settlement_interfaces.cairo): a *different*, public,
+ * 2) Rekber (contracts/escrow_rekber/
+ *    escrow_rekber_interfaces.cairo): a *different*, public,
  *    commitment-based calldata shape, because this contract actually moves
  *    ERC-20 custody:
  *      deposit  [1, custody_commitment, release_commitment, refund_commitment,
@@ -24,12 +24,12 @@
  *
  *    Both contracts' only external entrypoint is privacy_invoke(calldata:
  *    Span<felt252>) — confirmed against
- *    contracts/private_escrow_settlement/private_escrow_settlement_interfaces.cairo
+ *    contracts/escrow_rekber/escrow_rekber_interfaces.cairo
  *    — so the selector below applies to both call sites in this file.
  */
 
 import type { WalletAccountV6 } from "starknet";
-import { hash } from "starknet";
+import { hash, num } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
   commitPayload,
@@ -108,7 +108,7 @@ export async function sendEscrowCoordinationAction(
   };
 }
 
-// --- Settlement (public commitments, moves real ERC-20 custody) ------------
+// --- Rekber (public commitments, moves real ERC-20 custody) ------------
 
 export interface EscrowSecrets {
   releaseSecret: bigint;
@@ -132,7 +132,7 @@ export function generateEscrowSecrets(): EscrowSecrets {
  * custody_commitment is generated FIRST, independently — it is this
  * escrow's identifier, not derived from the release/refund commitments.
  * release_commitment and refund_commitment are then computed FROM it (see
- * private_escrow_settlement_interfaces.cairo: `compute_release_commitment(
+ * escrow_rekber_interfaces.cairo: `compute_release_commitment(
  * custody_commitment, release_secret)`). Generating it any other order
  * breaks the contract's expected input composition.
  */
@@ -140,7 +140,7 @@ export function generateCustodyCommitment(): bigint {
   return randomFelt();
 }
 
-/** Mirrors VinssPrivateEscrowSettlement.compute_release_commitment. */
+/** Mirrors VinssEscrowRekber.compute_release_commitment. */
 export function computeReleaseCommitment(
   custodyCommitment: bigint,
   releaseSecret: bigint,
@@ -153,7 +153,7 @@ export function computeReleaseCommitment(
   );
 }
 
-/** Mirrors VinssPrivateEscrowSettlement.compute_refund_commitment. */
+/** Mirrors VinssEscrowRekber.compute_refund_commitment. */
 export function computeRefundCommitment(
   custodyCommitment: bigint,
   refundSecret: bigint,
@@ -172,40 +172,85 @@ export async function depositEscrow(
     custodyCommitment: bigint;
     releaseCommitment: bigint;
     refundCommitment: bigint;
-    refundAfter: number; // unix seconds
+    refundAfter: number;
     token: string;
     amount: bigint;
   },
 ): Promise<{ transactionHash: string }> {
-  if (!CONTRACTS.privateEscrowSettlement) {
+  if (!CONTRACTS.escrowRekber) {
     throw new Error(
-      "NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS is not set — see .env.local.example.",
+      "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set.",
     );
   }
+
+  const treasury =
+    process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!treasury) {
+    throw new Error(
+      "NEXT_PUBLIC_VINSS_TREASURY_ADDRESS is not configured",
+    );
+  }
+
+  const principal = params.amount;
+  const fee = principal / 100n;
+
+  if (fee <= 0n) {
+    throw new Error(
+      "Amount is too small for the 1% Rekber fee.",
+    );
+  }
+
+  const total = principal + fee;
+  const token = num.toHex(params.token);
+
   const calldata = [
     toFelt(1),
     toFelt(params.custodyCommitment),
     toFelt(params.releaseCommitment),
     toFelt(params.refundCommitment),
     toFelt(params.refundAfter),
-    params.token,
-    toFelt(params.amount),
+    token,
+    toFelt(principal),
   ];
-  const response = await invokeHelper(
-    account,
-    CONTRACTS.privateEscrowSettlement,
-    calldata,
-  );
-  return { transactionHash: response.transaction_hash };
+
+  const response =
+    await account.strk20InvokeTransaction([
+      {
+        type: "withdraw",
+        token,
+        amount: toFelt(total),
+        recipient: CONTRACTS.escrowRekber,
+      },
+      {
+        type: "transfer",
+        token,
+        amount: "OPEN",
+        recipient: treasury,
+      },
+      {
+        type: "invoke",
+        contract: CONTRACTS.escrowRekber,
+        calldata: [
+          toFelt(calldata.length + 1),
+          ...calldata,
+          "${openNoteIds[0]}",
+        ],
+      },
+    ]);
+
+  return {
+    transactionHash: response.transaction_hash,
+  };
 }
 
 export async function releaseEscrow(
   account: WalletAccountV6,
   params: { custodyCommitment: bigint; releaseSecret: bigint; outputNoteId: bigint },
 ): Promise<{ transactionHash: string }> {
-  if (!CONTRACTS.privateEscrowSettlement) {
+  if (!CONTRACTS.escrowRekber) {
     throw new Error(
-      "NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS is not set — see .env.local.example.",
+      "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set — see .env.local.example.",
     );
   }
   const calldata = [
@@ -216,7 +261,7 @@ export async function releaseEscrow(
   ];
   const response = await invokeHelper(
     account,
-    CONTRACTS.privateEscrowSettlement,
+    CONTRACTS.escrowRekber,
     calldata,
   );
   return { transactionHash: response.transaction_hash };
@@ -226,9 +271,9 @@ export async function refundEscrow(
   account: WalletAccountV6,
   params: { custodyCommitment: bigint; refundSecret: bigint; outputNoteId: bigint },
 ): Promise<{ transactionHash: string }> {
-  if (!CONTRACTS.privateEscrowSettlement) {
+  if (!CONTRACTS.escrowRekber) {
     throw new Error(
-      "NEXT_PUBLIC_PRIVATE_ESCROW_SETTLEMENT_ADDRESS is not set — see .env.local.example.",
+      "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set — see .env.local.example.",
     );
   }
   const calldata = [
@@ -239,7 +284,7 @@ export async function refundEscrow(
   ];
   const response = await invokeHelper(
     account,
-    CONTRACTS.privateEscrowSettlement,
+    CONTRACTS.escrowRekber,
     calldata,
   );
   return { transactionHash: response.transaction_hash };

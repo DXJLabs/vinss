@@ -24,7 +24,7 @@ import {
   type MessagingIdentity,
   type RoomParticipant,
 } from "@/lib/vinss-sdk/participantKeys";
-import type { MessagePayload, OfferActionPayload } from "@/lib/vinss-sdk/types";
+import type { MessagePayload, OfferActionPayload, DealType } from "@/lib/vinss-sdk/types";
 import type { MessageRoute } from "@/lib/vinss-sdk/messageRouting";
 import { BACKEND_URL } from "@/lib/starknet/constants";
 import { AgentPanel } from "@/components/AgentPanel";
@@ -129,7 +129,19 @@ export default function DealRoomPage() {
     const r = loadRoom(params.roomId);
     setRoom(r);
     if (r) {
-      deriveChannelKeyFromRoomSecret(r.roomSecret).then(setChannelKey);
+      deriveChannelKeyFromRoomSecret(r.roomSecret).then(async (key) => {
+        setChannelKey(key);
+
+        const digest = new Uint8Array(
+          await crypto.subtle.digest("SHA-256", Uint8Array.from(key).buffer),
+        );
+
+        const fingerprint = Array.from(digest.slice(0, 6))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        console.log("[VINSS CHANNEL FINGERPRINT]", fingerprint);
+      });
     }
   }, [params.roomId]);
 
@@ -268,7 +280,7 @@ export default function DealRoomPage() {
         setTab("escrow");
         return;
 
-      case "review_settlement":
+      case "review_rekber":
         setTab("escrow");
         return;
     }
@@ -377,7 +389,10 @@ export default function DealRoomPage() {
       const groupMessages = await discoverMessages(
         BACKEND_URL,
         channelKey,
-      ).catch(() => []);
+      ).catch((err) => {
+        console.error("[VINSS GROUP DISCOVERY FAILED]", err);
+        return [];
+      });
 
       const participantMap = new Map<
         string,
@@ -452,7 +467,10 @@ export default function DealRoomPage() {
           BACKEND_URL,
           channelKey,
           routes,
-        ).catch(() => []);
+        ).catch((err) => {
+          console.error("[VINSS DIRECT DISCOVERY FAILED]", err);
+          return [];
+        });
       }
 
       const messages = [
@@ -1041,6 +1059,7 @@ function OfferPanel({
     { type: "draft_offer" | "draft_counter_offer" }
   > | null;
 }) {
+  const [dealType, setDealType] = useState<DealType>("otc");
   const [asset, setAsset] = useState("");
   const [amount, setAmount] = useState("");
   const [terms, setTerms] = useState("");
@@ -1060,6 +1079,7 @@ function OfferPanel({
 
     try {
       const payload: Omit<OfferActionPayload, "kind"> = {
+        dealType,
         asset: asset.trim(),
         amount: amount.trim(),
         paymentTerms: terms.trim() || "Tidak ditentukan",
@@ -1117,6 +1137,36 @@ function OfferPanel({
       </div>
 
       <div className="space-y-5 p-4">
+        {/* Deal type — encrypted inside the Offer payload */}
+        <div>
+          <label
+            htmlFor="offer-deal-type"
+            className="mb-2 block font-display text-[10px] uppercase tracking-widest text-paper/40"
+          >
+            Deal type
+          </label>
+
+          <select
+            id="offer-deal-type"
+            value={dealType}
+            onChange={(e) => setDealType(e.target.value as DealType)}
+            disabled={!session || !channelKey || busy}
+            className="w-full border border-wire bg-vault px-3 py-3 text-sm text-paper outline-none focus:border-signal disabled:opacity-40"
+          >
+            <option value="otc">OTC / Token trade</option>
+            <option value="freelance">Freelance / Service</option>
+            <option value="goods">Physical goods</option>
+            <option value="digital_goods">Digital goods / License</option>
+            <option value="bounty">Bounty / Task</option>
+            <option value="nft">NFT deal</option>
+            <option value="other">Other</option>
+          </select>
+
+          <p className="mt-1.5 text-[10px] leading-relaxed text-paper/25">
+            Deal type is encrypted with the offer and is not exposed publicly on-chain.
+          </p>
+        </div>
+
         {/* Asset */}
         <div>
           <label
@@ -1200,7 +1250,19 @@ function OfferPanel({
             </span>
           </div>
 
-          <FeeBreakdown amount={amount} />
+          <div className="border border-wire bg-vault/50 px-3 py-3 text-xs">
+            <div className="flex justify-between text-paper/50">
+              <span>Deal value</span>
+              <span>
+                {amount || "0"} {asset || ""}
+              </span>
+            </div>
+
+            <div className="mt-1 flex justify-between text-paper/50">
+              <span>Private offer action fee</span>
+              <span>1 STRK</span>
+            </div>
+          </div>
         </div>
 
         {/* Review boundary */}
@@ -1209,8 +1271,9 @@ function OfferPanel({
             <span className="mt-0.5 text-signal">◆</span>
 
             <p className="text-[10px] leading-relaxed text-paper/40">
-              Review the deal value and service fee before creating the offer.
-              Creating an offer does not automatically fund escrow.
+              Review the deal terms before creating the offer. Creating an offer
+              charges a flat 1 STRK private action fee and does not fund
+              Escrow Rekber.
             </p>
           </div>
         </div>
@@ -1365,15 +1428,15 @@ function EscrowPanel({
     <section className="border border-wire bg-vault/40">
       <div className="border-b border-wire px-4 py-4">
         <p className="font-display text-xs uppercase tracking-widest text-signal">
-          Escrow
+          VINSS Escrow Rekber
         </p>
 
         <h3 className="mt-1 text-sm text-paper">
-          Fund this deal securely
+          Secure the accepted deal
         </h3>
 
         <p className="mt-1 text-xs leading-relaxed text-paper/35">
-          Connect the accepted offer first, then deposit the agreed funds.
+          Connect the accepted offer first, then lock the agreed payment in Rekber.
         </p>
       </div>
 
@@ -1535,7 +1598,9 @@ function EscrowPanel({
               />
 
               <p className="mt-1.5 text-[10px] text-paper/25">
-                The token address is used for the on-chain ERC-20 deposit.
+                The current Rekber contract locks ERC-20 payment assets. The deal itself
+                may represent OTC, freelance work, goods, NFT purchases, bounty,
+                or another privately negotiated transaction.
               </p>
             </div>
 
@@ -1613,6 +1678,7 @@ function EscrowPanel({
               <FeeBreakdown
                 amount={amount}
                 label="VINSS escrow service fee"
+                feeBps={100}
               />
             </div>
 

@@ -5,7 +5,7 @@ use starknet::ContractAddress;
 /// ERC-20 token, amount, and refund boundary are public because the custody
 /// transfer and InvokeExternal calldata are public on-chain.
 #[derive(Drop, starknet::Event)]
-pub struct PrivateEscrowCustodyFunded {
+pub struct EscrowRekberCustodyFunded {
     #[key]
     pub custody_commitment: felt252,
     #[key]
@@ -17,7 +17,7 @@ pub struct PrivateEscrowCustodyFunded {
 
 /// Custody was consumed through the release-secret path.
 #[derive(Drop, starknet::Event)]
-pub struct PrivateEscrowCustodyReleased {
+pub struct EscrowRekberCustodyReleased {
     #[key]
     pub custody_commitment: felt252,
     #[key]
@@ -27,7 +27,7 @@ pub struct PrivateEscrowCustodyReleased {
 
 /// Custody was consumed through the timeout refund path.
 #[derive(Drop, starknet::Event)]
-pub struct PrivateEscrowCustodyRefunded {
+pub struct EscrowRekberCustodyRefunded {
     #[key]
     pub custody_commitment: felt252,
     #[key]

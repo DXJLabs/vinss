@@ -1,8 +1,8 @@
-use crate::private_escrow_settlement::
-    private_escrow_settlement_interfaces::IVinssPrivateEscrowSettlement;
+use crate::escrow_rekber::
+    escrow_rekber_interfaces::IVinssEscrowRekber;
 
 #[starknet::contract]
-pub mod VinssPrivateEscrowSettlement {
+pub mod VinssEscrowRekber {
     use openzeppelin_security::reentrancyguard::ReentrancyGuardComponent;
     use openzeppelin_security::reentrancyguard::
         ReentrancyGuardComponent::InternalTrait
@@ -25,23 +25,23 @@ pub mod VinssPrivateEscrowSettlement {
         StoragePointerWriteAccess,
     };
 
-    use super::IVinssPrivateEscrowSettlement;
+    use super::IVinssEscrowRekber;
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
-    use crate::private_escrow_settlement::
-        private_escrow_settlement_commitments::{
+    use crate::escrow_rekber::
+        escrow_rekber_commitments::{
             compute_private_escrow_refund_commitment,
             compute_private_escrow_release_commitment,
         };
-    use crate::private_escrow_settlement::
-        private_escrow_settlement_errors as errors;
-    use crate::private_escrow_settlement::
-        private_escrow_settlement_events::{
-            PrivateEscrowCustodyFunded,
-            PrivateEscrowCustodyRefunded,
-            PrivateEscrowCustodyReleased,
+    use crate::escrow_rekber::
+        escrow_rekber_errors as errors;
+    use crate::escrow_rekber::
+        escrow_rekber_events::{
+            EscrowRekberCustodyFunded,
+            EscrowRekberCustodyRefunded,
+            EscrowRekberCustodyReleased,
         };
-    use crate::private_escrow_settlement::
-        private_escrow_settlement_types::PrivateEscrowCustody;
+    use crate::escrow_rekber::
+        escrow_rekber_types::EscrowRekberCustody;
     use crate::utils::errors::{
         UNAUTHORIZED_PRIVACY_POOL,
         ZERO_AMOUNT,
@@ -65,7 +65,7 @@ pub mod VinssPrivateEscrowSettlement {
         #[substorage(v0)]
         reentrancy_guard: ReentrancyGuardComponent::Storage,
         privacy_pool: ContractAddress,
-        custodies: Map<felt252, PrivateEscrowCustody>,
+        custodies: Map<felt252, EscrowRekberCustody>,
         custody_exists: Map<felt252, bool>,
         reserved_by_token: Map<ContractAddress, u128>,
     }
@@ -75,9 +75,9 @@ pub mod VinssPrivateEscrowSettlement {
     enum Event {
         #[flat]
         ReentrancyGuardEvent: ReentrancyGuardComponent::Event,
-        PrivateEscrowCustodyFunded: PrivateEscrowCustodyFunded,
-        PrivateEscrowCustodyReleased: PrivateEscrowCustodyReleased,
-        PrivateEscrowCustodyRefunded: PrivateEscrowCustodyRefunded,
+        EscrowRekberCustodyFunded: EscrowRekberCustodyFunded,
+        EscrowRekberCustodyReleased: EscrowRekberCustodyReleased,
+        EscrowRekberCustodyRefunded: EscrowRekberCustodyRefunded,
     }
 
     #[constructor]
@@ -90,8 +90,8 @@ pub mod VinssPrivateEscrowSettlement {
     }
 
     #[abi(embed_v0)]
-    impl VinssPrivateEscrowSettlementImpl
-        of IVinssPrivateEscrowSettlement<ContractState>
+    impl VinssEscrowRekberImpl
+        of IVinssEscrowRekber<ContractState>
     {
         fn privacy_invoke(
             ref self: ContractState,
@@ -171,7 +171,7 @@ pub mod VinssPrivateEscrowSettlement {
         fn get_custody(
             self: @ContractState,
             custody_commitment: felt252,
-        ) -> PrivateEscrowCustody {
+        ) -> EscrowRekberCustody {
             assert(
                 self.custody_exists.read(custody_commitment),
                 errors::CUSTODY_NOT_FOUND,
@@ -196,7 +196,9 @@ pub mod VinssPrivateEscrowSettlement {
             ref self: ContractState,
             calldata: Span<felt252>,
         ) -> Span<OpenNoteDeposit> {
-            assert(calldata.len() == 7, errors::INVALID_CALLDATA);
+            // [action, custody, release, refund, refund_after,
+            //  token, principal, revenue_open_note_id]
+            assert(calldata.len() == 8, errors::INVALID_CALLDATA);
 
             let custody_commitment = *calldata.at(1);
             assert(
@@ -219,6 +221,7 @@ pub mod VinssPrivateEscrowSettlement {
                 refund_commitment != 0,
                 errors::ZERO_REFUND_COMMITMENT,
             );
+
             assert(
                 release_commitment != refund_commitment,
                 errors::SAME_PATH_COMMITMENTS,
@@ -231,36 +234,62 @@ pub mod VinssPrivateEscrowSettlement {
             let token: ContractAddress = (*calldata.at(5))
                 .try_into()
                 .expect(ZERO_TOKEN);
+
             assert_non_zero_address(token);
 
+            // Principal rekber.
             let amount: u128 = (*calldata.at(6))
                 .try_into()
                 .expect(ZERO_AMOUNT);
+
             assert(amount != 0, ZERO_AMOUNT);
 
+            let revenue_open_note_id = *calldata.at(7);
+            assert(revenue_open_note_id != 0, ZERO_NOTE_ID);
+
+            // VINSS Rekber revenue = 1%.
+            // Principal TIDAK dipotong.
+            let fee_amount: u128 = amount / 100_u128;
+
+            assert(
+                fee_amount != 0,
+                errors::FEE_TOO_SMALL,
+            );
+
             let now = get_block_timestamp();
+
             assert(
                 refund_after > now,
                 errors::INVALID_REFUND_AFTER,
             );
 
-            let reserved = self.reserved_by_token.read(token);
-            let updated_reserved = reserved + amount;
+            let reserved =
+                self.reserved_by_token.read(token);
+
+            let updated_reserved =
+                reserved + amount;
+
+            let required_balance =
+                updated_reserved + fee_amount;
 
             let erc20 = IERC20Dispatcher {
                 contract_address: token,
             };
-            let contract = get_contract_address();
-            let balance = erc20.balance_of(account: contract);
 
+            let contract = get_contract_address();
+
+            let balance =
+                erc20.balance_of(account: contract);
+
+            // Wallet harus mengirim principal + 1%.
             assert(
-                balance >= updated_reserved.into(),
+                balance >= required_balance.into(),
                 errors::FUNDS_NOT_RECEIVED,
             );
 
             self.custodies.write(
                 custody_commitment,
-                PrivateEscrowCustody {
+                EscrowRekberCustody {
                     custody_commitment,
                     release_commitment,
                     refund_commitment,
@@ -273,16 +302,19 @@ pub mod VinssPrivateEscrowSettlement {
                     settled_at: 0,
                 },
             );
+
             self
                 .custody_exists
                 .write(custody_commitment, true);
+
+            // Reserve principal saja.
             self
                 .reserved_by_token
                 .write(token, updated_reserved);
 
             self.emit(
-                Event::PrivateEscrowCustodyFunded(
-                    PrivateEscrowCustodyFunded {
+                Event::EscrowRekberCustodyFunded(
+                    EscrowRekberCustodyFunded {
                         custody_commitment,
                         token,
                         amount,
@@ -292,7 +324,32 @@ pub mod VinssPrivateEscrowSettlement {
                 ),
             );
 
-            ArrayTrait::<OpenNoteDeposit>::new().span()
+            let pool = self.privacy_pool.read();
+
+            assert(
+                erc20.allowance(
+                    owner: contract,
+                    spender: pool,
+                ) == 0,
+                errors::STALE_ALLOWANCE,
+            );
+
+            assert(
+                erc20.approve(
+                    spender: pool,
+                    amount: fee_amount.into(),
+                ),
+                errors::APPROVAL_FAILED,
+            );
+
+            [
+                OpenNoteDeposit {
+                    note_id: revenue_open_note_id,
+                    token,
+                    amount: fee_amount,
+                },
+            ]
+                .span()
         }
 
         /// Release funds to a private output note before the refund boundary.
@@ -397,7 +454,7 @@ pub mod VinssPrivateEscrowSettlement {
         /// exact allowance for one OpenNoteDeposit.
         fn prepare_output(
             ref self: ContractState,
-            mut custody: PrivateEscrowCustody,
+            mut custody: EscrowRekberCustody,
             output_note_id: felt252,
             refunded: bool,
             now: u64,
@@ -465,8 +522,8 @@ pub mod VinssPrivateEscrowSettlement {
 
             if refunded {
                 self.emit(
-                    Event::PrivateEscrowCustodyRefunded(
-                        PrivateEscrowCustodyRefunded {
+                    Event::EscrowRekberCustodyRefunded(
+                        EscrowRekberCustodyRefunded {
                             custody_commitment:
                                 custody.custody_commitment,
                             output_note_id,
@@ -476,8 +533,8 @@ pub mod VinssPrivateEscrowSettlement {
                 );
             } else {
                 self.emit(
-                    Event::PrivateEscrowCustodyReleased(
-                        PrivateEscrowCustodyReleased {
+                    Event::EscrowRekberCustodyReleased(
+                        EscrowRekberCustodyReleased {
                             custody_commitment:
                                 custody.custody_commitment,
                             output_note_id,

@@ -20,8 +20,8 @@ export const config = {
     messageHelper: process.env.MESSAGE_HELPER_ADDRESS ?? "",
     offerHelper: process.env.OFFER_HELPER_ADDRESS ?? "",
     privateEscrowHelper: process.env.PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
-    privateEscrowSettlement:
-      process.env.PRIVATE_ESCROW_SETTLEMENT_ADDRESS ?? "",
+    escrowRekber:
+      process.env.ESCROW_REKBER_ADDRESS ?? "",
     claimEscrow: process.env.CLAIM_ESCROW_ADDRESS ?? "",
   },
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",

@@ -28,7 +28,7 @@ use crate::private_escrow::private_escrow_types::EncryptedPrivateEscrowActionRec
 /// - refund private escrow;
 /// - dispute and resolution.
 ///
-/// The action kind, participant context, lifecycle relationships, and settlement coordination exist only inside ciphertext.
+/// The action kind, participant context, lifecycle relationships, and rekber coordination exist only inside ciphertext.
 #[starknet::interface]
 pub trait IVinssPrivateEscrowHelper<TContractState> {
     /// Store one encrypted Private Escrow action through the configured Privacy Pool.
@@ -63,11 +63,11 @@ pub trait IVinssPrivateEscrowHelper<TContractState> {
     /// - root and parent escrow action relationships;
     /// - asset;
     /// - payment terms;
-    /// - funding and settlement terms;
+    /// - funding and rekber terms;
     /// - conditions;
     /// - expiry;
     /// - release, refund, dispute, or resolution reason;
-    /// - settlement commitment.
+    /// - rekber commitment.
     ///
     /// The helper returns an empty deposit span because storing an encrypted
     /// Private Escrow action does not itself credit an output token to an open note.
