@@ -105,11 +105,12 @@ async function invokeInvite(
 
   const actions = [
     {
-      // Zero-value encrypted note = WriteOnce replay anchor.
-      // No real token value moves.
+      // Minimal private self-transfer = WriteOnce replay anchor.
+      // Wallet API compiler requires created-note amount > 0.
+      // 0x1 = one smallest STRK unit, not 1 STRK.
       type: "transfer" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
-      amount: "0x0",
+      amount: "0x1",
       recipient: toFelt(account.address),
     },
     {
