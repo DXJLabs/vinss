@@ -22,7 +22,7 @@ export function ProofModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       role="presentation"
       onMouseDown={(event) => {
         // Clicking outside the card closes the proof without changing chat state.
@@ -32,7 +32,12 @@ export function ProofModal({
       }}
     >
       <div
-        className="w-full max-w-md border border-wire bg-vault p-5 shadow-2xl sm:rounded-lg"
+        className="w-full max-w-sm rounded-xl border border-wire bg-vault p-5 shadow-2xl"
+        style={{
+          animation:
+            "vinssProofPop 160ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+          transformOrigin: "center",
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -106,6 +111,20 @@ export function ProofModal({
           </div>
         </details>
       </div>
+
+      <style>{`
+        @keyframes vinssProofPop {
+          from {
+            opacity: 0;
+            transform: scale(0.92);
+          }
+
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}</style>
     </div>
   );
 }

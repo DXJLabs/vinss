@@ -9,7 +9,10 @@ import {
   createInviteToken,
   getInviteOnchainState,
 } from "@/lib/deal-room/invitation";
-import type { RoomParticipant } from "@/lib/privacy/participantKeys";
+import {
+  sameStarknetAddress,
+  type RoomParticipant,
+} from "@/lib/privacy/participantKeys";
 
 interface RoomInvitationContext {
   id: string;
@@ -332,8 +335,10 @@ export function useRoomInvitation({
           }
 
           if (
-            sender.address.toLowerCase() ===
-            session.account.address.toLowerCase()
+            sameStarknetAddress(
+              sender.address,
+              session.account.address,
+            )
           ) {
             continue;
           }

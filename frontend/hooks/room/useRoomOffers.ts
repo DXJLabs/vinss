@@ -11,8 +11,10 @@ import {
   rejectOffer,
 } from "@/lib/deal-room/offers";
 import {
+  canonicalStarknetAddress,
   deriveDirectMessageKey,
   getOrCreateMessagingIdentity,
+  sameStarknetAddress,
   type MessagingIdentity,
   type RoomParticipant,
 } from "@/lib/privacy/participantKeys";
@@ -145,8 +147,10 @@ export function useRoomOffers({
     // Match against participant public keys learned from encrypted room chat.
     const peer = participants.find(
       (participant) =>
-        participant.address.toLowerCase() ===
-        peerAddress.toLowerCase(),
+        sameStarknetAddress(
+          participant.address,
+          peerAddress,
+        ),
     );
 
     if (!peer) {
@@ -262,22 +266,35 @@ export function useRoomOffers({
         routes,
       );
 
-      const self = session.account.address.toLowerCase();
+      const self =
+        canonicalStarknetAddress(
+          session.account.address,
+        );
 
       // Only keep direct actions whose encrypted participants include this wallet
       // and one participant currently known in this room.
       const knownPeers = new Set(
         participants.map((participant) =>
-          participant.address.toLowerCase(),
+          canonicalStarknetAddress(
+            participant.address,
+          ),
         ),
       );
 
       const incomingEntries = discovered
         .filter((item) => {
           const sender =
-            item.action.senderAddress?.toLowerCase() ?? "";
+            item.action.senderAddress
+              ? canonicalStarknetAddress(
+                  item.action.senderAddress,
+                )
+              : "";
           const recipient =
-            item.action.recipientAddress?.toLowerCase() ?? "";
+            item.action.recipientAddress
+              ? canonicalStarknetAddress(
+                  item.action.recipientAddress,
+                )
+              : "";
 
           if (!sender || !recipient) return false;
 
@@ -451,8 +468,10 @@ export function useRoomOffers({
 
     // A counter is valid only for the encrypted recipient of the parent action.
     if (
-      sourceAction.recipientAddress?.toLowerCase() !==
-      session.account.address.toLowerCase()
+      !sameStarknetAddress(
+        sourceAction.recipientAddress,
+        session.account.address,
+      )
     ) {
       setError("Only the current recipient can counter this offer.");
       return false;
@@ -521,8 +540,10 @@ export function useRoomOffers({
     const sourceAction = source.offerAction;
 
     if (
-      sourceAction.recipientAddress?.toLowerCase() !==
-      session.account.address.toLowerCase()
+      !sameStarknetAddress(
+        sourceAction.recipientAddress,
+        session.account.address,
+      )
     ) {
       setError("Only the current recipient can accept this offer.");
       return false;
@@ -594,8 +615,10 @@ export function useRoomOffers({
     const sourceAction = source.offerAction;
 
     if (
-      sourceAction.recipientAddress?.toLowerCase() !==
-      session.account.address.toLowerCase()
+      !sameStarknetAddress(
+        sourceAction.recipientAddress,
+        session.account.address,
+      )
     ) {
       setError("Only the current recipient can reject this offer.");
       return false;
