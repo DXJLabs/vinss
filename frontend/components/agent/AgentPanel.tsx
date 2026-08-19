@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   askVinssAgent,
   type AgentProposal,
@@ -8,84 +12,328 @@ import {
   type DealStage,
 } from "@/lib/agent";
 
-function stageLabel(stage: DealStage | null) {
-  switch (stage) {
-    case "discussion":
-      return "Diskusi";
-    case "negotiating":
-      return "Negosiasi";
-    case "offer_pending":
-      return "Offer menunggu";
-    case "agreed":
-      return "Disepakati";
-    case "escrow_pending":
-      return "Escrow menunggu";
-    case "funded":
-      return "Escrow terisi";
-    case "rekber_pending":
-      return "Settlement menunggu";
-    case "completed":
-      return "Selesai";
-    default:
-      return "Siap";
-  }
-}
+export type AgentContextKind =
+  | "messages"
+  | "chat"
+  | "group"
+  | "deal"
+  | "escrow";
 
-function proposalLines(proposal: AgentProposal): string[] {
-  switch (proposal.type) {
-    case "draft_message":
-      return [proposal.payload.body];
-
-    case "draft_offer":
-    case "draft_counter_offer":
-      return [
-        `${proposal.payload.amount} ${proposal.payload.asset}`,
-        `Pembayaran: ${proposal.payload.paymentTerms}`,
-        ...(proposal.payload.conditions
-          ? [`Syarat: ${proposal.payload.conditions}`]
-          : []),
-      ];
-
-    case "prepare_escrow":
-      return [
-        proposal.payload.dealOfferLocator
-          ? `Offer: ${proposal.payload.dealOfferLocator}`
-          : "Offer akan dipilih saat review",
-        `Refund window: ${proposal.payload.refundHours ?? "24"} jam`,
-      ];
-
-    case "review_rekber":
-      return [proposal.payload.reason];
-  }
-}
-
-export function AgentPanel({
-  roomLabel,
-  timeline,
-  latestOffer,
-  onApproveProposal,
-}: {
+interface AgentPanelProps {
   roomLabel?: string;
+  contextKind: AgentContextKind;
+  contextLabel: string;
   timeline: AgentTimelineItem[];
   latestOffer?: unknown;
   onApproveProposal?: (
     proposal: AgentProposal,
   ) => void | Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [shareContext, setShareContext] = useState(false);
-  const [message, setMessage] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [dealStage, setDealStage] = useState<DealStage | null>(null);
-  const [proposal, setProposal] = useState<AgentProposal | null>(null);
-  const [approved, setApproved] = useState(false);
-  const [acted, setActed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+}
 
-  async function submit() {
-    if (!message.trim() || !shareContext) return;
+interface AgentCommand {
+  label: string;
+  prompt: string;
+}
 
+function stageLabel(
+  stage: DealStage | null,
+): string {
+  switch (stage) {
+    case "discussion":
+      return "Discussion";
+    case "negotiating":
+      return "Negotiating";
+    case "offer_pending":
+      return "Offer pending";
+    case "agreed":
+      return "Agreed";
+    case "escrow_pending":
+      return "Escrow pending";
+    case "funded":
+      return "Funded";
+    case "rekber_pending":
+      return "Settlement pending";
+    case "completed":
+      return "Completed";
+    default:
+      return "Ready";
+  }
+}
+
+function proposalLines(
+  proposal: AgentProposal,
+): string[] {
+  switch (proposal.type) {
+    case "draft_message":
+      return [
+        proposal.payload.body,
+      ];
+
+    case "draft_offer":
+    case "draft_counter_offer":
+      return [
+        `${proposal.payload.amount} ${proposal.payload.asset}`,
+        `Payment terms: ${proposal.payload.paymentTerms}`,
+        ...(proposal.payload.conditions
+          ? [
+              `Conditions: ${proposal.payload.conditions}`,
+            ]
+          : []),
+      ];
+
+    case "prepare_escrow":
+      return [
+        proposal.payload
+          .dealOfferLocator
+          ? `Offer: ${proposal.payload.dealOfferLocator}`
+          : "Offer will be selected during review",
+        `Refund window: ${proposal.payload.refundHours ?? "24"} hours`,
+      ];
+
+    case "review_rekber":
+      return [
+        proposal.payload.reason,
+      ];
+  }
+}
+
+function commandsFor(
+  contextKind: AgentContextKind,
+): AgentCommand[] {
+  switch (contextKind) {
+    case "chat":
+      return [
+        {
+          label: "Summarize chat",
+          prompt:
+            "Summarize this private chat and identify unresolved deal terms.",
+        },
+        {
+          label: "Find next decision",
+          prompt:
+            "Identify the next decision both parties need to make based only on the shared context.",
+        },
+        {
+          label: "Draft reply",
+          prompt:
+            "Draft a concise private reply that moves this deal forward without inventing facts.",
+        },
+        {
+          label: "Review deal",
+          prompt:
+            "Review this private deal context and identify missing terms or risks.",
+        },
+      ];
+
+    case "group":
+      return [
+        {
+          label: "Summarize Group",
+          prompt:
+            "Summarize the current Group activity and list unresolved items.",
+        },
+        {
+          label: "Find decisions",
+          prompt:
+            "Identify decisions in this Group that still need confirmation.",
+        },
+        {
+          label: "Draft announcement",
+          prompt:
+            "Draft a concise Group message for the most useful next step.",
+        },
+        {
+          label: "Review risks",
+          prompt:
+            "Review the shared Group context and identify practical deal risks.",
+        },
+      ];
+
+    case "deal":
+      return [
+        {
+          label: "Review offer",
+          prompt:
+            "Review the current offer and identify missing or risky terms.",
+        },
+        {
+          label: "Suggest counter",
+          prompt:
+            "Suggest a practical counter-offer based only on the shared context.",
+        },
+        {
+          label: "Explain next step",
+          prompt:
+            "Explain the current deal stage and the next required action.",
+        },
+        {
+          label: "Prepare escrow",
+          prompt:
+            "Prepare escrow from the accepted offer only if the shared context supports it.",
+        },
+      ];
+
+    case "escrow":
+      return [
+        {
+          label: "Explain status",
+          prompt:
+            "Explain the current escrow state and the safest next step.",
+        },
+        {
+          label: "Check readiness",
+          prompt:
+            "Identify what must be confirmed before funding, release, refund, or settlement.",
+        },
+        {
+          label: "Review settlement",
+          prompt:
+            "Review whether the shared deal context is ready for settlement.",
+        },
+        {
+          label: "Find risks",
+          prompt:
+            "List unresolved escrow or settlement risks from the shared context.",
+        },
+      ];
+
+    default:
+      return [
+        {
+          label: "Summarize activity",
+          prompt:
+            "Summarize the explicitly shared conversation activity.",
+        },
+        {
+          label: "Find open items",
+          prompt:
+            "Identify unresolved deal items from the shared context.",
+        },
+        {
+          label: "Draft next message",
+          prompt:
+            "Draft the next useful private message without inventing facts.",
+        },
+        {
+          label: "Review deal stage",
+          prompt:
+            "Explain the current deal stage and the most useful next step.",
+        },
+      ];
+  }
+}
+
+export function AgentPanel({
+  roomLabel,
+  contextKind,
+  contextLabel,
+  timeline,
+  latestOffer,
+  onApproveProposal,
+}: AgentPanelProps) {
+  const [open, setOpen] =
+    useState(false);
+
+  const [
+    shareContext,
+    setShareContext,
+  ] = useState(false);
+
+  const [instruction, setInstruction] =
+    useState("");
+
+  const [answer, setAnswer] =
+    useState<string | null>(null);
+
+  const [
+    dealStage,
+    setDealStage,
+  ] =
+    useState<DealStage | null>(
+      null,
+    );
+
+  const [proposal, setProposal] =
+    useState<AgentProposal | null>(
+      null,
+    );
+
+  const [approved, setApproved] =
+    useState(false);
+
+  const [acted, setActed] =
+    useState(false);
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const commands = useMemo(
+    () =>
+      commandsFor(contextKind),
+    [contextKind],
+  );
+
+  useEffect(() => {
+    // Context permission is scoped to the currently visible workflow.
+    // Moving from one private chat or Group to another requires fresh consent.
+    setShareContext(false);
+    setInstruction("");
+    setAnswer(null);
+    setDealStage(null);
+    setProposal(null);
+    setApproved(false);
+    setActed(false);
+    setError(null);
+  }, [
+    contextKind,
+    contextLabel,
+  ]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const onKeyDown = (
+      event: KeyboardEvent,
+    ) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      onKeyDown,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        onKeyDown,
+      );
+    };
+  }, [open]);
+
+  async function submit(
+    override?: string,
+  ) {
+    const request =
+      (override ?? instruction)
+        .trim();
+
+    if (
+      !request ||
+      !shareContext ||
+      busy
+    ) {
+      return;
+    }
+
+    setInstruction(request);
     setBusy(true);
     setError(null);
     setAnswer(null);
@@ -94,23 +342,34 @@ export function AgentPanel({
     setActed(false);
 
     try {
-      const result = await askVinssAgent({
-        message: message.trim(),
-        context: {
-          roomLabel,
-          latestOffer,
-          timeline,
-        },
-      });
+      const result =
+        await askVinssAgent({
+          message: request,
+          context: {
+            roomLabel:
+              roomLabel
+                ? `${roomLabel} — ${contextLabel}`
+                : contextLabel,
+            latestOffer,
+            timeline,
+          },
+        });
 
       setAnswer(result.answer);
-      setDealStage(result.dealStage);
-      setProposal(result.proposal);
+      setDealStage(
+        result.dealStage,
+      );
+      setProposal(
+        result.proposal,
+      );
     } catch (err) {
+      console.error(
+        "[VINSS AGENT ERROR]",
+        err,
+      );
+
       setError(
-        err instanceof Error
-          ? err.message
-          : "VINSS Agent tidak tersedia.",
+        "VINSS Agent is unavailable right now.",
       );
     } finally {
       setBusy(false);
@@ -118,281 +377,336 @@ export function AgentPanel({
   }
 
   async function approveProposal() {
-    if (!proposal || approved) return;
+    if (
+      !proposal ||
+      approved
+    ) {
+      return;
+    }
 
     setError(null);
     setApproved(true);
 
     try {
-      await onApproveProposal?.(proposal);
+      await onApproveProposal?.(
+        proposal,
+      );
+
       setActed(true);
     } catch (err) {
+      console.error(
+        "[VINSS AGENT PROPOSAL ERROR]",
+        err,
+      );
+
       setApproved(false);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Proposal tidak dapat disiapkan.",
+        "The proposed action could not be prepared.",
       );
     }
   }
 
-  const steps = [
-    { number: "01", label: "Amati", done: shareContext },
-    {
-      number: "02",
-      label: "Analisis",
-      done: Boolean(answer || proposal),
-    },
-    { number: "03", label: "Usulkan", done: Boolean(proposal) },
-    { number: "04", label: "Setujui", done: approved },
-    { number: "05", label: "Siapkan", done: acted },
-  ];
-
-  const activeStep = steps.findIndex((step) => !step.done);
-
   return (
-    <section
-      className="border border-wire bg-vault/60"
-      data-testid="agent-panel"
-    >
+    <>
       <button
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between px-4 py-4 text-left transition-colors hover:bg-paper/[0.02]"
+        type="button"
+        onClick={() =>
+          setOpen(true)
+        }
+        data-testid="agent-trigger"
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 border border-signal/35 bg-ink/95 px-3.5 py-2.5 shadow-2xl backdrop-blur transition hover:border-signal hover:bg-vault"
       >
-        <div className="flex items-center gap-3">
-          <span className="flex h-2 w-2 rounded-full bg-signal" />
+        <span className="text-sm text-signal">
+          ✦
+        </span>
 
-          <div>
-            <div className="flex items-baseline">
-              <span className="font-display text-xs uppercase tracking-widest text-signal">
-                VINSS
-              </span>
-              <span className="ml-2 text-sm text-paper">
-                Agent
-              </span>
-            </div>
-
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-paper/35">
-              Agen privat untuk seluruh proses deal
-            </p>
-          </div>
-        </div>
-
-        <span className="text-xs text-paper/40">
-          {open ? "Tutup" : "Review deal →"}
+        <span className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/70">
+          Agent
         </span>
       </button>
 
       {open && (
-        <div className="border-t border-wire">
-          <div className="grid grid-cols-5 border-b border-wire text-center">
-            {steps.map((step, index) => {
-              const active =
-                index === activeStep ||
-                (activeStep === -1 && index === 4);
+        <div
+          className="fixed inset-0 z-50 bg-black/70 sm:flex sm:items-end sm:justify-end sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="VINSS Agent"
+          onMouseDown={(
+            event,
+          ) => {
+            if (
+              event.currentTarget ===
+              event.target
+            ) {
+              setOpen(false);
+            }
+          }}
+        >
+          <section
+            className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto border-t border-signal/25 bg-ink shadow-2xl sm:static sm:w-full sm:max-w-md sm:border"
+            data-testid="agent-panel"
+          >
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-wire bg-ink/95 px-4 py-4 backdrop-blur">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-signal">
+                    ✦
+                  </span>
 
-              return (
-                <div
-                  key={step.label}
-                  className={`border-r border-wire px-1 py-3 last:border-r-0 ${
-                    active ? "bg-paper/[0.025]" : ""
-                  }`}
-                >
-                  <div className="font-display text-[9px] tracking-widest text-paper/25">
-                    {step.number}
-                  </div>
-
-                  <div
-                    className={`mt-1 text-[9px] uppercase tracking-wider ${
-                      step.done || active
-                        ? "text-signal"
-                        : "text-paper/35"
-                    }`}
-                  >
-                    {step.done ? "✓ " : ""}
-                    {step.label}
-                  </div>
+                  <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
+                    VINSS Agent
+                  </p>
                 </div>
-              );
-            })}
-          </div>
 
-          <div className="space-y-5 p-4">
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-display text-[10px] uppercase tracking-widest text-paper/35">
-                  Status deal
-                </span>
-
-                <span className="flex items-center gap-1.5 text-[10px] text-signal">
-                  <span className="h-1.5 w-1.5 rounded-full bg-signal" />
-                  {stageLabel(dealStage)}
-                </span>
-              </div>
-
-              <div className="border border-wire bg-paper/[0.015] p-3">
-                <p className="text-sm text-paper/80">
-                  {roomLabel || "Private Deal Room"}
-                </p>
-
-                <p className="mt-1 text-xs leading-relaxed text-paper/40">
-                  Agent membantu memahami posisi deal dan menyiapkan
-                  langkah berikutnya. Agent tidak memegang wallet atau
-                  private key.
+                <p className="mt-1.5 truncate text-[10px] text-paper/35">
+                  Context · {contextLabel}
                 </p>
               </div>
-            </div>
 
-            <div>
-              <div className="mb-2 font-display text-[10px] uppercase tracking-widest text-paper/35">
-                Batas konteks
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(false)
+                }
+                className="flex h-8 w-8 shrink-0 items-center justify-center border border-wire text-sm text-paper/40 transition hover:border-signal/40 hover:text-signal"
+                aria-label="Close Agent"
+              >
+                ×
+              </button>
+            </header>
 
-              <label className="flex cursor-pointer items-start gap-3 border border-wire p-3">
-                <input
-                  type="checkbox"
-                  checked={shareContext}
-                  onChange={(event) =>
-                    setShareContext(event.target.checked)
-                  }
-                  className="mt-0.5"
-                />
+            <div className="space-y-5 p-4 pb-6">
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
+                    Context permission
+                  </p>
 
-                <span>
-                  <span className="block text-xs text-paper/75">
-                    Izinkan Agent membaca konteks deal saat ini
-                  </span>
-
-                  <span className="mt-1 block text-[10px] leading-relaxed text-paper/35">
-                    Hanya timeline, informasi room, dan offer yang
-                    kamu izinkan yang dikirim untuk analisis.
-                  </span>
-                </span>
-              </label>
-            </div>
-
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-display text-[10px] uppercase tracking-widest text-paper/35">
-                  Instruksi
-                </span>
-
-                {!shareContext && (
-                  <span className="text-[10px] text-paper/25">
-                    Butuh izin konteks
-                  </span>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  value={message}
-                  onChange={(event) =>
-                    setMessage(event.target.value)
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      void submit();
+                  <span
+                    className={
+                      shareContext
+                        ? "font-display text-[8px] uppercase tracking-[0.13em] text-signal/70"
+                        : "font-display text-[8px] uppercase tracking-[0.13em] text-paper/25"
                     }
-                  }}
-                  placeholder="Contoh: Apa langkah terbaik untuk deal ini?"
-                  disabled={!shareContext || busy}
-                  className="min-w-0 flex-1 border border-wire bg-transparent px-3 py-2.5 text-sm text-paper outline-none placeholder:text-paper/25 focus:border-signal disabled:opacity-40"
+                  >
+                    {shareContext
+                      ? "Allowed"
+                      : "Not shared"}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShareContext(
+                      (value) =>
+                        !value,
+                    )
+                  }
+                  className={
+                    shareContext
+                      ? "flex w-full items-start gap-3 border border-signal/25 bg-signal/[0.035] p-3 text-left"
+                      : "flex w-full items-start gap-3 border border-wire p-3 text-left transition hover:border-signal/30"
+                  }
+                >
+                  <span
+                    className={
+                      shareContext
+                        ? "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border border-signal bg-signal text-[9px] text-ink"
+                        : "mt-0.5 h-4 w-4 shrink-0 border border-paper/30"
+                    }
+                  >
+                    {shareContext
+                      ? "✓"
+                      : ""}
+                  </span>
+
+                  <span>
+                    <span className="block text-xs text-paper/70">
+                      Allow the Agent to read this context
+                    </span>
+
+                    <span className="mt-1 block text-[10px] leading-relaxed text-paper/30">
+                      Only the currently selected context is sent for analysis. Wallet keys and private keys are never shared.
+                    </span>
+                  </span>
+                </button>
+              </section>
+
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
+                    Actions
+                  </p>
+
+                  {!shareContext && (
+                    <span className="text-[9px] text-paper/25">
+                      Allow context first
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {commands.map(
+                    (command) => (
+                      <button
+                        key={
+                          command.label
+                        }
+                        type="button"
+                        onClick={() =>
+                          void submit(
+                            command.prompt,
+                          )
+                        }
+                        disabled={
+                          !shareContext ||
+                          busy
+                        }
+                        className="min-h-12 border border-wire px-3 py-2.5 text-left text-[11px] leading-snug text-paper/55 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
+                      >
+                        {command.label}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </section>
+
+              <section>
+                <p className="mb-2 font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
+                  Instruction
+                </p>
+
+                <textarea
+                  value={instruction}
+                  onChange={(event) =>
+                    setInstruction(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Give the Agent a task for this context…"
+                  rows={3}
+                  disabled={
+                    !shareContext ||
+                    busy
+                  }
+                  className="w-full resize-none border border-wire bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/20 focus:border-signal/50 disabled:opacity-35"
                 />
 
                 <button
-                  onClick={() => void submit()}
+                  type="button"
+                  onClick={() =>
+                    void submit()
+                  }
                   disabled={
                     !shareContext ||
-                    !message.trim() ||
+                    !instruction.trim() ||
                     busy
                   }
-                  className="border border-signal px-4 py-2 font-display text-[10px] uppercase tracking-widest text-signal disabled:opacity-30"
+                  className="mt-2 flex h-10 w-full items-center justify-center border border-signal/35 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
                 >
-                  {busy ? "Analisis…" : "Jalankan"}
+                  {busy
+                    ? "Working…"
+                    : "Run Agent"}
                 </button>
-              </div>
-            </div>
+              </section>
 
-            {answer && (
-              <div className="border border-wire p-4">
-                <p className="mb-2 font-display text-[10px] uppercase tracking-widest text-paper/35">
-                  Analisis Agent
-                </p>
-
-                <p className="text-sm leading-relaxed text-paper/75">
-                  {answer}
-                </p>
-              </div>
-            )}
-
-            {proposal && (
-              <div className="border border-signal/40 bg-signal/[0.025] p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="font-display text-[10px] uppercase tracking-widest text-signal">
-                    Proposal Agent
-                  </span>
-
-                  <span className="text-[10px] uppercase tracking-wider text-paper/30">
-                    Persetujuan wajib
-                  </span>
-                </div>
-
-                <h4 className="text-sm text-paper">
-                  {proposal.title}
-                </h4>
-
-                <p className="mt-1 text-xs leading-relaxed text-paper/40">
-                  {proposal.description}
-                </p>
-
-                <div className="mt-3 space-y-1 border-l-2 border-signal pl-3">
-                  {proposalLines(proposal).map((line) => (
-                    <p
-                      key={line}
-                      className="text-xs text-paper/70"
-                    >
-                      {line}
+              {(answer ||
+                dealStage) && (
+                <section className="border border-wire bg-vault/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
+                      Agent analysis
                     </p>
-                  ))}
-                </div>
 
-                {!acted ? (
-                  <button
-                    onClick={() =>
-                      void approveProposal()
-                    }
-                    disabled={approved && !acted}
-                    className="mt-4 w-full border border-signal px-4 py-3 font-display text-[10px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-40"
-                  >
-                    {approved
-                      ? "Menyiapkan…"
-                      : "Setujui & siapkan →"}
-                  </button>
-                ) : (
-                  <div className="mt-4 border-t border-wire pt-3 text-xs text-signal">
-                    ✓ Proposal sudah disiapkan di bagian deal yang sesuai.
+                    <span className="flex items-center gap-1.5 text-[9px] text-signal/70">
+                      <span className="h-1.5 w-1.5 rounded-full bg-signal" />
+                      {stageLabel(
+                        dealStage,
+                      )}
+                    </span>
                   </div>
-                )}
 
-                <p className="mt-3 text-[10px] leading-relaxed text-paper/30">
-                  Persetujuan Agent tidak mengeksekusi transaksi.
-                  Jika aksi membutuhkan blockchain, Ready X tetap
-                  meminta konfirmasi wallet.
-                </p>
-              </div>
-            )}
+                  {answer && (
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-paper/70">
+                      {answer}
+                    </p>
+                  )}
+                </section>
+              )}
 
-            {error && (
-              <div className="border border-danger/30 p-3">
-                <p className="text-xs text-danger">
-                  {error}
-                </p>
-              </div>
-            )}
-          </div>
+              {proposal && (
+                <section className="border border-signal/30 bg-signal/[0.025] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-display text-[9px] uppercase tracking-[0.16em] text-signal">
+                      Proposed action
+                    </p>
+
+                    <span className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/25">
+                      Approval required
+                    </span>
+                  </div>
+
+                  <h3 className="mt-3 text-sm text-paper/80">
+                    {proposal.title}
+                  </h3>
+
+                  <p className="mt-1 text-xs leading-relaxed text-paper/35">
+                    {proposal.description}
+                  </p>
+
+                  <div className="mt-3 space-y-1.5 border-l border-signal/40 pl-3">
+                    {proposalLines(
+                      proposal,
+                    ).map((line) => (
+                      <p
+                        key={line}
+                        className="text-xs leading-relaxed text-paper/60"
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+
+                  {!acted ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void approveProposal()
+                      }
+                      disabled={
+                        approved &&
+                        !acted
+                      }
+                      className="mt-4 flex h-10 w-full items-center justify-center border border-signal font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-35"
+                    >
+                      {approved
+                        ? "Preparing…"
+                        : "Review & prepare →"}
+                    </button>
+                  ) : (
+                    <div className="mt-4 border-t border-wire pt-3 text-xs text-signal/75">
+                      ✓ Prepared in the relevant VINSS workflow.
+                    </div>
+                  )}
+
+                  <p className="mt-3 text-[10px] leading-relaxed text-paper/25">
+                    The Agent prepares actions only. Ready X remains the final authority for any blockchain transaction.
+                  </p>
+                </section>
+              )}
+
+              {error && (
+                <section className="border border-danger/30 p-3">
+                  <p className="text-xs text-danger">
+                    {error}
+                  </p>
+                </section>
+              )}
+            </div>
+          </section>
         </div>
       )}
-    </section>
+    </>
   );
 }

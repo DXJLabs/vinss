@@ -9,7 +9,10 @@ import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { BACKEND_URL } from "@/lib/starknet/constants";
-import { AgentPanel } from "@/components/agent/AgentPanel";
+import {
+  AgentPanel,
+  type AgentContextKind,
+} from "@/components/agent/AgentPanel";
 import { useRoomAgent } from "@/hooks/room/useRoomAgent";
 import { humanizeError } from "@/lib/errors/uiError";
 import {
@@ -29,6 +32,12 @@ import { useRoomOffers } from "@/hooks/room/useRoomOffers";
 import {
   isGroupAdmin,
 } from "@/lib/groups/localGroups";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
+import {
+  shortAddress,
+} from "@/components/room/conversation/chatFormat";
 
 type TimelineEntry = ConversationEntry;
 
@@ -165,7 +174,158 @@ export default function DealRoomPage() {
     invitedGroupId,
   ]);
 
+  const directAgentPeer =
+    messageTarget !== "chat" &&
+    messageTarget !== "groups" &&
+    !messageTarget.startsWith("group:")
+      ? messageTarget
+      : null;
 
+  const agentContextKind: AgentContextKind =
+    tab === "offer"
+      ? "deal"
+      : tab === "escrow"
+        ? "escrow"
+        : selectedGroup
+          ? "group"
+          : directAgentPeer
+            ? "chat"
+            : "messages";
+
+  const agentContextLabel =
+    tab === "offer"
+      ? directAgentPeer
+        ? `Deal · ${shortAddress(directAgentPeer)}`
+        : "Deal"
+      : tab === "escrow"
+        ? "Escrow"
+        : selectedGroup
+          ? `Group · ${selectedGroup.name}`
+          : directAgentPeer
+            ? `Private chat · ${shortAddress(directAgentPeer)}`
+            : messageTarget === "groups"
+              ? "Groups"
+              : "Private chats";
+
+  const isCurrentDirectEntry = (
+    entry: ConversationEntry,
+  ) => {
+    if (!directAgentPeer) {
+      return false;
+    }
+
+    return (
+      sameStarknetAddress(
+        entry.senderAddress,
+        directAgentPeer,
+      ) ||
+      sameStarknetAddress(
+        entry.recipientAddress,
+        directAgentPeer,
+      ) ||
+      (entry.scope === "direct" &&
+        entry.kind === "message")
+    );
+  };
+
+  const agentContextEntries = [
+    ...entries,
+    ...offerEntries,
+  ]
+    .filter((entry) => {
+      if (tab === "offer") {
+        return (
+          entry.kind === "offer" &&
+          (!directAgentPeer ||
+            isCurrentDirectEntry(entry))
+        );
+      }
+
+      if (tab === "escrow") {
+        if (selectedGroup) {
+          return (
+            entry.groupId ===
+            selectedGroup.id
+          );
+        }
+
+        if (directAgentPeer) {
+          return isCurrentDirectEntry(
+            entry,
+          );
+        }
+
+        return entry.kind === "offer";
+      }
+
+      if (selectedGroup) {
+        return (
+          entry.groupId ===
+          selectedGroup.id
+        );
+      }
+
+      if (directAgentPeer) {
+        return isCurrentDirectEntry(
+          entry,
+        );
+      }
+
+      // Never aggregate unrelated private chats while the user is only
+      // looking at a directory. The Agent receives no timeline in that state.
+      return false;
+    })
+    .sort(
+      (left, right) =>
+        new Date(
+          left.sentAt,
+        ).getTime() -
+        new Date(
+          right.sentAt,
+        ).getTime(),
+    );
+
+  const latestAgentOffer =
+    [...offerEntries]
+      .filter(
+        (entry) =>
+          entry.offerAction &&
+          (!directAgentPeer ||
+            isCurrentDirectEntry(entry)),
+      )
+      .sort(
+        (left, right) =>
+          new Date(
+            left.sentAt,
+          ).getTime() -
+          new Date(
+            right.sentAt,
+          ).getTime(),
+      )
+      .at(-1);
+
+  const latestOfferContext =
+    latestAgentOffer?.offerAction
+      ? {
+          asset:
+            latestAgentOffer
+              .offerAction.asset,
+          amount:
+            latestAgentOffer
+              .offerAction.amount,
+          paymentTerms:
+            latestAgentOffer
+              .offerAction
+              .paymentTerms,
+          conditions:
+            latestAgentOffer
+              .offerAction
+              .conditions,
+          actionLocator:
+            latestAgentOffer
+              .actionLocator,
+        }
+      : undefined;
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-16">
@@ -176,8 +336,8 @@ export default function DealRoomPage() {
 
       {!room && (
         <p className="mb-6 border border-danger/40 px-4 py-3 text-xs text-danger">
-          Room ini tidak ditemukan di perangkat Anda. Buat atau gabung room
-          dulu dari halaman Rooms.
+          This room is not available on this device. Create or join the room
+          from the Rooms page first.
         </p>
       )}
 
@@ -237,24 +397,35 @@ export default function DealRoomPage() {
         onShare={shareInviteLink}
       />
 
-      <div className="mb-6">
-        <AgentPanel
-          roomLabel={room?.label}
-          timeline={[...entries, ...offerEntries]
-            .sort(
-              (left, right) =>
-                new Date(left.sentAt).getTime() -
-                new Date(right.sentAt).getTime(),
-            )
-            .map((entry) => ({
-              kind: entry.kind,
-              summary: entry.summary,
-              sentAt: entry.sentAt,
-              actionLocator: entry.actionLocator,
-            }))}
-          onApproveProposal={handleAgentProposal}
-        />
-      </div>
+      {tab !== "loyalty" &&
+        !showAccessDetails && (
+          <AgentPanel
+            roomLabel={room?.label}
+            contextKind={
+              agentContextKind
+            }
+            contextLabel={
+              agentContextLabel
+            }
+            timeline={agentContextEntries.map(
+              (entry) => ({
+                kind: entry.kind,
+                summary:
+                  entry.summary,
+                sentAt:
+                  entry.sentAt,
+                actionLocator:
+                  entry.actionLocator,
+              }),
+            )}
+            latestOffer={
+              latestOfferContext
+            }
+            onApproveProposal={
+              handleAgentProposal
+            }
+          />
+        )}
 
       {tab === "timeline" && (
         <ConversationPanel

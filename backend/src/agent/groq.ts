@@ -33,6 +33,8 @@ Rules:
 - Every financial action requires explicit user approval and wallet confirmation.
 - Ready/wallet remains the final transaction authority.
 - Be concise and practical.
+- Always respond in English, even when the user's instruction or shared context uses another language.
+- Keep proposal titles, descriptions, drafted messages, and explanations in English unless the user explicitly asks to draft content in another language.
 `;
 
 export async function runVinssAgent(input: {
