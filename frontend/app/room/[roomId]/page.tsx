@@ -45,10 +45,26 @@ type TimelineEntry = ConversationEntry;
 export default function DealRoomPage() {
   const params = useParams<{ roomId: string }>();
   const searchParams = useSearchParams();
-  const showAccessDetails = searchParams.get("access") === "1";
   const invitedChatTarget = searchParams.get("chat");
   const invitedMessageMode = searchParams.get("message");
   const invitedGroupId = searchParams.get("group");
+  const accessMode = searchParams.get("access");
+
+  // Chat and Group invitations are separate capabilities and never share
+  // one mixed invitation screen. access=1 remains a compatibility fallback.
+  const inviteScope =
+    accessMode === "chat"
+      ? "direct"
+      : accessMode === "group"
+        ? "group"
+        : accessMode === "1"
+          ? invitedGroupId
+            ? "group"
+            : "direct"
+          : null;
+
+  const showAccessDetails =
+    inviteScope !== null;
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
   const { room, channelKey } = useRoom(params.roomId);
@@ -348,10 +364,12 @@ export default function DealRoomPage() {
         </p>
       )}
 
-      <RoomTabs
-        value={tab}
-        onChange={setTab}
-      />
+      {!showAccessDetails && (
+        <RoomTabs
+          value={tab}
+          onChange={setTab}
+        />
+      )}
 
       {error && (
         <p className="mb-4 border border-danger/40 px-3 py-2 text-xs text-danger">
@@ -359,43 +377,54 @@ export default function DealRoomPage() {
         </p>
       )}
 
-      <InvitationPanel
-        visible={
-          showAccessDetails &&
-          Boolean(room)
-        }
-        roomId={room?.id ?? ""}
-        group={accessGroup}
-        canInviteDirect={
-          Boolean(
-            room?.roomSecret,
-          )
-        }
-        canInviteGroup={
-          Boolean(
-            accessGroup &&
-              session &&
-              isGroupAdmin(
-                accessGroup,
-                session.account.address,
-              ),
-          )
-        }
-        directInvite={directInvite}
-        groupInvite={groupInvite}
-        joinedNoticeScope={
-          joinedNoticeScope
-        }
-        groupDuration={
-          groupDuration
-        }
-        onGroupDurationChange={
-          setGroupDuration
-        }
-        onCreate={createInviteLink}
-        onCopy={copyInviteLink}
-        onShare={shareInviteLink}
-      />
+      {showAccessDetails &&
+        room &&
+        inviteScope && (
+          <InvitationPanel
+            scope={inviteScope}
+            roomId={room.id}
+            group={accessGroup}
+            canInviteDirect={
+              Boolean(
+                room.roomSecret,
+              )
+            }
+            canInviteGroup={
+              Boolean(
+                accessGroup &&
+                  session &&
+                  isGroupAdmin(
+                    accessGroup,
+                    session.account.address,
+                  ),
+              )
+            }
+            directInvite={
+              directInvite
+            }
+            groupInvite={
+              groupInvite
+            }
+            joinedNoticeScope={
+              joinedNoticeScope
+            }
+            groupDuration={
+              groupDuration
+            }
+            onGroupDurationChange={
+              setGroupDuration
+            }
+            onCreate={
+              createInviteLink
+            }
+            onCopy={
+              copyInviteLink
+            }
+            onShare={
+              shareInviteLink
+            }
+          />
+        )}
 
       {tab !== "loyalty" &&
         !showAccessDetails && (
@@ -427,7 +456,8 @@ export default function DealRoomPage() {
           />
         )}
 
-      {tab === "timeline" && (
+      {!showAccessDetails &&
+        tab === "timeline" && (
         <ConversationPanel
           roomId={room?.id ?? params.roomId}
           entries={entries}
@@ -467,7 +497,8 @@ export default function DealRoomPage() {
         />
       )}
 
-      {tab === "offer" && (
+      {!showAccessDetails &&
+        tab === "offer" && (
         <OfferPanel
           session={session}
           channelKey={channelKey}
@@ -487,7 +518,8 @@ export default function DealRoomPage() {
         />
       )}
 
-      {tab === "escrow" && (
+      {!showAccessDetails &&
+        tab === "escrow" && (
         <EscrowPanel
           session={session}
           channelKey={channelKey}
@@ -499,7 +531,10 @@ export default function DealRoomPage() {
         />
       )}
 
-      {tab === "loyalty" && <LoyaltyPanel />}
+      {!showAccessDetails &&
+        tab === "loyalty" && (
+          <LoyaltyPanel />
+        )}
     </main>
   );
 }

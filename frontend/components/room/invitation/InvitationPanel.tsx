@@ -14,14 +14,11 @@ import type {
 
 interface InviteCardProps {
   scope: InviteScope;
-  title: string;
-  description: string;
-  lifetime: string;
   state: InviteUiState;
   joined: boolean;
-  disabled?: boolean;
-  groupDuration?: GroupInviteDuration;
-  onGroupDurationChange?: (
+  disabled: boolean;
+  groupDuration: GroupInviteDuration;
+  onGroupDurationChange: (
     value: GroupInviteDuration,
   ) => void;
   onCreate: () => void | Promise<void>;
@@ -31,95 +28,68 @@ interface InviteCardProps {
 
 function InviteCard({
   scope,
-  title,
-  description,
-  lifetime,
   state,
   joined,
-  disabled = false,
+  disabled,
   groupDuration,
   onGroupDurationChange,
   onCreate,
   onCopy,
   onShare,
 }: InviteCardProps) {
-  const label =
-    scope === "direct"
-      ? "Private Chat"
-      : "Group member";
+  const groupMode =
+    scope === "group";
 
   return (
     <article className="border border-wire bg-vault/20 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-4">
+      {groupMode && (
         <div>
-          <p className="font-display text-[9px] uppercase tracking-[0.18em] text-signal/70">
-            {label}
+          <p className="mb-2 font-display text-[8px] uppercase tracking-[0.14em] text-paper/25">
+            Link duration
           </p>
 
-          <h3 className="mt-2 text-base text-paper/85">
-            {title}
-          </h3>
-
-          <p className="mt-2 max-w-md text-xs leading-relaxed text-paper/35">
-            {description}
-          </p>
-        </div>
-
-        <span className="shrink-0 border border-wire px-2 py-1 font-display text-[8px] uppercase tracking-widest text-paper/30">
-          {lifetime}
-        </span>
-      </div>
-
-      {scope === "group" &&
-        groupDuration &&
-        onGroupDurationChange && (
-          <div className="mt-4">
-            <p className="mb-2 font-display text-[8px] uppercase tracking-[0.14em] text-paper/25">
-              Link duration
-            </p>
-
-            <div className="grid grid-cols-2 border border-wire">
-              {(
-                [
-                  "24h",
-                  "7d",
-                ] as GroupInviteDuration[]
-              ).map((duration) => (
-                <button
-                  key={duration}
-                  type="button"
-                  onClick={() =>
-                    onGroupDurationChange(
-                      duration,
-                    )
-                  }
-                  disabled={
-                    disabled ||
-                    Boolean(state.link)
-                  }
-                  className={
-                    groupDuration ===
-                    duration
-                      ? "bg-signal px-3 py-2 font-display text-[8px] uppercase tracking-widest text-ink disabled:opacity-50"
-                      : "px-3 py-2 font-display text-[8px] uppercase tracking-widest text-paper/35 transition hover:text-signal disabled:opacity-30"
-                  }
-                >
-                  {duration === "24h"
-                    ? "24 hours"
-                    : "7 days"}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 border border-wire">
+            {(
+              [
+                "24h",
+                "7d",
+              ] as GroupInviteDuration[]
+            ).map((duration) => (
+              <button
+                key={duration}
+                type="button"
+                onClick={() =>
+                  onGroupDurationChange(
+                    duration,
+                  )
+                }
+                disabled={
+                  disabled ||
+                  Boolean(state.link)
+                }
+                className={
+                  groupDuration ===
+                  duration
+                    ? "bg-signal px-3 py-2 font-display text-[8px] uppercase tracking-widest text-ink disabled:opacity-50"
+                    : "px-3 py-2 font-display text-[8px] uppercase tracking-widest text-paper/35 transition hover:text-signal disabled:opacity-30"
+                }
+              >
+                {duration === "24h"
+                  ? "24 hours"
+                  : "7 days"}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
       {joined && (
-        <div className="mt-4 flex items-center gap-2 border border-signal/20 bg-signal/[0.035] px-3 py-2.5 text-xs text-signal/70">
+        <div className={`${groupMode ? "mt-4" : ""} flex items-center gap-2 border border-signal/20 bg-signal/[0.035] px-3 py-2.5 text-xs text-signal/70`}>
           <span>✓</span>
           <span>
-            {scope === "direct"
-              ? "Chat invite accepted."
-              : "Group member joined."}
+            {groupMode
+              ? "Member joined this Group."
+              : "Private Chat invite accepted."}
           </span>
         </div>
       )}
@@ -131,14 +101,14 @@ function InviteCard({
             void onCreate()
           }
           disabled={disabled}
-          className="mt-5 flex h-10 w-full items-center justify-center border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+          className={`${groupMode || joined ? "mt-5" : ""} flex h-11 w-full items-center justify-center border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30`}
         >
-          {scope === "direct"
-            ? "Create Chat invite →"
-            : "Create member invite →"}
+          {groupMode
+            ? "Create member invite →"
+            : "Create private Chat invite →"}
         </button>
       ) : (
-        <div className="mt-5">
+        <div className={groupMode ? "mt-5" : ""}>
           <div className="border border-signal/15 bg-signal/[0.025] p-3">
             <div className="flex items-center justify-between gap-3">
               <p className="font-display text-[8px] uppercase tracking-[0.15em] text-paper/30">
@@ -223,7 +193,7 @@ function InviteCard({
 }
 
 interface InvitationPanelProps {
-  visible: boolean;
+  scope: InviteScope;
   roomId: string;
   group: LocalRoomGroup | null;
   canInviteDirect: boolean;
@@ -249,7 +219,7 @@ interface InvitationPanelProps {
 }
 
 export function InvitationPanel({
-  visible,
+  scope,
   roomId,
   group,
   canInviteDirect,
@@ -263,83 +233,105 @@ export function InvitationPanel({
   onCopy,
   onShare,
 }: InvitationPanelProps) {
-  if (!visible) return null;
+  const groupMode =
+    scope === "group";
+
+  const backHref =
+    groupMode && group
+      ? `/room/${roomId}?group=${encodeURIComponent(
+          group.id,
+        )}`
+      : `/room/${roomId}?message=chat`;
 
   return (
     <section
-      className="mb-6 border border-signal/25 bg-signal/[0.02] p-5 sm:p-6"
-      data-testid="access-details"
+      className="mb-6 border border-signal/25 bg-signal/[0.02]"
+      data-testid={
+        groupMode
+          ? "group-invite"
+          : "chat-invite"
+      }
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
-            Invitations
-          </p>
+      <header className="border-b border-wire px-5 py-5 sm:px-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
+              {groupMode
+                ? "Group member invite"
+                : "Private Chat invite"}
+            </p>
 
-          <h2 className="mt-2 text-lg text-paper">
-            Invite access
-          </h2>
+            <h2 className="mt-2 text-lg text-paper">
+              {groupMode
+                ? group
+                  ? `Invite to ${group.name}`
+                  : "Group unavailable"
+                : "Invite someone to private Chat"}
+            </h2>
 
-          <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
-            Chat invitations start a private 1-to-1. Group invitations are created only for a Group that an admin already created.
-          </p>
+            <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
+              {groupMode
+                ? group
+                  ? `This one-time link grants access only to ${group.name}. It does not grant private Chat access.`
+                  : "This Group is not available on this device."
+                : "This one-time link grants private Chat access to one person. Group access is managed separately inside each Group."}
+            </p>
+          </div>
+
+          <Link
+            href={backHref}
+            className="shrink-0 font-display text-[8px] uppercase tracking-[0.13em] text-paper/35 transition hover:text-signal"
+          >
+            {groupMode
+              ? "← Back to Group"
+              : "← Back to Chat"}
+          </Link>
         </div>
+      </header>
 
-        <Link
-          href={`/room/${roomId}`}
-          className="shrink-0 text-xs text-paper/35 transition hover:text-signal"
-        >
-          Close
-        </Link>
-      </div>
-
-      <div className="mt-6 grid gap-3">
-        <InviteCard
-          scope="direct"
-          title="Start a private 1-to-1"
-          description={
-            canInviteDirect
-              ? "Invite one person for private messages, negotiation and Offers."
-              : "This device has Group-only access. Private Chat access must be shared through a direct invite."
-          }
-          lifetime="1 hour"
-          state={directInvite}
-          disabled={!canInviteDirect}
-          joined={
-            joinedNoticeScope ===
-            "direct"
-          }
-          onCreate={() =>
-            onCreate("direct")
-          }
-          onCopy={() =>
-            onCopy("direct")
-          }
-          onShare={() =>
-            onShare("direct")
-          }
-        />
-
-        {group ? (
+      <div className="p-5 sm:p-6">
+        {groupMode ? (
+          group ? (
+            <InviteCard
+              scope="group"
+              state={groupInvite}
+              joined={
+                joinedNoticeScope ===
+                "group"
+              }
+              disabled={!canInviteGroup}
+              groupDuration={
+                groupDuration
+              }
+              onGroupDurationChange={
+                onGroupDurationChange
+              }
+              onCreate={() =>
+                onCreate("group")
+              }
+              onCopy={() =>
+                onCopy("group")
+              }
+              onShare={() =>
+                onShare("group")
+              }
+            />
+          ) : (
+            <div className="border border-dashed border-wire p-5">
+              <p className="text-xs leading-relaxed text-paper/35">
+                Return to Groups and open a Group before creating a member invitation.
+              </p>
+            </div>
+          )
+        ) : (
           <InviteCard
-            scope="group"
-            title={`Invite to ${group.name}`}
-            description={
-              canInviteGroup
-                ? "This link adds one member to this specific Group. After it is used, you can generate another one."
-                : "Only this Group's admin can create member invitations."
-            }
-            lifetime={
-              groupDuration === "24h"
-                ? "24 hours"
-                : "7 days"
-            }
-            state={groupInvite}
+            scope="direct"
+            state={directInvite}
             joined={
               joinedNoticeScope ===
-              "group"
+              "direct"
             }
-            disabled={!canInviteGroup}
+            disabled={!canInviteDirect}
             groupDuration={
               groupDuration
             }
@@ -347,30 +339,24 @@ export function InvitationPanel({
               onGroupDurationChange
             }
             onCreate={() =>
-              onCreate("group")
+              onCreate("direct")
             }
             onCopy={() =>
-              onCopy("group")
+              onCopy("direct")
             }
             onShare={() =>
-              onShare("group")
+              onShare("direct")
             }
           />
-        ) : (
-          <article className="border border-dashed border-wire bg-vault/10 p-5">
-            <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/30">
-              Group invite
-            </p>
-
-            <h3 className="mt-2 text-sm text-paper/60">
-              Create a Group first
-            </h3>
-
-            <p className="mt-2 text-xs leading-relaxed text-paper/30">
-              Open Messages → Groups, create or open a Group, then use Invite member from that Group.
-            </p>
-          </article>
         )}
+
+        <div className="mt-4 border-t border-wire/60 pt-4">
+          <p className="text-[10px] leading-relaxed text-paper/25">
+            {groupMode
+              ? "Member invitations are one-time and scoped to this Group key."
+              : "Private Chat invitations expire after 1 hour and are separate from Group membership."}
+          </p>
+        </div>
       </div>
     </section>
   );

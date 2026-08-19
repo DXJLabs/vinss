@@ -254,6 +254,10 @@ export function ConversationPanel({
       ) : messageTarget ===
         "chat" ? (
         <DirectConversationList
+          roomId={roomId}
+          canInvite={
+            channelReady
+          }
           participants={
             participants
           }

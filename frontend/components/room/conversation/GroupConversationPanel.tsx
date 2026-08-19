@@ -139,7 +139,7 @@ export function GroupConversationPanel({
 
           {admin && (
             <Link
-              href={`/room/${roomId}?access=1&group=${encodeURIComponent(
+              href={`/room/${roomId}?access=group&group=${encodeURIComponent(
                 group.id,
               )}`}
               className="border border-signal/25 px-3 py-2 font-display text-[8px] uppercase tracking-[0.13em] text-signal/70 transition hover:bg-signal hover:text-ink"
