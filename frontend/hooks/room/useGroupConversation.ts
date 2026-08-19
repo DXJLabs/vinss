@@ -259,8 +259,49 @@ export function useGroupConversation({
         err,
       );
 
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      const definitelyFailed =
+        /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
+          raw,
+        );
+
+      if (
+        definitelyFailed &&
+        preparedLocator
+      ) {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+
+        setPending(false);
+
+        setEntries((previous) =>
+          previous.filter(
+            (entry) =>
+              entry.actionLocator !==
+              preparedLocator,
+          ),
+        );
+
+        setDraft(body);
+
+        setError(
+          humanizeError(
+            err,
+            "Group message could not be sent.",
+          ),
+        );
+
+        return;
+      }
+
       if (preparedLocator) {
-        // Preserve the optimistic item. Group discovery will reconcile it.
+        // An interrupted wallet callback may still have landed on-chain.
+        // Give discovery a short, bounded recovery window.
         setError(
           "Group message is being confirmed in the background.",
         );
@@ -285,59 +326,108 @@ export function useGroupConversation({
       `vinss:pending-group-message:${roomId}:` +
       session.account.address.toLowerCase();
 
-    const raw =
-      window.localStorage.getItem(storageKey);
+    let stopped = false;
 
-    if (!raw) {
-      setPending(false);
-      return;
-    }
+    const checkPending = () => {
+      if (stopped) return;
 
-    let pendingRecord: {
-      actionLocator: string;
-      createdAt: number;
+      const raw =
+        window.localStorage.getItem(
+          storageKey,
+        );
+
+      if (!raw) {
+        setPending(false);
+        return;
+      }
+
+      let pendingRecord: {
+        actionLocator: string;
+        body?: string;
+        createdAt: number;
+      };
+
+      try {
+        pendingRecord =
+          JSON.parse(raw);
+      } catch {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+        setPending(false);
+        return;
+      }
+
+      setPending(true);
+
+      const locator =
+        pendingRecord.actionLocator
+          .replace(/^0x/, "")
+          .toLowerCase();
+
+      const recovered = entries.find(
+        (entry) =>
+          entry.actionLocator
+            .replace(/^0x/, "")
+            .toLowerCase() === locator &&
+          Boolean(entry.transactionHash),
+      );
+
+      if (recovered) {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+        setPending(false);
+        setError(null);
+        return;
+      }
+
+      if (
+        Date.now() -
+          pendingRecord.createdAt >
+        60_000
+      ) {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+
+        setPending(false);
+
+        setEntries((previous) =>
+          previous.filter(
+            (entry) =>
+              entry.actionLocator
+                .replace(/^0x/, "")
+                .toLowerCase() !==
+              locator,
+          ),
+        );
+
+        if (pendingRecord.body) {
+          setDraft((current) =>
+            current.trim()
+              ? current
+              : pendingRecord.body!,
+          );
+        }
+
+        setError(
+          "Group message was not confirmed. Review it and try again.",
+        );
+      }
     };
 
-    try {
-      pendingRecord = JSON.parse(raw);
-    } catch {
-      window.localStorage.removeItem(storageKey);
-      setPending(false);
-      return;
-    }
+    checkPending();
 
-    setPending(true);
-
-    const locator =
-      pendingRecord.actionLocator
-        .replace(/^0x/, "")
-        .toLowerCase();
-
-    const recovered = entries.find(
-      (entry) =>
-        entry.actionLocator
-          .replace(/^0x/, "")
-          .toLowerCase() === locator &&
-        Boolean(entry.transactionHash),
+    const timer = window.setInterval(
+      checkPending,
+      2_000,
     );
 
-    if (recovered) {
-      window.localStorage.removeItem(storageKey);
-      setPending(false);
-      setError(null);
-      return;
-    }
-
-    if (
-      Date.now() - pendingRecord.createdAt >
-      90_000
-    ) {
-      window.localStorage.removeItem(storageKey);
-      setPending(false);
-      setError(
-        "Group message was not confirmed. You can try sending it again.",
-      );
-    }
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [
     roomId,
     session?.account.address,

@@ -23,9 +23,8 @@ interface UseRoomConversationOptions {
 /**
  * Thin conversation coordinator.
  *
- * Group, participant discovery, and direct chat now own independent state and
- * effects. This wrapper only selects which panel is active and preserves the
- * existing room-page API while the rest of the frontend is migrated.
+ * "chat" is the private conversation directory, "group" is the room-wide
+ * conversation, and a Starknet address selects one private pair.
  */
 export function useRoomConversation({
   roomId,
@@ -38,10 +37,8 @@ export function useRoomConversation({
   const [
     messageTarget,
     setMessageTarget,
-  ] = useState("group");
+  ] = useState("chat");
 
-  // Non-chat room activity remains separate so Escrow cannot mutate either
-  // Group or Direct message state.
   const [
     activityEntries,
     setActivityEntries,
@@ -52,8 +49,6 @@ export function useRoomConversation({
       roomId,
       session,
       channelKey,
-      // Participant/public-key discovery remains available in Offer/Invite
-      // workflows even when the Chat tab itself is not currently visible.
       active: Boolean(
         roomId &&
           session &&
@@ -75,6 +70,10 @@ export function useRoomConversation({
       setError,
     });
 
+  const hasDirectPeer =
+    messageTarget !== "group" &&
+    messageTarget !== "chat";
+
   const direct =
     useDirectConversation({
       roomId,
@@ -87,12 +86,12 @@ export function useRoomConversation({
       selfRoutingIdentities:
         participantState.selfRoutingIdentities,
       peerAddress:
-        messageTarget === "group"
-          ? null
-          : messageTarget,
+        hasDirectPeer
+          ? messageTarget
+          : null,
       active:
         active &&
-        messageTarget !== "group",
+        hasDirectPeer,
       setBusy,
       setError,
     });
@@ -103,8 +102,6 @@ export function useRoomConversation({
     ...activityEntries,
   ];
 
-  // Keep the old setter name only for non-chat room activity such as Escrow.
-  // Message hooks never share a mutable entries array again.
   const setEntries: Dispatch<
     SetStateAction<ConversationEntry[]>
   > = setActivityEntries;
@@ -123,7 +120,9 @@ export function useRoomConversation({
       return;
     }
 
-    await direct.sendDirectMessage();
+    if (hasDirectPeer) {
+      await direct.sendDirectMessage();
+    }
   }
 
   async function handleRefresh(
@@ -136,7 +135,10 @@ export function useRoomConversation({
 
       if (messageTarget === "group") {
         await group.refreshGroup(silent);
-      } else {
+        return;
+      }
+
+      if (hasDirectPeer) {
         await direct.refreshDirect(silent);
       }
     } catch (err) {

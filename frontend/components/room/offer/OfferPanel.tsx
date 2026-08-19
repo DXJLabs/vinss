@@ -63,7 +63,8 @@ export function OfferPanel({
   // A new Offer uses the participant currently selected in Chat.
   const selectedParticipant = useMemo(
     () =>
-      messageTarget === "group"
+      messageTarget === "group" ||
+      messageTarget === "chat"
         ? null
         : participants.find(
             (participant) =>
@@ -167,7 +168,7 @@ export function OfferPanel({
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
               {targetAddress
                 ? `Private deal with ${shortAddress(targetAddress)}`
-                : "Choose a participant in Chat before creating an offer."}
+                : "Open a private Chat and choose a participant before creating an offer."}
             </p>
           </div>
 

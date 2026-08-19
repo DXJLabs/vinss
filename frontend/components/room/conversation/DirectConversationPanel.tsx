@@ -25,6 +25,7 @@ interface DirectConversationPanelProps {
   draft: string;
   peerTyping: boolean;
   chatEndRef: MutableRefObject<HTMLDivElement | null>;
+  onBack: () => void;
   onDraftChange: (value: string) => void;
   onSendMessage: () => void | Promise<void>;
   onAcceptOffer: (
@@ -49,6 +50,7 @@ export function DirectConversationPanel({
   draft,
   peerTyping,
   chatEndRef,
+  onBack,
   onDraftChange,
   onSendMessage,
   onAcceptOffer,
@@ -122,6 +124,25 @@ export function DirectConversationPanel({
 
   return (
     <>
+      <div className="flex items-center justify-between gap-3 border-x border-b border-wire bg-vault/20 px-4 py-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/35 transition hover:text-signal"
+        >
+          ← Chats
+        </button>
+
+        <div className="min-w-0 text-right">
+          <p className="truncate text-xs text-paper/60">
+            {peerLabel}
+          </p>
+          <p className="truncate font-mono text-[8px] text-paper/20">
+            {peerAddress}
+          </p>
+        </div>
+      </div>
+
       <div className="min-h-[360px] max-h-[58vh] overflow-y-auto border-x border-b border-wire bg-black/10">
         {pairEntries.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">

@@ -656,67 +656,106 @@ export function useDirectConversation({
 
     if (!storageKey) return;
 
-    const raw =
-      window.localStorage.getItem(
-        storageKey,
+    let stopped = false;
+
+    const checkPending = () => {
+      if (stopped) return;
+
+      const raw =
+        window.localStorage.getItem(
+          storageKey,
+        );
+
+      if (!raw) {
+        setMessagePending(false);
+        return;
+      }
+
+      let pending: {
+        actionLocator: string;
+        body?: string;
+        createdAt: number;
+      };
+
+      try {
+        pending = JSON.parse(raw);
+      } catch {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+        setMessagePending(false);
+        return;
+      }
+
+      setMessagePending(true);
+
+      const locator =
+        pending.actionLocator
+          .replace(/^0x/, "")
+          .toLowerCase();
+
+      const recovered = entries.find(
+        (entry) =>
+          entry.actionLocator
+            .replace(/^0x/, "")
+            .toLowerCase() === locator &&
+          Boolean(entry.transactionHash),
       );
 
-    if (!raw) {
-      setMessagePending(false);
-      return;
-    }
+      if (recovered) {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+        setMessagePending(false);
+        setError(null);
+        return;
+      }
 
-    let pending: {
-      actionLocator: string;
-      createdAt: number;
+      if (
+        Date.now() - pending.createdAt >
+        60_000
+      ) {
+        window.localStorage.removeItem(
+          storageKey,
+        );
+
+        setMessagePending(false);
+
+        setEntries((previous) =>
+          previous.filter(
+            (entry) =>
+              entry.actionLocator
+                .replace(/^0x/, "")
+                .toLowerCase() !==
+              locator,
+          ),
+        );
+
+        if (pending.body) {
+          setDraft((current) =>
+            current.trim()
+              ? current
+              : pending.body!,
+          );
+        }
+
+        setError(
+          "Message was not confirmed. Review it and try again.",
+        );
+      }
     };
 
-    try {
-      pending = JSON.parse(raw);
-    } catch {
-      window.localStorage.removeItem(
-        storageKey,
-      );
-      setMessagePending(false);
-      return;
-    }
+    checkPending();
 
-    setMessagePending(true);
-
-    const locator =
-      pending.actionLocator
-        .replace(/^0x/, "")
-        .toLowerCase();
-
-    const recovered = entries.find(
-      (entry) =>
-        entry.actionLocator
-          .replace(/^0x/, "")
-          .toLowerCase() === locator &&
-        Boolean(entry.transactionHash),
+    const timer = window.setInterval(
+      checkPending,
+      2_000,
     );
 
-    if (recovered) {
-      window.localStorage.removeItem(
-        storageKey,
-      );
-      setMessagePending(false);
-      setError(null);
-      return;
-    }
-
-    if (
-      Date.now() - pending.createdAt >
-      90_000
-    ) {
-      window.localStorage.removeItem(
-        storageKey,
-      );
-      setMessagePending(false);
-      setError(
-        "Message was not confirmed. You can try sending it again.",
-      );
-    }
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [
     active,
     peerKey,

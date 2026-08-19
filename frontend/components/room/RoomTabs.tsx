@@ -1,16 +1,30 @@
 "use client";
 
-export type RoomTab = "timeline" | "offer" | "escrow" | "loyalty";
+export type RoomTab =
+  | "timeline"
+  | "offer"
+  | "escrow"
+  | "loyalty";
 
 interface RoomTabsProps {
   value: RoomTab;
   onChange: (tab: RoomTab) => void;
 }
 
-export function RoomTabs({ value, onChange }: RoomTabsProps) {
+export function RoomTabs({
+  value,
+  onChange,
+}: RoomTabsProps) {
   return (
     <nav className="mb-6 flex gap-1 border-b border-wire">
-      {(["timeline", "offer", "escrow", "loyalty"] as RoomTab[]).map((tab) => (
+      {(
+        [
+          "timeline",
+          "offer",
+          "escrow",
+          "loyalty",
+        ] as RoomTab[]
+      ).map((tab) => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
@@ -21,7 +35,7 @@ export function RoomTabs({ value, onChange }: RoomTabsProps) {
           }`}
         >
           {tab === "timeline"
-            ? "Chat"
+            ? "Messages"
             : tab === "offer"
               ? "Deal"
               : tab === "escrow"
