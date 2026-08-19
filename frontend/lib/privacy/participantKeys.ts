@@ -1,4 +1,4 @@
-import type { ChannelKey } from "./envelope";
+import type { ChannelKey } from "@/lib/privacy/envelope";
 
 const DB_NAME = "vinss-messaging-keys";
 const DB_VERSION = 1;

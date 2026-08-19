@@ -58,7 +58,7 @@ export default function RoomsPage() {
     if (!label.trim()) return;
 
     const { generateRoomSecret } = await import(
-      "@/lib/vinss-sdk/channelKey"
+      "@/lib/privacy/channelKey"
     );
 
     const room: LocalRoom = {

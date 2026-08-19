@@ -1,5 +1,5 @@
 /**
- * Offer SDK — matches contracts/offers/offer_interfaces.cairo exactly:
+ * Offer domain module — matches contracts/offers/offer_interfaces.cairo exactly:
  *
  *   privacy_invoke(calldata) with calldata =
  *     [envelope_version, offer_action_locator, claimed_payload_commitment,
@@ -20,12 +20,12 @@ import {
   shortStringToFelt,
   toFelt,
   type ChannelKey,
-} from "./envelope";
-import type { OfferActionPayload, SendActionResult } from "./types";
+} from "@/lib/privacy/envelope";
+import type { OfferActionPayload, SendActionResult } from "@/types/deal-room";
 import {
   GROUP_RECIPIENT_IDENTITY,
   deriveMessageRoutingTag,
-} from "./messageRouting";
+} from "@/lib/privacy/messageRouting";
 
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
@@ -197,7 +197,7 @@ export async function discoverOfferActions(
 ): Promise<Array<{
   actionLocator: string;
   payloadCommitment: string;
-  action: import("./types").OfferActionPayload;
+  action: OfferActionPayload;
   blockNumber: number;
   transactionHash: string;
 }>> {
@@ -222,7 +222,7 @@ export async function discoverOfferActions(
       const action = (await decryptPayload(
         channelKey,
         record.ciphertextChunks.map(BigInt),
-      )) as import("./types").OfferActionPayload;
+      )) as OfferActionPayload;
       decrypted.push({
         actionLocator: record.actionLocator,
         payloadCommitment: record.payloadCommitment,

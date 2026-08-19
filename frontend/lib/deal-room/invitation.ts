@@ -3,7 +3,7 @@ import { CONTRACTS, RPC_URL } from "../starknet/constants";
 import {
   shortStringToFelt,
   toFelt,
-} from "./envelope";
+} from "@/lib/privacy/envelope";
 
 const INVITE_VERSION = 2 as const;
 const INVITE_TTL_MS = 30 * 60 * 1000;
@@ -180,7 +180,6 @@ async function invokeInvite(
   try {
     return await account.strk20InvokeTransaction(actions);
   } catch (err) {
-    console.error("[VINSS INVITE ACTIONS]", actions);
     throw err;
   }
 

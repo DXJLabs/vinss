@@ -2,7 +2,7 @@ import { hash } from "starknet";
 import {
   shortStringToFelt,
   type ChannelKey,
-} from "./envelope";
+} from "@/lib/privacy/envelope";
 
 export const MESSAGE_ENVELOPE_VERSION = 2;
 export const MESSAGE_COMMITMENT_DOMAIN = "VINSS_MSG_COMMIT_V2";

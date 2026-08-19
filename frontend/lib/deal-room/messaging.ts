@@ -1,5 +1,5 @@
 /**
- * Messaging SDK — matches contracts/messaging/messaging_interfaces.cairo and
+ * Messaging domain module — matches contracts/messaging/messaging_interfaces.cairo and
  * messaging_types.cairo exactly:
  *
  *   privacy_invoke(calldata) with calldata =
@@ -21,15 +21,15 @@ import {
   generateActionLocator,
   toFelt,
   type ChannelKey,
-} from "./envelope";
+} from "@/lib/privacy/envelope";
 import {
   GROUP_RECIPIENT_IDENTITY,
   MESSAGE_ENVELOPE_VERSION,
   commitMessagePayloadV2,
   deriveMessageRoutingTag,
   type MessageRoute,
-} from "./messageRouting";
-import type { MessagePayload, SendActionResult } from "./types";
+} from "@/lib/privacy/messageRouting";
+import type { MessagePayload, SendActionResult } from "@/types/deal-room";
 
 export interface PreparedMessageSend {
   actionLocator: bigint;
@@ -186,7 +186,7 @@ export async function sendMessage(
       2,
     );
 
-    console.error("[vinss-sdk] strk20InvokeTransaction failed", {
+    console.error("[VINSS MESSAGING] strk20InvokeTransaction failed", {
       message: msg,
       ...extra,
       rawError,
@@ -259,11 +259,6 @@ export async function discoverMessages(
 
   const decrypted = [];
 
-  console.log("[VINSS MSG DISCOVER RAW]", {
-    records: records.length,
-    routes: candidateRoutes.length,
-    locators: records.map((record) => record.actionLocator),
-  });
 
   for (const record of records) {
     if (!record.senderTag || !record.recipientTag) {
@@ -292,23 +287,11 @@ export async function discoverMessages(
           );
 
         if (BigInt(record.recipientTag) !== expectedRecipientTag) {
-          console.log("[VINSS MSG ROUTE MISS]", {
-            locator: record.actionLocator,
-            routeIndex,
-            recipientIdentity: candidate.recipientIdentity,
-            actual: record.recipientTag,
-            expected: "0x" + expectedRecipientTag.toString(16),
-          });
 
           routeIndex++;
           continue;
         }
 
-        console.log("[VINSS MSG ROUTE MATCH]", {
-          locator: record.actionLocator,
-          routeIndex,
-          recipientIdentity: candidate.recipientIdentity,
-        });
 
         const message = (await decryptPayload(
           encryptionKey,

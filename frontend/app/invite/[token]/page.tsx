@@ -15,7 +15,7 @@ import {
   decodeInviteToken,
   consumeInviteOnchain,
   type InvitePayload,
-} from "@/lib/vinss-sdk/invite";
+} from "@/lib/deal-room/invitation";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 

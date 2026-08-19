@@ -12,7 +12,7 @@ export const NETWORK = (process.env.NEXT_PUBLIC_STARKNET_NETWORK ??
 // (e.g. 0x0173f5b0...), copy-pasted straight into .env.local. The STRK20
 // Wallet API validates every felt-typed field — including `contract` in an
 // `invoke` action — against ^0x(0|[a-fA-F1-9][a-fA-F0-9]{0,62})$ (see the
-// same pattern cited in vinss-sdk/envelope.ts toFelt): NO leading zero
+// same pattern cited in lib/privacy/envelope.ts toFelt): NO leading zero
 // digit is allowed. A zero-padded address fails that regex and the wallet
 // returns INVALID_REQUEST_PAYLOAD. calldata values already go through
 // toFelt() and come out normalized; these top-level addresses did not, so

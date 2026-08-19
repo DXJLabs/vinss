@@ -1,5 +1,5 @@
 /**
- * Escrow SDK — two contracts, two calldata shapes.
+ * Escrow domain module — two contracts, two calldata shapes.
  *
  * 1) Coordination (contracts/private_escrow/private_escrow_interfaces.cairo):
  *    same 4-felt-header + ciphertext shape as messaging/offer:
@@ -37,12 +37,12 @@ import {
   shortStringToFelt,
   toFelt,
   type ChannelKey,
-} from "./envelope";
-import type { EscrowActionPayload, SendActionResult } from "./types";
+} from "@/lib/privacy/envelope";
+import type { EscrowActionPayload, SendActionResult } from "@/types/deal-room";
 import {
   GROUP_RECIPIENT_IDENTITY,
   deriveMessageRoutingTag,
-} from "./messageRouting";
+} from "@/lib/privacy/messageRouting";
 
 const PRIVATE_ESCROW_ENVELOPE_VERSION = 2;
 const ESCROW_COMMITMENT_DOMAIN =
