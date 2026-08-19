@@ -70,10 +70,10 @@ export async function scanCommittedActions(
   let effectiveFromBlock = fromBlock;
   let effectiveToBlock: number | "latest" = toBlock;
 
-  // Some RPC providers return an empty result for extremely wide event
-  // ranges instead of paginating the full history. Messaging V2 only needs
-  // recent discovery for the live client when no explicit range is supplied.
-  if (kind === "message" && fromBlock === 0 && toBlock === "latest") {
+  // Live discovery uses a bounded recent block range by default.
+  // Large genesis-to-latest event scans can exceed RPC provider limits.
+  // Explicit caller-provided ranges still keep their requested bounds.
+  if (fromBlock === 0 && toBlock === "latest") {
     const latest = await rp.getBlockNumber();
     effectiveFromBlock = Math.max(0, latest - 10_000);
     effectiveToBlock = latest;
