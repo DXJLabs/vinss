@@ -13,7 +13,7 @@ export interface MessageRoute {
    * GROUP:
    *   recipientIdentity = "group"
    *
-   * DIRECT later:
+   * DIRECT:
    *   recipientIdentity = recipient messaging identity/address
    *   encryptionKey/routingKey = pairwise Alice<->Bob key
    */

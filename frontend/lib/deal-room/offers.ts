@@ -1,16 +1,11 @@
 /**
- * Offer domain module — matches contracts/offers/offer_interfaces.cairo exactly:
+ * Offer domain module.
  *
- *   privacy_invoke(calldata) with calldata =
- *     [envelope_version, offer_action_locator, claimed_payload_commitment,
- *      payload_chunk_count, ...ciphertext_chunks]
- *
- * offer_action_locator must never be reused as a stable offer/conversation/
- * channel/participant/deal-room/escrow id — every lifecycle action
- * (create/counter/accept/reject/cancel/expire/prepare_escrow) gets its own.
- * root/parent relationships live only inside ciphertext (offer_types.cairo).
+ * Every Offer lifecycle action is immutable and receives its own locator.
+ * Direct Offer actions reuse the same pairwise ECDH-derived encryption and
+ * routing context as direct chat. The backend receives only public opaque
+ * routing tags and ciphertext; participant addresses remain encrypted.
  */
-
 import { hash, num, type WalletAccountV6 } from "starknet";
 import { CONTRACTS } from "../starknet/constants";
 import {
@@ -21,15 +16,23 @@ import {
   toFelt,
   type ChannelKey,
 } from "@/lib/privacy/envelope";
-import type { OfferActionPayload, SendActionResult } from "@/types/deal-room";
+import type {
+  OfferActionPayload,
+  SendActionResult,
+} from "@/types/deal-room";
 import {
   GROUP_RECIPIENT_IDENTITY,
   deriveMessageRoutingTag,
+  type MessageRoute,
 } from "@/lib/privacy/messageRouting";
 
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
 
+/**
+ * Commit the exact public Offer envelope that the Cairo helper records.
+ * The encrypted payload itself remains private.
+ */
 function commitOfferPayloadV2(
   actionLocator: bigint,
   senderTag: bigint,
@@ -51,10 +54,17 @@ function commitOfferPayloadV2(
   );
 }
 
+/**
+ * Send one immutable Offer lifecycle action.
+ *
+ * With no route this remains compatible with the legacy room-key path.
+ * With a route, encryption and opaque routing use the pairwise direct key.
+ */
 export async function sendOfferAction(
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: OfferActionPayload,
+  route?: MessageRoute,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.offerHelper) {
     throw new Error(
@@ -77,25 +87,42 @@ export async function sendOfferAction(
     );
   }
 
-  const actionLocator = generateActionLocator(channelKey);
+  // A direct Offer uses the Alice<->Bob key; legacy/group Offer uses room key.
+  const encryptionKey = route?.encryptionKey ?? channelKey;
 
+  // Routing normally uses the same pairwise key as encryption.
+  const routingKey = route?.routingKey ?? encryptionKey;
+
+  // The recipient identity is hidden behind a per-action HMAC routing tag.
+  const recipientIdentity =
+    route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
+
+  // Generate a fresh locator from the encryption context for every action.
+  const actionLocator = generateActionLocator(encryptionKey);
+
+  // Derive unlinkable sender and recipient tags for this one locator.
   const [senderTag, recipientTag] = await Promise.all([
     deriveMessageRoutingTag(
-      channelKey,
+      routingKey,
       "sender",
       account.address,
       actionLocator,
     ),
     deriveMessageRoutingTag(
-      channelKey,
+      routingKey,
       "recipient",
-      GROUP_RECIPIENT_IDENTITY,
+      recipientIdentity,
       actionLocator,
     ),
   ]);
 
-  const ciphertextChunks = await encryptPayload(channelKey, payload);
+  // Encrypt all deal terms and participant metadata locally.
+  const ciphertextChunks = await encryptPayload(
+    encryptionKey,
+    payload,
+  );
 
+  // Commit to the exact encrypted envelope before sending it to Starknet.
   const payloadCommitment = commitOfferPayloadV2(
     actionLocator,
     senderTag,
@@ -103,6 +130,7 @@ export async function sendOfferAction(
     ciphertextChunks,
   );
 
+  // Keep calldata aligned with VinssOfferHelper.privacy_invoke V2.
   const calldata = [
     OFFER_ENVELOPE_VERSION,
     actionLocator,
@@ -114,7 +142,7 @@ export async function sendOfferAction(
   ].map(toFelt);
 
   // VinssOfferHelper returns one OpenNoteDeposit worth 1 STRK.
-  // No selector is prepended: STRK20 invokes privacy_invoke itself.
+  // STRK20 invokes privacy_invoke itself, so no selector is prepended.
   const response = await account.strk20InvokeTransaction([
     {
       type: "withdraw",
@@ -146,93 +174,252 @@ export async function sendOfferAction(
   };
 }
 
-// Convenience wrappers — each just fixes `kind`, keeping call sites in the
-// UI readable and matching the product doc's feature list (Offer: create,
-// counter, accept, reject, expire, convert to escrow).
+// These wrappers keep lifecycle call sites explicit while preserving the
+// same optional private route for create/counter/accept/reject actions.
 export const createOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "create" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "create" },
+    route,
+  );
 
 export const counterOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "counter" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "counter" },
+    route,
+  );
 
 export const acceptOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "accept" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "accept" },
+    route,
+  );
 
 export const rejectOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "reject" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "reject" },
+    route,
+  );
 
 export const cancelOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "cancel" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "cancel" },
+    route,
+  );
 
 export const expireOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "expire" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "expire" },
+    route,
+  );
 
 export const prepareEscrowFromOffer = (
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
-) => sendOfferAction(account, channelKey, { ...payload, kind: "prepare_escrow" });
+  route?: MessageRoute,
+) =>
+  sendOfferAction(
+    account,
+    channelKey,
+    { ...payload, kind: "prepare_escrow" },
+    route,
+  );
 
+/**
+ * Discover Offer ciphertext and decrypt only records matching one of the
+ * caller's private routing contexts.
+ */
 export async function discoverOfferActions(
   backendUrl: string,
   channelKey: ChannelKey,
-): Promise<Array<{
-  actionLocator: string;
-  payloadCommitment: string;
-  action: OfferActionPayload;
-  blockNumber: number;
-  transactionHash: string;
-}>> {
+  route?: MessageRoute | MessageRoute[],
+): Promise<
+  Array<{
+    actionLocator: string;
+    payloadCommitment: string;
+    senderTag: string;
+    recipientTag: string;
+    action: OfferActionPayload;
+    blockNumber: number;
+    transactionHash: string;
+  }>
+> {
+  // The backend remains keyless and receives only the record kind.
   const res = await fetch(`${backendUrl}/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind: "offer" }),
   });
-  if (!res.ok) throw new Error(`Discovery failed: ${res.status} ${await res.text()}`);
 
+  if (!res.ok) {
+    throw new Error(
+      `Discovery failed: ${res.status} ${await res.text()}`,
+    );
+  }
+
+  // Offer V2 events expose only opaque routing tags plus ciphertext.
   const records = (await res.json()) as Array<{
     actionLocator: string;
     payloadCommitment: string;
+    senderTag?: string;
+    recipientTag?: string;
     ciphertextChunks: string[];
     blockNumber: number;
     transactionHash: string;
   }>;
 
-  const decrypted = [];
+  // Preserve a legacy room-key route when no direct route was supplied.
+  const candidateRoutes: MessageRoute[] =
+    route == null
+      ? [
+          {
+            recipientIdentity: GROUP_RECIPIENT_IDENTITY,
+            encryptionKey: channelKey,
+            routingKey: channelKey,
+          },
+        ]
+      : Array.isArray(route)
+        ? route
+        : [route];
+
+  const decrypted: Array<{
+    actionLocator: string;
+    payloadCommitment: string;
+    senderTag: string;
+    recipientTag: string;
+    action: OfferActionPayload;
+    blockNumber: number;
+    transactionHash: string;
+  }> = [];
+
+  // Try only private routing contexts known by this client.
   for (const record of records) {
-    try {
-      const action = (await decryptPayload(
-        channelKey,
-        record.ciphertextChunks.map(BigInt),
-      )) as OfferActionPayload;
-      decrypted.push({
-        actionLocator: record.actionLocator,
-        payloadCommitment: record.payloadCommitment,
-        action,
-        blockNumber: record.blockNumber,
-        transactionHash: record.transactionHash,
-      });
-    } catch {
-      // Unrelated channel / invalid ciphertext: discard locally.
+    if (!record.senderTag || !record.recipientTag) {
+      continue;
+    }
+
+    const actionLocator = BigInt(record.actionLocator);
+
+    for (const candidate of candidateRoutes) {
+      try {
+        // Direct routes carry their own pairwise encryption key.
+        const encryptionKey =
+          candidate.encryptionKey ?? channelKey;
+
+        // Routing defaults to the encryption key to avoid a second secret.
+        const routingKey =
+          candidate.routingKey ?? encryptionKey;
+
+        // First reject records whose public opaque recipient tag cannot
+        // belong to this candidate route.
+        const expectedRecipientTag =
+          await deriveMessageRoutingTag(
+            routingKey,
+            "recipient",
+            candidate.recipientIdentity,
+            actionLocator,
+          );
+
+        if (
+          BigInt(record.recipientTag) !==
+          expectedRecipientTag
+        ) {
+          continue;
+        }
+
+        // Decrypt locally only after the opaque route matches.
+        const action = (await decryptPayload(
+          encryptionKey,
+          record.ciphertextChunks.map(BigInt),
+        )) as OfferActionPayload;
+
+        // Bind the encrypted sender identity back to the public sender tag.
+        if (action.senderAddress) {
+          const expectedSenderTag =
+            await deriveMessageRoutingTag(
+              routingKey,
+              "sender",
+              action.senderAddress,
+              actionLocator,
+            );
+
+          if (
+            BigInt(record.senderTag) !==
+            expectedSenderTag
+          ) {
+            continue;
+          }
+        }
+
+        // New direct Offer payloads also bind the encrypted recipient to
+        // the route that matched the opaque recipient tag.
+        if (
+          action.recipientAddress &&
+          action.recipientAddress.toLowerCase() !==
+            candidate.recipientIdentity.toLowerCase()
+        ) {
+          continue;
+        }
+
+        decrypted.push({
+          actionLocator: record.actionLocator,
+          payloadCommitment: record.payloadCommitment,
+          senderTag: record.senderTag,
+          recipientTag: record.recipientTag,
+          action,
+          blockNumber: record.blockNumber,
+          transactionHash: record.transactionHash,
+        });
+
+        // One record must belong to at most one candidate route.
+        break;
+      } catch {
+        // A key mismatch or unrelated ciphertext is expected during local discovery.
+      }
     }
   }
+
   return decrypted;
 }

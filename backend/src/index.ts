@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { discoverRouter } from "./routes/discover.js";
 import { agentRouter } from "./routes/agent.js";
 import { loyaltyRouter } from "./loyalty/routes.js";
+import { presenceRouter } from "./routes/presence.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/health", (_req, res) => {
 app.use(discoverRouter);
 app.use(agentRouter);
 app.use(loyaltyRouter);
+app.use(presenceRouter);
 
 app.listen(config.port, () => {
   console.log(`VINSS backend listening on :${config.port} (${config.network})`);

@@ -1,7 +1,10 @@
 "use client";
 
-import type { MutableRefObject } from "react";
+import { useState, type MutableRefObject } from "react";
 import { NETWORK } from "@/lib/starknet/constants";
+import type { OfferActionPayload } from "@/types/deal-room";
+import { OfferCard } from "@/components/room/conversation/OfferCard";
+import { ProofModal } from "@/components/room/conversation/ProofModal";
 
 export interface ConversationEntry {
   id: string;
@@ -20,6 +23,12 @@ export interface ConversationEntry {
 
   // Preserve the decrypted sender only in local application state.
   senderAddress?: string;
+
+  // Preserve locally decrypted immutable Offer lifecycle data for direct cards.
+  offerAction?: OfferActionPayload;
+
+  // Live read receipts are ephemeral UI state and are never written on-chain.
+  readAt?: string;
 }
 
 interface ConversationParticipant {
@@ -28,6 +37,7 @@ interface ConversationParticipant {
 
 interface ConversationPanelProps {
   entries: ConversationEntry[];
+  offerEntries: ConversationEntry[];
   walletAddress?: string;
   connected: boolean;
   channelReady: boolean;
@@ -35,11 +45,15 @@ interface ConversationPanelProps {
   draft: string;
   messageTarget: string;
   participants: ConversationParticipant[];
+  peerTyping: boolean;
   chatEndRef: MutableRefObject<HTMLDivElement | null>;
   onDraftChange: (value: string) => void;
   onMessageTargetChange: (value: string) => void;
   onSendMessage: () => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
+  onAcceptOffer: (entry: ConversationEntry) => Promise<boolean>;
+  onRejectOffer: (entry: ConversationEntry) => Promise<boolean>;
+  onCounterOffer: (entry: ConversationEntry) => void;
 }
 
 function explorerUrl(transactionHash: string): string {
@@ -67,6 +81,7 @@ function messageTime(sentAt: string): string {
 
 export function ConversationPanel({
   entries,
+  offerEntries,
   walletAddress,
   connected,
   channelReady,
@@ -74,54 +89,74 @@ export function ConversationPanel({
   draft,
   messageTarget,
   participants,
+  peerTyping,
   chatEndRef,
   onDraftChange,
   onMessageTargetChange,
   onSendMessage,
   onRefresh,
+  onAcceptOffer,
+  onRejectOffer,
+  onCounterOffer,
 }: ConversationPanelProps) {
+  // Only one proof popup can be open at a time, keeping the timeline compact.
+  const [proofEntry, setProofEntry] =
+    useState<ConversationEntry | null>(null);
+
   // Normalize the currently connected wallet once for direct-chat filtering.
   const normalizedWallet = walletAddress?.toLowerCase() ?? "";
 
   // Normalize the selected chat target once for direct-chat filtering.
   const normalizedTarget = messageTarget.toLowerCase();
 
-  // Keep Group and pairwise conversations visually separate.
-  const visibleEntries = entries.filter((entry) => {
-    // Offer cards are intentionally excluded from the generic chat timeline
-    // until they are routed through the pairwise Offer flow.
-    if (entry.kind === "offer") return false;
+  // Merge separate domain states only at the UI boundary.
+  const conversationEntries = [...entries, ...offerEntries];
 
+  // Keep Group and pairwise conversations visually separate.
+  const visibleEntries = conversationEntries.filter((entry) => {
     // Treat legacy messages without an explicit scope as Group messages.
     const scope = entry.scope ?? "group";
 
-    // Show only Group messages while the Group chat is selected.
+    // Group never receives Offer cards; it contains group messages only.
     if (messageTarget === "group") {
-      return scope === "group";
+      return entry.kind === "message" && scope === "group";
     }
 
-    // Ignore Group messages while a participant chat is selected.
+    // Ignore Group content while a participant chat is selected.
     if (scope !== "direct") return false;
 
-    // Normalize the locally decrypted sender address.
+    // Normalize locally decrypted participant addresses for pair filtering.
     const sender = entry.senderAddress?.toLowerCase() ?? "";
-
-    // Normalize the locally decrypted recipient address.
     const recipient = entry.recipientAddress?.toLowerCase() ?? "";
 
-    // Show messages sent by the selected participant to the current wallet.
+    // Show content sent by the selected participant to the current wallet.
     const incomingFromTarget =
       sender === normalizedTarget &&
-      (!recipient || recipient === normalizedWallet);
+      recipient === normalizedWallet;
 
-    // Show messages sent by the current wallet to the selected participant.
+    // Show content sent by the current wallet to the selected participant.
     const outgoingToTarget =
       sender === normalizedWallet &&
       recipient === normalizedTarget;
 
-    // Keep only messages belonging to this pairwise conversation.
+    // Messages and Offer cards now share the same pairwise conversation.
     return incomingFromTarget || outgoingToTarget;
   });
+
+  // Any child action supersedes its immutable parent for Accept/Reject/Counter.
+  const supersededOfferLocators = new Set(
+    visibleEntries
+      .filter(
+        (entry) =>
+          entry.kind === "offer" &&
+          Boolean(entry.offerAction?.parentOfferLocator),
+      )
+      .map((entry) =>
+        entry.offerAction!.parentOfferLocator!
+          .replace(/^0x/, "")
+          .toLowerCase(),
+      ),
+  );
 
   // Resolve the current chat label without introducing a username dependency yet.
   const activeChatLabel =
@@ -296,18 +331,34 @@ export function ConversationPanel({
                                 {!entry.transactionHash ? (
                                   <span
                                     className="inline-flex h-3 w-3 items-center justify-center"
-                                    title="Recording on Starknet"
-                                    aria-label="Recording on Starknet"
+                                    title="Sending"
+                                    aria-label="Sending"
                                   >
                                     <span className="h-2.5 w-2.5 animate-spin rounded-full border border-paper/15 border-t-signal/70" />
                                   </span>
                                 ) : (
                                   <span
-                                    className="text-signal/55"
-                                    title="Recorded on Starknet"
-                                    aria-label="Recorded on Starknet"
+                                    className="text-signal/60"
+                                    title={
+                                      isOwnMessage &&
+                                      entry.scope === "direct" &&
+                                      entry.readAt
+                                        ? "Read"
+                                        : "Sent"
+                                    }
+                                    aria-label={
+                                      isOwnMessage &&
+                                      entry.scope === "direct" &&
+                                      entry.readAt
+                                        ? "Read"
+                                        : "Sent"
+                                    }
                                   >
-                                    ✓
+                                    {isOwnMessage &&
+                                    entry.scope === "direct" &&
+                                    entry.readAt
+                                      ? "✓✓"
+                                      : "✓"}
                                   </span>
                                 )}
                               </span>
@@ -315,89 +366,48 @@ export function ConversationPanel({
                           </div>
                         </div>
                       ) : (
-                        <div className="mx-auto max-w-[92%] rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-                          <div className="mb-1 flex items-center justify-between gap-4">
-                            <span className="font-display text-[9px] uppercase tracking-[0.16em] text-amber-400/70">
-                              Deal update
-                            </span>
-
-                            <span className="text-[9px] text-paper/25">
-                              {messageTime(entry.sentAt)}
-                            </span>
-                          </div>
-
-                          <p className="text-sm text-paper/70">
-                            {entry.summary}
-                          </p>
-                        </div>
+                        <OfferCard
+                          entry={entry}
+                          walletAddress={walletAddress}
+                          busy={busy}
+                          actionable={Boolean(
+                            entry.offerAction &&
+                              (entry.offerAction.kind === "create" ||
+                                entry.offerAction.kind === "counter") &&
+                              walletAddress &&
+                              entry.offerAction.recipientAddress?.toLowerCase() ===
+                                walletAddress.toLowerCase() &&
+                              !supersededOfferLocators.has(
+                                entry.actionLocator
+                                  .replace(/^0x/, "")
+                                  .toLowerCase(),
+                              ),
+                          )}
+                          onAccept={onAcceptOffer}
+                          onReject={onRejectOffer}
+                          onCounter={onCounterOffer}
+                        />
                       )}
 
-                      <details
-                        className={
-                          !entry.transactionHash
-                            ? "hidden"
-                            : entry.kind === "message"
-                              ? isPeerMessage
-                                ? "mt-2 max-w-[82%]"
-                                : "ml-auto mt-2 max-w-[82%]"
-                              : "mx-auto mt-2 max-w-[92%]"
-                        }
-                      >
-                        <summary
+                      {entry.transactionHash && (
+                        <div
                           className={
-                            entry.kind === "message" && !isPeerMessage
-                              ? "cursor-pointer list-none text-right font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
-                              : "cursor-pointer list-none text-left font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
+                            entry.kind === "message"
+                              ? isPeerMessage
+                                ? "mt-1.5 max-w-[82%]"
+                                : "ml-auto mt-1.5 max-w-[82%] text-right"
+                              : "mx-auto mt-2 max-w-[92%]"
                           }
                         >
-                          Proof on-chain ↓
-                        </summary>
-
-                        <div className="mt-2 border border-wire bg-vault/60 p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="font-display text-[8px] uppercase tracking-[0.16em] text-signal/60">
-                              Starknet proof
-                            </p>
-
-                            <span className="font-display text-[8px] uppercase tracking-[0.12em] text-signal/45">
-                              ✓ Recorded
-                            </span>
-                          </div>
-
-                          <div className="mt-3 space-y-2 font-mono text-[9px] text-paper/35">
-                            <div>
-                              <p className="mb-1 font-display text-[7px] uppercase tracking-[0.13em] text-paper/20">
-                                Transaction
-                              </p>
-                              <p className="break-all">
-                                {entry.transactionHash}
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 font-display text-[7px] uppercase tracking-[0.13em] text-paper/20">
-                                Action locator
-                              </p>
-                              <p className="break-all">0x{entry.actionLocator}</p>
-                            </div>
-                          </div>
-
-                          <p className="mt-3 text-[9px] leading-relaxed text-paper/25">
-                            The transaction proves this encrypted action was
-                            recorded on Starknet. Message plaintext is not
-                            exposed on-chain.
-                          </p>
-
-                          <a
-                            href={explorerUrl(entry.transactionHash)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-3 flex h-9 items-center justify-center border border-signal/25 font-display text-[8px] uppercase tracking-[0.15em] text-signal/65 transition hover:border-signal hover:bg-signal hover:text-ink"
+                          <button
+                            type="button"
+                            onClick={() => setProofEntry(entry)}
+                            className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
                           >
-                            Open in Voyager ↗
-                          </a>
+                            View proof
+                          </button>
                         </div>
-                      </details>
+                      )}
                     </li>
                   );
                 })}
@@ -420,8 +430,18 @@ export function ConversationPanel({
             {activeChatLabel}
           </span>
 
-          <span className="text-[9px] text-paper/25">
-            {messageTarget === "group" ? "Group" : "Direct"}
+          <span
+            className={
+              peerTyping && messageTarget !== "group"
+                ? "text-[9px] text-signal/70"
+                : "text-[9px] text-paper/25"
+            }
+          >
+            {peerTyping && messageTarget !== "group"
+              ? "Typing…"
+              : messageTarget === "group"
+                ? "Group"
+                : "Direct"}
           </span>
         </div>
 
@@ -459,6 +479,16 @@ export function ConversationPanel({
         <span className="text-signal/60">●</span>
         End-to-end encrypted
       </div>
+
+      {proofEntry?.transactionHash && (
+        <ProofModal
+          kind={proofEntry.kind}
+          transactionHash={proofEntry.transactionHash}
+          recordId={proofEntry.actionLocator}
+          explorerUrl={explorerUrl(proofEntry.transactionHash)}
+          onClose={() => setProofEntry(null)}
+        />
+      )}
     </section>
   );
 }

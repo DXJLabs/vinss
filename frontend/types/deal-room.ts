@@ -61,6 +61,16 @@ export type OfferActionKind =
 export interface OfferActionPayload {
   kind: OfferActionKind;
 
+  // These participant fields live only inside encrypted Offer ciphertext.
+  // They let the client reconstruct a direct Alice<->Bob lifecycle without
+  // exposing reusable wallet identities in the helper contract state.
+  senderAddress?: string;
+  recipientAddress?: string;
+
+  // Keep application ordering inside ciphertext instead of guessing from a
+  // Starknet block number, which is not a timestamp.
+  sentAt?: string;
+
   // Encrypted deal classification. Never exposed by OfferHelper.
   dealType?: DealType;
   rootOfferLocator?: string; // hex string of a prior actionLocator, if any.

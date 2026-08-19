@@ -25,6 +25,7 @@ import { LoyaltyPanel } from "@/components/room/loyalty/LoyaltyPanel";
 import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
+import { useRoomOffers } from "@/hooks/room/useRoomOffers";
 
 type TimelineEntry = ConversationEntry;
 
@@ -39,6 +40,10 @@ export default function DealRoomPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Counter mode points to one immutable Offer action selected from direct chat.
+  const [counterSource, setCounterSource] =
+    useState<ConversationEntry | null>(null);
+
   const {
     entries,
     setEntries,
@@ -49,6 +54,7 @@ export default function DealRoomPage() {
     setParticipants,
     messageTarget,
     setMessageTarget,
+    peerTyping,
     handleSendMessage,
     handleRefresh,
   } = useRoomConversation({
@@ -56,6 +62,24 @@ export default function DealRoomPage() {
     session,
     channelKey,
     active: tab === "timeline",
+    setBusy,
+    setError,
+  });
+
+  // Offer lifecycle state is separate from messages and merges only in direct chat UI.
+  const {
+    offerEntries,
+    createDirectOffer,
+    counterDirectOffer,
+    acceptDirectOffer,
+    rejectDirectOffer,
+    handleOfferRefresh,
+  } = useRoomOffers({
+    roomId: room?.id ?? null,
+    session,
+    channelKey,
+    participants,
+    active: tab === "timeline" || tab === "offer",
     setBusy,
     setError,
   });
@@ -144,12 +168,18 @@ export default function DealRoomPage() {
       <div className="mb-6">
         <AgentPanel
           roomLabel={room?.label}
-          timeline={entries.map((entry) => ({
-            kind: entry.kind,
-            summary: entry.summary,
-            sentAt: entry.sentAt,
-            actionLocator: entry.actionLocator,
-          }))}
+          timeline={[...entries, ...offerEntries]
+            .sort(
+              (left, right) =>
+                new Date(left.sentAt).getTime() -
+                new Date(right.sentAt).getTime(),
+            )
+            .map((entry) => ({
+              kind: entry.kind,
+              summary: entry.summary,
+              sentAt: entry.sentAt,
+              actionLocator: entry.actionLocator,
+            }))}
           onApproveProposal={handleAgentProposal}
         />
       </div>
@@ -157,6 +187,7 @@ export default function DealRoomPage() {
       {tab === "timeline" && (
         <ConversationPanel
           entries={entries}
+          offerEntries={offerEntries}
           walletAddress={session?.account.address}
           connected={Boolean(session)}
           channelReady={Boolean(channelKey)}
@@ -164,11 +195,27 @@ export default function DealRoomPage() {
           draft={draft}
           messageTarget={messageTarget}
           participants={participants}
+          peerTyping={peerTyping}
           chatEndRef={chatEndRef}
           onDraftChange={setDraft}
-          onMessageTargetChange={setMessageTarget}
+          onMessageTargetChange={(value) => {
+            // A new chat selection exits any stale counter flow.
+            setMessageTarget(value);
+            setCounterSource(null);
+          }}
           onSendMessage={handleSendMessage}
-          onRefresh={() => handleRefresh(false)}
+          onRefresh={async () => {
+            // Manual Sync refreshes chat first, then private Offer cards.
+            await handleRefresh(false);
+            await handleOfferRefresh(true);
+          }}
+          onAcceptOffer={acceptDirectOffer}
+          onRejectOffer={rejectDirectOffer}
+          onCounterOffer={(entry) => {
+            // Counter editing happens in the Offer tab, but stays bound to this parent.
+            setCounterSource(entry);
+            setTab("offer");
+          }}
         />
       )}
 
@@ -176,11 +223,19 @@ export default function DealRoomPage() {
         <OfferPanel
           session={session}
           channelKey={channelKey}
-          onSent={(entry) => setEntries((prev) => [entry, ...prev])}
-          setBusy={setBusy}
-          setError={setError}
+          messageTarget={messageTarget}
+          participants={participants}
+          counterSource={counterSource}
           busy={busy}
           agentDraft={agentOfferDraft}
+          onCreate={createDirectOffer}
+          onCounter={counterDirectOffer}
+          onCancelCounter={() => setCounterSource(null)}
+          onSubmitted={() => {
+            // Return to the same direct chat after the wallet-backed action.
+            setCounterSource(null);
+            setTab("timeline");
+          }}
         />
       )}
 

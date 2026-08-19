@@ -15,6 +15,10 @@ import {
 } from "@/lib/privacy/participantKeys";
 import type { MessagePayload } from "@/types/deal-room";
 import type { MessageRoute } from "@/lib/privacy/messageRouting";
+import {
+  pollPresence,
+  publishPresence,
+} from "@/lib/privacy/presence";
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import { humanizeError } from "@/lib/errors/uiError";
 
@@ -44,6 +48,12 @@ export function useRoomConversation({
   const [participants, setParticipants] =
     useState<RoomParticipant[]>([]);
   const [messageTarget, setMessageTarget] = useState("group");
+
+  // Typing is live pairwise presence and never becomes a chat/on-chain record.
+  const [peerTyping, setPeerTyping] = useState(false);
+
+  // Avoid repeatedly publishing the same read receipt while a message stays visible.
+  const sentReadReceiptsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!roomId || !session) {
@@ -266,6 +276,353 @@ export function useRoomConversation({
     channelKey,
     messagingIdentity,
     participants,
+  ]);
+
+  // Keep participant dependencies stable across background discovery refreshes.
+  const participantFingerprint = participants
+    .map(
+      (participant) =>
+        `${participant.address.toLowerCase()}:${participant.publicKey}`,
+    )
+    .sort()
+    .join("|");
+
+  // Track only the empty/non-empty transition so continuous typing does not
+  // restart the heartbeat on every character.
+  const hasTypingDraft = Boolean(draft.trim());
+
+  // Resolve the currently selected direct chat to its pairwise key.
+  async function resolveSelectedDirectKey(): Promise<Uint8Array | null> {
+    if (
+      !roomId ||
+      !session ||
+      !messagingIdentity ||
+      messageTarget === "group"
+    ) {
+      return null;
+    }
+
+    const participant = participants.find(
+      (item) =>
+        item.address.toLowerCase() ===
+        messageTarget.toLowerCase(),
+    );
+
+    if (!participant) return null;
+
+    return deriveDirectMessageKey(
+      roomId,
+      messagingIdentity.privateKey,
+      participant.publicKey,
+    );
+  }
+
+  useEffect(() => {
+    // Typing presence exists only while a direct chat is open.
+    if (
+      !active ||
+      !session ||
+      messageTarget === "group" ||
+      !messagingIdentity ||
+      !participantFingerprint
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    let interval: number | null = null;
+
+    const publishTyping = async (typing: boolean) => {
+      try {
+        const directKey = await resolveSelectedDirectKey();
+
+        if (!directKey || stopped) return;
+
+        await publishPresence(
+          BACKEND_URL,
+          directKey,
+          {
+            version: 1,
+            type: "typing",
+            senderAddress: session.account.address,
+            sentAt: new Date().toISOString(),
+            active: typing,
+          },
+          typing ? 5_000 : 2_000,
+        );
+      } catch (err) {
+        // Presence failure must never block normal encrypted messaging.
+        console.error("[VINSS TYPING PRESENCE ERROR]", err);
+      }
+    };
+
+    if (hasTypingDraft) {
+      // Publish immediately, then heartbeat while the user continues typing.
+      void publishTyping(true);
+
+      interval = window.setInterval(() => {
+        void publishTyping(true);
+      }, 2_000);
+    } else {
+      // An explicit inactive event hides the indicator faster than TTL expiry.
+      void publishTyping(false);
+    }
+
+    return () => {
+      stopped = true;
+
+      if (interval !== null) {
+        window.clearInterval(interval);
+      }
+
+      // The short server TTL remains the final fallback if cleanup is interrupted.
+      void (async () => {
+        try {
+          const directKey = await resolveSelectedDirectKey();
+
+          if (!directKey) return;
+
+          await publishPresence(
+            BACKEND_URL,
+            directKey,
+            {
+              version: 1,
+              type: "typing",
+              senderAddress: session.account.address,
+              sentAt: new Date().toISOString(),
+              active: false,
+            },
+            2_000,
+          );
+        } catch {
+          // Cleanup presence is best-effort only.
+        }
+      })();
+    };
+  }, [
+    active,
+    session?.account.address,
+    messageTarget,
+    messagingIdentity?.publicKey,
+    participantFingerprint,
+    hasTypingDraft,
+  ]);
+
+  useEffect(() => {
+    // Poll the selected pair only; Group has no per-user read/typing state.
+    if (
+      !active ||
+      !session ||
+      messageTarget === "group" ||
+      !messagingIdentity ||
+      !participantFingerprint
+    ) {
+      setPeerTyping(false);
+      return;
+    }
+
+    let stopped = false;
+    let running = false;
+
+    const poll = async () => {
+      if (stopped || running) return;
+
+      running = true;
+
+      try {
+        const directKey = await resolveSelectedDirectKey();
+
+        if (!directKey || stopped) return;
+
+        const events = await pollPresence(
+          BACKEND_URL,
+          directKey,
+        );
+
+        if (stopped) return;
+
+        const self = session.account.address.toLowerCase();
+        const peer = messageTarget.toLowerCase();
+
+        // Only encrypted events from the selected peer affect this chat.
+        const peerEvents = events.filter(
+          (event) =>
+            event.senderAddress.toLowerCase() === peer &&
+            event.senderAddress.toLowerCase() !== self,
+        );
+
+        const latestTyping = peerEvents
+          .filter((event) => event.type === "typing")
+          .sort(
+            (left, right) =>
+              new Date(right.sentAt).getTime() -
+              new Date(left.sentAt).getTime(),
+          )[0];
+
+        setPeerTyping(
+          Boolean(
+            latestTyping?.active &&
+            latestTyping.expiresAt > Date.now(),
+          ),
+        );
+
+        // Apply encrypted read receipts to this wallet's matching outgoing messages.
+        const readByLocator = new Map<string, string>();
+
+        for (const event of peerEvents) {
+          if (
+            event.type !== "read" ||
+            !event.messageLocator
+          ) {
+            continue;
+          }
+
+          readByLocator.set(
+            event.messageLocator
+              .replace(/^0x/, "")
+              .toLowerCase(),
+            event.sentAt,
+          );
+        }
+
+        if (readByLocator.size > 0) {
+          setEntries((previous) =>
+            previous.map((entry) => {
+              if (
+                entry.kind !== "message" ||
+                entry.scope !== "direct" ||
+                entry.senderAddress?.toLowerCase() !== self ||
+                entry.recipientAddress?.toLowerCase() !== peer
+              ) {
+                return entry;
+              }
+
+              const readAt = readByLocator.get(
+                entry.actionLocator
+                  .replace(/^0x/, "")
+                  .toLowerCase(),
+              );
+
+              return readAt
+                ? {
+                    ...entry,
+                    readAt,
+                  }
+                : entry;
+            }),
+          );
+        }
+      } catch (err) {
+        // Live presence is optional and must not surface as a blocking UI error.
+        console.error("[VINSS PRESENCE POLL ERROR]", err);
+        setPeerTyping(false);
+      } finally {
+        running = false;
+      }
+    };
+
+    void poll();
+
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 1_200);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      setPeerTyping(false);
+    };
+  }, [
+    active,
+    session?.account.address,
+    messageTarget,
+    messagingIdentity?.publicKey,
+    participantFingerprint,
+  ]);
+
+  useEffect(() => {
+    // A direct incoming message is considered read only while its chat is open.
+    if (
+      !active ||
+      !session ||
+      messageTarget === "group" ||
+      !messagingIdentity ||
+      !participantFingerprint
+    ) {
+      return;
+    }
+
+    const self = session.account.address.toLowerCase();
+    const peer = messageTarget.toLowerCase();
+
+    const unreadIncoming = entries.filter(
+      (entry) =>
+        entry.kind === "message" &&
+        entry.scope === "direct" &&
+        Boolean(entry.transactionHash) &&
+        entry.senderAddress?.toLowerCase() === peer &&
+        entry.recipientAddress?.toLowerCase() === self &&
+        !sentReadReceiptsRef.current.has(
+          entry.actionLocator
+            .replace(/^0x/, "")
+            .toLowerCase(),
+        ),
+    );
+
+    if (unreadIncoming.length === 0) return;
+
+    let cancelled = false;
+
+    const publishReceipts = async () => {
+      try {
+        const directKey = await resolveSelectedDirectKey();
+
+        if (!directKey || cancelled) return;
+
+        for (const entry of unreadIncoming) {
+          const locator = entry.actionLocator
+            .replace(/^0x/, "")
+            .toLowerCase();
+
+          // Mark before awaiting so overlapping renders cannot publish duplicates.
+          sentReadReceiptsRef.current.add(locator);
+
+          try {
+            await publishPresence(
+              BACKEND_URL,
+              directKey,
+              {
+                version: 1,
+                type: "read",
+                senderAddress: session.account.address,
+                sentAt: new Date().toISOString(),
+                messageLocator: locator,
+              },
+              24 * 60 * 60 * 1_000,
+            );
+          } catch (err) {
+            // Allow a later render to retry a receipt that failed to publish.
+            sentReadReceiptsRef.current.delete(locator);
+            console.error("[VINSS READ RECEIPT ERROR]", err);
+          }
+        }
+      } catch (err) {
+        console.error("[VINSS READ RECEIPT KEY ERROR]", err);
+      }
+    };
+
+    void publishReceipts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    session?.account.address,
+    messageTarget,
+    messagingIdentity?.publicKey,
+    participantFingerprint,
+    entries,
   ]);
 
   async function handleSendMessage() {
@@ -631,10 +988,17 @@ export function useRoomConversation({
             participant.publicKey,
           );
 
+          // Incoming direct messages route to this wallet.
           routes.push({
-            // For receive-side matching the recipient is ME,
-            // not the peer.
             recipientIdentity: session.account.address,
+            encryptionKey: directKey,
+            routingKey: directKey,
+          });
+
+          // Outgoing direct messages route to the peer. Including this second
+          // candidate lets the sender rediscover its own chat after reload.
+          routes.push({
+            recipientIdentity: participant.address,
             encryptionKey: directKey,
             routingKey: directKey,
           });
@@ -715,6 +1079,9 @@ export function useRoomConversation({
         );
       });
     } catch (err) {
+      // Raw discovery failures are developer-only and never rendered directly.
+      console.error("[VINSS ROOM REFRESH ERROR]", err);
+
       if (!silent) {
         setError(
           humanizeError(
@@ -722,7 +1089,6 @@ export function useRoomConversation({
             "We couldn't refresh the room. Please try again in a moment.",
           ),
         );
-      } else {
       }
     } finally {
       if (!silent) {
@@ -756,7 +1122,7 @@ export function useRoomConversation({
       }
     };
 
-    // Langsung sync saat masuk room.
+    // Sync immediately when the user enters the room.
     void sync();
 
     const timer = window.setInterval(() => {
@@ -823,6 +1189,7 @@ export function useRoomConversation({
     setParticipants,
     messageTarget,
     setMessageTarget,
+    peerTyping,
     handleSendMessage,
     handleRefresh,
   };
