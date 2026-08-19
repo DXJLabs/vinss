@@ -34,6 +34,8 @@ export default function DealRoomPage() {
   const params = useParams<{ roomId: string }>();
   const searchParams = useSearchParams();
   const showAccessDetails = searchParams.get("access") === "1";
+  const invitedChatTarget = searchParams.get("chat");
+  const invitedMessageMode = searchParams.get("message");
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
   const { room, channelKey } = useRoom(params.roomId);
@@ -94,24 +96,49 @@ export default function DealRoomPage() {
   });
 
   const {
-    inviteLink,
-    inviteCopied,
-    invitePending,
-    inviteCompleted,
-    inviteJoinedNotice,
-    inviteExpired,
-    inviteCountdown,
+    directInvite,
+    groupInvite,
+    joinedNoticeScope,
+    groupDuration,
+    setGroupDuration,
     createInviteLink,
     copyInviteLink,
     shareInviteLink,
   } = useRoomInvitation({
     room,
     session,
-    channelKey,
-    participants,
-    setParticipants,
     setError,
   });
+
+  useEffect(() => {
+    if (!room) return;
+
+    // New V3 invites land in the intended conversation without changing the
+    // underlying room route or exposing private invite metadata to the backend.
+    if (invitedChatTarget) {
+      setMessageTarget(
+        invitedChatTarget,
+      );
+      return;
+    }
+
+    if (
+      invitedMessageMode === "group"
+    ) {
+      setMessageTarget("group");
+      return;
+    }
+
+    if (
+      invitedMessageMode === "chat"
+    ) {
+      setMessageTarget("chat");
+    }
+  }, [
+    room?.id,
+    invitedChatTarget,
+    invitedMessageMode,
+  ]);
 
 
 
@@ -150,16 +177,20 @@ export default function DealRoomPage() {
       <InvitationPanel
         visible={
           showAccessDetails &&
-          Boolean(room) &&
-          (!inviteCompleted || inviteJoinedNotice)
+          Boolean(room)
         }
         roomId={room?.id ?? ""}
-        joinedNotice={inviteJoinedNotice}
-        inviteLink={inviteLink}
-        pending={invitePending}
-        copied={inviteCopied}
-        expired={inviteExpired}
-        countdown={inviteCountdown}
+        directInvite={directInvite}
+        groupInvite={groupInvite}
+        joinedNoticeScope={
+          joinedNoticeScope
+        }
+        groupDuration={
+          groupDuration
+        }
+        onGroupDurationChange={
+          setGroupDuration
+        }
         onCreate={createInviteLink}
         onCopy={copyInviteLink}
         onShare={shareInviteLink}

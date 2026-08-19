@@ -5,10 +5,24 @@ import {
   toFelt,
 } from "@/lib/privacy/envelope";
 
-const INVITE_VERSION = 2 as const;
-const INVITE_TTL_MS = 30 * 60 * 1000;
-const INVITE_AAD_TEXT = "VINSS_INVITE_V2";
+const INVITE_VERSION = 3 as const;
+const LEGACY_INVITE_VERSION = 2 as const;
+const INVITE_AAD_TEXT = "VINSS_INVITE_V3";
+const LEGACY_INVITE_AAD_TEXT = "VINSS_INVITE_V2";
 const INVITE_COMMITMENT_TAG = "VINSS_INVITE_V1";
+
+export type InviteScope = "direct" | "group";
+export type GroupInviteDuration = "24h" | "7d";
+
+export const DIRECT_INVITE_TTL_MS = 60 * 60 * 1000;
+
+export const GROUP_INVITE_TTL_MS: Record<
+  GroupInviteDuration,
+  number
+> = {
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+};
 
 const inviteReadProvider = new RpcProvider({
   nodeUrl: RPC_URL,
@@ -45,6 +59,18 @@ async function waitForInviteOnchain(
 }
 
 export interface InvitePayload {
+  v: 3;
+  inviteId: string;
+  scope: InviteScope;
+  roomId: string;
+  roomSecret: string;
+  onchainSecret: string;
+  label: string;
+  inviterAddress?: string;
+  expiresAt: string;
+}
+
+interface LegacyInvitePayload {
   v: 2;
   inviteId: string;
   roomId: string;
@@ -58,11 +84,14 @@ export interface CreateInvitePayload {
   roomId: string;
   roomSecret: string;
   label: string;
+  scope: InviteScope;
+  groupDuration?: GroupInviteDuration;
 }
 
 export interface EncryptedInviteToken {
   token: string;
   key: string;
+  scope: InviteScope;
   expiresAt: string;
   commitment: string;
 }
@@ -97,8 +126,8 @@ function base64UrlToBytes(value: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
 
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
   }
 
   return bytes;
@@ -114,9 +143,9 @@ function randomHex(byteLength: number): string {
     .join("");
 }
 
-function getInviteAad(): ArrayBuffer {
+function getInviteAad(text: string): ArrayBuffer {
   return toArrayBuffer(
-    new TextEncoder().encode(INVITE_AAD_TEXT),
+    new TextEncoder().encode(text),
   );
 }
 
@@ -129,6 +158,18 @@ function computeInviteCommitment(
       String(BigInt(onchainSecret)),
     ]),
   );
+}
+
+function resolveInviteTtlMs(
+  input: CreateInvitePayload,
+): number {
+  if (input.scope === "direct") {
+    return DIRECT_INVITE_TTL_MS;
+  }
+
+  return GROUP_INVITE_TTL_MS[
+    input.groupDuration ?? "24h"
+  ];
 }
 
 async function invokeInvite(
@@ -177,22 +218,14 @@ async function invokeInvite(
     },
   ];
 
-  try {
-    return await account.strk20InvokeTransaction(actions);
-  } catch (err) {
-    throw err;
-  }
-
+  return account.strk20InvokeTransaction(actions);
 }
 
 /**
- * Invite V2:
+ * Invite V3 keeps Chat and Group invitation lifecycles explicit.
  *
- * - roomSecret is encrypted locally with AES-256-GCM.
- * - ciphertext goes in the URL path.
- * - encryption key goes in the URL fragment (#k=...), which browsers do
- *   not send as part of the HTTP request.
- * - VINSS backend/Vercel never needs the plaintext roomSecret.
+ * Scope and expiry live inside the encrypted payload. The deployed Invite
+ * contract remains generic: it only enforces one-time use and expiry.
  */
 export async function createInviteToken(
   account: WalletAccountV6,
@@ -210,16 +243,18 @@ export async function createInviteToken(
   const keyBytes = crypto.getRandomValues(
     new Uint8Array(32),
   );
-
   const iv = crypto.getRandomValues(
     new Uint8Array(12),
   );
 
   const expiresAt = new Date(
-    Date.now() + INVITE_TTL_MS,
+    Date.now() + resolveInviteTtlMs(input),
   ).toISOString();
 
-  let onchainSecret = BigInt("0x" + randomHex(31));
+  let onchainSecret = BigInt(
+    "0x" + randomHex(31),
+  );
+
   if (onchainSecret === 0n) {
     onchainSecret = 1n;
   }
@@ -230,25 +265,23 @@ export async function createInviteToken(
   const expiresAtSeconds =
     Math.floor(Date.parse(expiresAt) / 1000);
 
-  // Build the private invite BEFORE asking Ready to submit.
-  // If Ready submits successfully but its callback times out,
-  // this exact token/key can still be returned after on-chain recovery.
+  // Recovery metadata exists before Ready X can background the dapp.
   const payload: InvitePayload = {
     v: INVITE_VERSION,
     inviteId: randomHex(16),
+    scope: input.scope,
     roomId: input.roomId,
     roomSecret: input.roomSecret,
     onchainSecret: toFelt(onchainSecret),
     label: input.label,
+    inviterAddress: account.address,
     expiresAt,
   };
 
   const key = await crypto.subtle.importKey(
     "raw",
     toArrayBuffer(keyBytes),
-    {
-      name: "AES-GCM",
-    },
+    { name: "AES-GCM" },
     false,
     ["encrypt"],
   );
@@ -262,7 +295,7 @@ export async function createInviteToken(
       {
         name: "AES-GCM",
         iv: toArrayBuffer(iv),
-        additionalData: getInviteAad(),
+        additionalData: getInviteAad(INVITE_AAD_TEXT),
       },
       key,
       toArrayBuffer(plaintext),
@@ -279,13 +312,11 @@ export async function createInviteToken(
   const invite: EncryptedInviteToken = {
     token: bytesToBase64Url(packed),
     key: bytesToBase64Url(keyBytes),
+    scope: input.scope,
     expiresAt,
     commitment: toFelt(commitment),
   };
 
-  // Persistable token/key are available BEFORE opening Ready X.
-  // This lets the dapp recover the invitation if the browser
-  // backgrounds or remounts while wallet approval is in progress.
   if (onPrepared) {
     await onPrepared(invite);
   }
@@ -294,11 +325,7 @@ export async function createInviteToken(
     // CREATE = [0, commitment, expires_at]
     await invokeInvite(
       account,
-      [
-        0,
-        commitment,
-        expiresAtSeconds,
-      ],
+      [0, commitment, expiresAtSeconds],
     );
   } catch (err) {
     const message =
@@ -334,81 +361,135 @@ export async function createInviteToken(
   return invite;
 }
 
+async function decryptPackedInvite(
+  token: string,
+  encodedKey: string,
+  aadText: string,
+): Promise<unknown> {
+  const packed = base64UrlToBytes(token);
+  const keyBytes = base64UrlToBytes(encodedKey);
+
+  if (packed.length <= 12 || keyBytes.length !== 32) {
+    throw new Error("INVALID_INVITE_BYTES");
+  }
+
+  const iv = packed.slice(0, 12);
+  const ciphertext = packed.slice(12);
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    toArrayBuffer(keyBytes),
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"],
+  );
+
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: toArrayBuffer(iv),
+      additionalData: getInviteAad(aadText),
+    },
+    key,
+    toArrayBuffer(ciphertext),
+  );
+
+  return JSON.parse(
+    new TextDecoder().decode(plaintext),
+  );
+}
+
+function isValidCommonInvite(
+  payload: {
+    inviteId?: unknown;
+    roomId?: unknown;
+    roomSecret?: unknown;
+    onchainSecret?: unknown;
+    label?: unknown;
+    expiresAt?: unknown;
+  },
+): boolean {
+  return Boolean(
+    typeof payload.inviteId === "string" &&
+      payload.inviteId &&
+      typeof payload.roomId === "string" &&
+      payload.roomId &&
+      typeof payload.roomSecret === "string" &&
+      payload.roomSecret &&
+      typeof payload.onchainSecret === "string" &&
+      payload.onchainSecret &&
+      typeof payload.label === "string" &&
+      typeof payload.expiresAt === "string",
+  );
+}
+
+function isUsableExpiry(expiresAt: string): boolean {
+  const value = Date.parse(expiresAt);
+
+  return Number.isFinite(value) && value > Date.now();
+}
+
 export async function decodeInviteToken(
   token: string,
   encodedKey: string,
 ): Promise<InvitePayload | null> {
   try {
-    const packed = base64UrlToBytes(token);
-    const keyBytes = base64UrlToBytes(encodedKey);
-
-    if (packed.length <= 12 || keyBytes.length !== 32) {
-      return null;
-    }
-
-    const iv = packed.slice(0, 12);
-    const ciphertext = packed.slice(12);
-
-    const key = await crypto.subtle.importKey(
-      "raw",
-      toArrayBuffer(keyBytes),
-      {
-        name: "AES-GCM",
-      },
-      false,
-      ["decrypt"],
+    const raw = await decryptPackedInvite(
+      token,
+      encodedKey,
+      INVITE_AAD_TEXT,
     );
 
-    const plaintext = await crypto.subtle.decrypt(
-      {
-        name: "AES-GCM",
-        iv: toArrayBuffer(iv),
-        additionalData: getInviteAad(),
-      },
-      key,
-      toArrayBuffer(ciphertext),
+    const payload = raw as Partial<InvitePayload>;
+
+    if (
+      payload.v !== INVITE_VERSION ||
+      (payload.scope !== "direct" &&
+        payload.scope !== "group") ||
+      !isValidCommonInvite(payload) ||
+      !isUsableExpiry(payload.expiresAt!)
+    ) {
+      return null;
+    }
+
+    return payload as InvitePayload;
+  } catch {
+    // Existing V2 links remain consumable during the migration.
+  }
+
+  try {
+    const raw = await decryptPackedInvite(
+      token,
+      encodedKey,
+      LEGACY_INVITE_AAD_TEXT,
     );
 
-    const payload = JSON.parse(
-      new TextDecoder().decode(plaintext),
-    ) as InvitePayload;
+    const legacy =
+      raw as Partial<LegacyInvitePayload>;
 
     if (
-      payload?.v !== INVITE_VERSION ||
-      typeof payload.inviteId !== "string" ||
-      typeof payload.roomId !== "string" ||
-      typeof payload.roomSecret !== "string" ||
-      typeof payload.onchainSecret !== "string" ||
-      typeof payload.label !== "string" ||
-      typeof payload.expiresAt !== "string"
+      legacy.v !== LEGACY_INVITE_VERSION ||
+      !isValidCommonInvite(legacy) ||
+      !isUsableExpiry(legacy.expiresAt!)
     ) {
       return null;
     }
 
-    if (
-      !payload.inviteId ||
-      !payload.roomId ||
-      !payload.roomSecret ||
-      !payload.onchainSecret
-    ) {
-      return null;
-    }
-
-    const expiresAt = Date.parse(payload.expiresAt);
-
-    if (
-      !Number.isFinite(expiresAt) ||
-      expiresAt <= Date.now()
-    ) {
-      return null;
-    }
-
-    return payload;
+    // V2 represented the old one-counterparty flow, so normalize it to Chat.
+    return {
+      v: INVITE_VERSION,
+      inviteId: legacy.inviteId!,
+      scope: "direct",
+      roomId: legacy.roomId!,
+      roomSecret: legacy.roomSecret!,
+      onchainSecret: legacy.onchainSecret!,
+      label: legacy.label!,
+      expiresAt: legacy.expiresAt!,
+    };
   } catch {
     return null;
   }
 }
-
 
 export interface InviteOnchainState {
   expiresAt: number;
@@ -439,7 +520,6 @@ export async function getInviteOnchainState(
   };
 }
 
-
 export async function consumeInviteOnchain(
   account: WalletAccountV6,
   onchainSecret: string,
@@ -453,10 +533,7 @@ export async function consumeInviteOnchain(
   // CONSUME = [1, secret].
   const response = await invokeInvite(
     account,
-    [
-      1,
-      onchainSecret,
-    ],
+    [1, onchainSecret],
   );
 
   return {

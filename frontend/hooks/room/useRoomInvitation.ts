@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import { BACKEND_URL } from "@/lib/starknet/constants";
-import { discoverMessages } from "@/lib/deal-room/messaging";
 import {
   createInviteToken,
   getInviteOnchainState,
+  type GroupInviteDuration,
+  type InviteScope,
 } from "@/lib/deal-room/invitation";
-import {
-  sameStarknetAddress,
-  type RoomParticipant,
-} from "@/lib/privacy/participantKeys";
 
 interface RoomInvitationContext {
   id: string;
@@ -23,178 +21,455 @@ interface RoomInvitationContext {
 interface UseRoomInvitationOptions {
   room: RoomInvitationContext | null;
   session: VinssWalletSession | null;
-  channelKey: Uint8Array | null;
-  participants: RoomParticipant[];
-  setParticipants: Dispatch<SetStateAction<RoomParticipant[]>>;
-  setError: (value: string | null) => void;
+  setError: (
+    value: string | null,
+  ) => void;
+}
+
+export interface InviteUiState {
+  link: string | null;
+  expiresAt: string | null;
+  commitment: string | null;
+  pending: boolean;
+  copied: boolean;
+  expired: boolean;
+  countdown: string;
+}
+
+interface StoredInvite {
+  link?: string;
+  expiresAt?: string;
+  commitment?: string;
+  status?: "pending" | "ready";
+}
+
+interface MutableInviteState {
+  link: string | null;
+  expiresAt: string | null;
+  commitment: string | null;
+  pending: boolean;
+  copied: boolean;
+}
+
+const EMPTY_INVITE: MutableInviteState = {
+  link: null,
+  expiresAt: null,
+  commitment: null,
+  pending: false,
+  copied: false,
+};
+
+function inviteStorageKey(
+  roomId: string,
+  scope: InviteScope,
+): string {
+  return (
+    `vinss:invite:v3:${roomId}:` +
+    scope
+  );
+}
+
+function formatCountdown(
+  expiresAt: string | null,
+  now: number,
+): {
+  expired: boolean;
+  countdown: string;
+} {
+  if (!expiresAt) {
+    return {
+      expired: false,
+      countdown: "",
+    };
+  }
+
+  const remainingMs =
+    Math.max(
+      0,
+      Date.parse(expiresAt) -
+        now,
+    );
+
+  if (remainingMs <= 0) {
+    return {
+      expired: true,
+      countdown: "Expired",
+    };
+  }
+
+  const totalMinutes =
+    Math.ceil(
+      remainingMs / 60_000,
+    );
+
+  if (totalMinutes >= 24 * 60) {
+    const days =
+      Math.floor(
+        totalMinutes / (24 * 60),
+      );
+
+    const hours =
+      Math.floor(
+        (totalMinutes %
+          (24 * 60)) /
+          60,
+      );
+
+    return {
+      expired: false,
+      countdown:
+        `${days}d ${hours}h`,
+    };
+  }
+
+  if (totalMinutes >= 60) {
+    const hours =
+      Math.floor(
+        totalMinutes / 60,
+      );
+
+    const minutes =
+      totalMinutes % 60;
+
+    return {
+      expired: false,
+      countdown:
+        `${hours}h ${minutes}m`,
+    };
+  }
+
+  const totalSeconds =
+    Math.ceil(
+      remainingMs / 1000,
+    );
+
+  const minutes =
+    Math.floor(
+      totalSeconds / 60,
+    );
+
+  const seconds =
+    totalSeconds % 60;
+
+  return {
+    expired: false,
+    countdown:
+      `${minutes}:${seconds
+        .toString()
+        .padStart(2, "0")}`,
+  };
 }
 
 export function useRoomInvitation({
   room,
   session,
-  channelKey,
-  participants,
-  setParticipants,
   setError,
 }: UseRoomInvitationOptions) {
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
-  const [inviteCommitment, setInviteCommitment] =
-    useState<string | null>(null);
-  const [inviteNow, setInviteNow] = useState(Date.now());
-  const [inviteCopied, setInviteCopied] = useState(false);
-  const [invitePending, setInvitePending] = useState(false);
-  const [inviteCompleted, setInviteCompleted] = useState(false);
-  const [inviteJoinedNotice, setInviteJoinedNotice] = useState(false);
+  const [
+    invites,
+    setInvites,
+  ] = useState<
+    Record<
+      InviteScope,
+      MutableInviteState
+    >
+  >({
+    direct: {
+      ...EMPTY_INVITE,
+    },
+    group: {
+      ...EMPTY_INVITE,
+    },
+  });
+
+  const [
+    groupDuration,
+    setGroupDuration,
+  ] = useState<GroupInviteDuration>(
+    "24h",
+  );
+
+  const [
+    joinedNoticeScope,
+    setJoinedNoticeScope,
+  ] =
+    useState<InviteScope | null>(
+      null,
+    );
+
+  const [now, setNow] =
+    useState(Date.now());
+
+  function updateInvite(
+    scope: InviteScope,
+    patch: Partial<MutableInviteState>,
+  ) {
+    setInvites((previous) => ({
+      ...previous,
+      [scope]: {
+        ...previous[scope],
+        ...patch,
+      },
+    }));
+  }
+
+  function clearInvite(
+    scope: InviteScope,
+  ) {
+    setInvites((previous) => ({
+      ...previous,
+      [scope]: {
+        ...EMPTY_INVITE,
+      },
+    }));
+  }
 
   useEffect(() => {
-    if (!room) return;
-
-    const completed =
-      window.localStorage.getItem(
-        `vinss:invite-completed:${room.id}`,
-      ) === "1";
-
-    setInviteCompleted(completed);
-
-    if (completed) {
-      setInviteLink(null);
-      setInviteExpiresAt(null);
-      setInviteCommitment(null);
-      setInvitePending(false);
+    if (!room) {
+      setInvites({
+        direct: {
+          ...EMPTY_INVITE,
+        },
+        group: {
+          ...EMPTY_INVITE,
+        },
+      });
       return;
     }
 
-    try {
-      const raw = window.localStorage.getItem(
-        `vinss:invite:${room.id}`,
-      );
+    const restored: Record<
+      InviteScope,
+      MutableInviteState
+    > = {
+      direct: {
+        ...EMPTY_INVITE,
+      },
+      group: {
+        ...EMPTY_INVITE,
+      },
+    };
 
-      if (!raw) return;
+    for (const scope of [
+      "direct",
+      "group",
+    ] as const) {
+      const key =
+        inviteStorageKey(
+          room.id,
+          scope,
+        );
 
-      const saved = JSON.parse(raw) as {
-        link?: string;
-        expiresAt?: string;
-        commitment?: string;
-        status?: "pending" | "ready";
-      };
+      try {
+        const raw =
+          window.localStorage.getItem(
+            key,
+          );
 
-      if (
-        saved.link &&
-        saved.expiresAt &&
-        Date.parse(saved.expiresAt) > Date.now()
-      ) {
-        setInviteLink(saved.link);
-        setInviteExpiresAt(saved.expiresAt);
-        setInviteCommitment(saved.commitment ?? null);
-        setInvitePending(saved.status === "pending");
-        setInviteNow(Date.now());
-      } else {
+        if (!raw) continue;
+
+        const saved =
+          JSON.parse(
+            raw,
+          ) as StoredInvite;
+
+        if (
+          saved.link &&
+          saved.expiresAt &&
+          Date.parse(
+            saved.expiresAt,
+          ) > Date.now()
+        ) {
+          restored[scope] = {
+            link: saved.link,
+            expiresAt:
+              saved.expiresAt,
+            commitment:
+              saved.commitment ??
+              null,
+            pending:
+              saved.status ===
+              "pending",
+            copied: false,
+          };
+        } else {
+          window.localStorage.removeItem(
+            key,
+          );
+        }
+      } catch {
         window.localStorage.removeItem(
-          `vinss:invite:${room.id}`,
+          key,
         );
       }
-    } catch {
-      window.localStorage.removeItem(
-        `vinss:invite:${room.id}`,
-      );
     }
-  }, [room]);
 
-  async function createInviteLink() {
+    setInvites(restored);
+    setNow(Date.now());
+  }, [room?.id]);
+
+  const directTiming =
+    formatCountdown(
+      invites.direct.expiresAt,
+      now,
+    );
+
+  const groupTiming =
+    formatCountdown(
+      invites.group.expiresAt,
+      now,
+    );
+
+  useEffect(() => {
+    if (
+      !invites.direct.expiresAt &&
+      !invites.group.expiresAt
+    ) {
+      return;
+    }
+
+    const timer =
+      window.setInterval(() => {
+        setNow(Date.now());
+      }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    invites.direct.expiresAt,
+    invites.group.expiresAt,
+  ]);
+
+  async function createInviteLink(
+    scope: InviteScope,
+  ) {
     if (!room) return;
 
     setError(null);
 
     if (!session) {
-      setError("Connect your wallet before creating an invite.");
+      setError(
+        "Connect your wallet before creating an invite.",
+      );
       return;
     }
 
-    // A new invitation must not inherit stale/expired/completed state.
-    setInviteLink(null);
-    setInviteExpiresAt(null);
-    setInviteCommitment(null);
-    setInviteCopied(false);
-    setInvitePending(false);
-    setInviteCompleted(false);
-    setInviteJoinedNotice(false);
-    setInviteNow(Date.now());
+    clearInvite(scope);
+    setJoinedNoticeScope(null);
+    setNow(Date.now());
+
+    const storageKey =
+      inviteStorageKey(
+        room.id,
+        scope,
+      );
 
     window.localStorage.removeItem(
-      `vinss:invite:${room.id}`,
+      storageKey,
     );
 
-    window.localStorage.removeItem(
-      `vinss:invite-completed:${room.id}`,
-    );
+    let preparedLink:
+      | string
+      | null = null;
 
-    let preparedLink: string | null = null;
-    let preparedCommitment: string | null = null;
-    let preparedExpiresAt: string | null = null;
+    let preparedCommitment:
+      | string
+      | null = null;
+
+    let preparedExpiresAt:
+      | string
+      | null = null;
 
     try {
-      const invite = await createInviteToken(
-        session.account,
-        {
-          roomId: room.id,
-          roomSecret: room.roomSecret,
-          label: room.label,
-        },
-        (prepared) => {
-          // IMPORTANT: this runs BEFORE Ready X is opened.
-          const link =
-            `${window.location.origin}/invite/${prepared.token}` +
-            `#k=${prepared.key}`;
+      const invite =
+        await createInviteToken(
+          session.account,
+          {
+            roomId: room.id,
+            roomSecret:
+              room.roomSecret,
+            label: room.label,
+            scope,
+            groupDuration:
+              scope === "group"
+                ? groupDuration
+                : undefined,
+          },
+          (prepared) => {
+            // Persist before Ready X opens so mobile backgrounding is recoverable.
+            const link =
+              `${window.location.origin}/invite/${prepared.token}` +
+              `#k=${prepared.key}`;
 
-          preparedLink = link;
-          preparedCommitment = prepared.commitment;
-          preparedExpiresAt = prepared.expiresAt;
+            preparedLink = link;
+            preparedCommitment =
+              prepared.commitment;
+            preparedExpiresAt =
+              prepared.expiresAt;
 
-          setInviteLink(link);
-          setInviteExpiresAt(prepared.expiresAt);
-          setInviteCommitment(prepared.commitment);
-          setInvitePending(true);
-          setInviteNow(Date.now());
+            updateInvite(
+              scope,
+              {
+                link,
+                expiresAt:
+                  prepared.expiresAt,
+                commitment:
+                  prepared.commitment,
+                pending: true,
+                copied: false,
+              },
+            );
 
-          window.localStorage.setItem(
-            `vinss:invite:${room.id}`,
-            JSON.stringify({
-              link,
-              expiresAt: prepared.expiresAt,
-              commitment: prepared.commitment,
-              status: "pending",
-            }),
-          );
-        },
-      );
+            setNow(Date.now());
+
+            window.localStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                link,
+                expiresAt:
+                  prepared.expiresAt,
+                commitment:
+                  prepared.commitment,
+                status: "pending",
+              } satisfies StoredInvite),
+            );
+          },
+        );
 
       const link =
         preparedLink ??
         `${window.location.origin}/invite/${invite.token}` +
           `#k=${invite.key}`;
 
-      setInviteLink(link);
-      setInviteExpiresAt(invite.expiresAt);
-      setInviteCommitment(invite.commitment);
-      setInvitePending(false);
-      setInviteNow(Date.now());
+      updateInvite(scope, {
+        link,
+        expiresAt:
+          invite.expiresAt,
+        commitment:
+          invite.commitment,
+        pending: false,
+        copied: false,
+      });
+
+      setNow(Date.now());
 
       window.localStorage.setItem(
-        `vinss:invite:${room.id}`,
+        storageKey,
         JSON.stringify({
           link,
-          expiresAt: invite.expiresAt,
-          commitment: invite.commitment,
+          expiresAt:
+            invite.expiresAt,
+          commitment:
+            invite.commitment,
           status: "ready",
-        }),
+        } satisfies StoredInvite),
       );
     } catch (err) {
-      console.error("[VINSS INVITE CREATE]", err);
+      console.error(
+        `[VINSS ${scope.toUpperCase()} INVITE CREATE]`,
+        err,
+      );
 
-      // Wallet callbacks can fail/disappear after mobile app switching
-      // even when the chain transaction actually landed. Recover using
-      // the commitment created before Ready X was opened.
       if (
         preparedCommitment &&
         preparedLink &&
@@ -207,354 +482,281 @@ export function useRoomInvitation({
             );
 
           if (state.exists) {
-            setInviteLink(preparedLink);
-            setInviteExpiresAt(preparedExpiresAt);
-            setInviteCommitment(preparedCommitment);
-            setInvitePending(false);
-            setInviteNow(Date.now());
+            updateInvite(
+              scope,
+              {
+                link:
+                  preparedLink,
+                expiresAt:
+                  preparedExpiresAt,
+                commitment:
+                  preparedCommitment,
+                pending: false,
+                copied: false,
+              },
+            );
 
             window.localStorage.setItem(
-              `vinss:invite:${room.id}`,
+              storageKey,
               JSON.stringify({
-                link: preparedLink,
-                expiresAt: preparedExpiresAt,
-                commitment: preparedCommitment,
+                link:
+                  preparedLink,
+                expiresAt:
+                  preparedExpiresAt,
+                commitment:
+                  preparedCommitment,
                 status: "ready",
-              }),
+              } satisfies StoredInvite),
             );
 
             return;
           }
         } catch {
-          // Fall through to real failure cleanup.
+          // Fall through to the safe UI error.
         }
       }
 
-      setInviteLink(null);
-      setInviteExpiresAt(null);
-      setInviteCommitment(null);
-      setInvitePending(false);
+      clearInvite(scope);
 
       window.localStorage.removeItem(
-        `vinss:invite:${room.id}`,
+        storageKey,
       );
 
       setError(
-        "Could not create the private invitation.",
+        scope === "direct"
+          ? "Could not create the private Chat invitation."
+          : "Could not create the Group invitation.",
       );
     }
   }
 
   useEffect(() => {
-    if (!inviteExpiresAt) return;
+    if (!room) return;
 
-    const timer = window.setInterval(() => {
-      setInviteNow(Date.now());
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [inviteExpiresAt]);
-
-  const inviteRemainingMs = inviteExpiresAt
-    ? Math.max(0, Date.parse(inviteExpiresAt) - inviteNow)
-    : 0;
-
-  const inviteExpired =
-    Boolean(inviteExpiresAt) && inviteRemainingMs <= 0;
-
-  const inviteRemainingSeconds =
-    Math.ceil(inviteRemainingMs / 1000);
-
-  const inviteMinutes =
-    Math.floor(inviteRemainingSeconds / 60);
-
-  const inviteSeconds =
-    inviteRemainingSeconds % 60;
-
-  const inviteCountdown =
-    `${inviteMinutes}:${inviteSeconds.toString().padStart(2, "0")}`;
-
-  useEffect(() => {
     if (
-      !room ||
-      participants.length === 0 ||
-      inviteCompleted
-    ) {
-      return;
-    }
-
-    setInviteCompleted(true);
-    setInviteJoinedNotice(true);
-    setInviteLink(null);
-    setInviteExpiresAt(null);
-    setInviteCommitment(null);
-
-    window.localStorage.setItem(
-      `vinss:invite-completed:${room.id}`,
-      "1",
-    );
-
-    window.localStorage.removeItem(
-      `vinss:invite:${room.id}`,
-    );
-
-  }, [room, participants.length, inviteCompleted]);
-
-  useEffect(() => {
-    if (
-      !inviteLink ||
-      inviteExpired ||
-      !channelKey ||
-      !session ||
-      participants.length > 0
+      !invites.direct.commitment &&
+      !invites.group.commitment
     ) {
       return;
     }
 
     let cancelled = false;
 
-    const checkCounterparty = async () => {
-      try {
-        const messages = await discoverMessages(
-          BACKEND_URL,
-          channelKey,
-        );
-
-        const map = new Map<string, RoomParticipant>();
-
-        for (const item of messages) {
-          const sender = item.message.senderIdentity;
+    const checkInvites =
+      async () => {
+        for (const scope of [
+          "direct",
+          "group",
+        ] as const) {
+          const invite =
+            invites[scope];
 
           if (
-            !sender?.address ||
-            !sender.messagingPublicKey
+            !invite.commitment ||
+            !invite.expiresAt ||
+            Date.parse(
+              invite.expiresAt,
+            ) <= Date.now()
           ) {
             continue;
           }
 
-          if (
-            sameStarknetAddress(
-              sender.address,
-              session.account.address,
-            )
-          ) {
-            continue;
+          try {
+            const state =
+              await getInviteOnchainState(
+                invite.commitment,
+              );
+
+            if (
+              cancelled ||
+              !state.exists
+            ) {
+              continue;
+            }
+
+            if (state.consumed) {
+              clearInvite(scope);
+
+              window.localStorage.removeItem(
+                inviteStorageKey(
+                  room.id,
+                  scope,
+                ),
+              );
+
+              setJoinedNoticeScope(
+                scope,
+              );
+
+              continue;
+            }
+
+            if (invite.pending) {
+              updateInvite(
+                scope,
+                {
+                  pending: false,
+                },
+              );
+
+              const key =
+                inviteStorageKey(
+                  room.id,
+                  scope,
+                );
+
+              try {
+                const raw =
+                  window.localStorage.getItem(
+                    key,
+                  );
+
+                const saved =
+                  raw
+                    ? (JSON.parse(
+                        raw,
+                      ) as StoredInvite)
+                    : {};
+
+                window.localStorage.setItem(
+                  key,
+                  JSON.stringify({
+                    ...saved,
+                    status: "ready",
+                  } satisfies StoredInvite),
+                );
+              } catch {
+                // Local recovery metadata is only a UX optimization.
+              }
+            }
+          } catch {
+            // Poll failures do not invalidate an otherwise usable invite.
           }
-
-          map.set(sender.address.toLowerCase(), {
-            address: sender.address,
-            publicKey: sender.messagingPublicKey,
-          });
         }
+      };
 
-        if (!cancelled && map.size > 0) {
-          setParticipants([...map.values()]);
-        }
-      } catch (err) {
-      }
-    };
+    void checkInvites();
 
-    void checkCounterparty();
-
-    const timer = window.setInterval(() => {
-      void checkCounterparty();
-    }, 5000);
+    const timer =
+      window.setInterval(() => {
+        void checkInvites();
+      }, 2500);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   }, [
-    inviteLink,
-    inviteExpired,
-    channelKey,
-    session,
-    participants.length,
+    room?.id,
+    invites.direct.commitment,
+    invites.direct.expiresAt,
+    invites.direct.pending,
+    invites.group.commitment,
+    invites.group.expiresAt,
+    invites.group.pending,
   ]);
 
   useEffect(() => {
-    if (
-      !room ||
-      !inviteCommitment ||
-      inviteExpired ||
-      inviteCompleted
-    ) {
+    if (!joinedNoticeScope) {
       return;
     }
 
-    let cancelled = false;
-
-    const checkConsumed = async () => {
-      try {
-        const state =
-          await getInviteOnchainState(inviteCommitment);
-
-        if (
-          cancelled ||
-          !state.exists ||
-          !state.consumed
-        ) {
-          return;
-        }
-
-        setInviteCompleted(true);
-        setInviteJoinedNotice(true);
-
-        setInviteLink(null);
-        setInviteExpiresAt(null);
-        setInviteCommitment(null);
-
-        window.localStorage.setItem(
-          `vinss:invite-completed:${room.id}`,
-          "1",
+    const timer =
+      window.setTimeout(() => {
+        setJoinedNoticeScope(
+          null,
         );
-
-        window.localStorage.removeItem(
-          `vinss:invite:${room.id}`,
-        );
-      } catch (err) {
-      }
-    };
-
-    void checkConsumed();
-
-    const timer = window.setInterval(() => {
-      void checkConsumed();
-    }, 3000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [
-    room,
-    inviteCommitment,
-    inviteExpired,
-    inviteCompleted,
-  ]);
-
-  useEffect(() => {
-    if (!inviteJoinedNotice) return;
-
-    const timer = window.setTimeout(() => {
-      setInviteJoinedNotice(false);
-    }, 4000);
+      }, 4500);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [inviteJoinedNotice]);
+  }, [joinedNoticeScope]);
 
-  useEffect(() => {
-    if (
-      !room ||
-      !invitePending ||
-      !inviteCommitment ||
-      inviteExpired
-    ) {
-      return;
-    }
+  async function copyInviteLink(
+    scope: InviteScope,
+  ) {
+    const link =
+      invites[scope].link;
 
-    let cancelled = false;
-
-    const recoverPendingInvite = async () => {
-      try {
-        const state =
-          await getInviteOnchainState(
-            inviteCommitment,
-          );
-
-        if (
-          cancelled ||
-          !state.exists
-        ) {
-          return;
-        }
-
-        setInvitePending(false);
-
-        const raw =
-          window.localStorage.getItem(
-            `vinss:invite:${room.id}`,
-          );
-
-        if (!raw) return;
-
-        const saved = JSON.parse(raw) as {
-          link?: string;
-          expiresAt?: string;
-          commitment?: string;
-        };
-
-        window.localStorage.setItem(
-          `vinss:invite:${room.id}`,
-          JSON.stringify({
-            ...saved,
-            status: "ready",
-          }),
-        );
-      } catch (err) {
-      }
-    };
-
-    void recoverPendingInvite();
-
-    const timer = window.setInterval(() => {
-      void recoverPendingInvite();
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [
-    room,
-    invitePending,
-    inviteCommitment,
-    inviteExpired,
-  ]);
-
-  async function copyInviteLink() {
-    if (!inviteLink) return;
+    if (!link) return;
 
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      setInviteCopied(true);
+      await navigator.clipboard.writeText(
+        link,
+      );
+
+      updateInvite(
+        scope,
+        {
+          copied: true,
+        },
+      );
     } catch (err) {
-      console.error("[VINSS INVITE COPY]", err);
-      setError("Could not copy the invite link.");
+      console.error(
+        `[VINSS ${scope.toUpperCase()} INVITE COPY]`,
+        err,
+      );
+
+      setError(
+        "Could not copy the invite link.",
+      );
     }
   }
 
-  async function shareInviteLink() {
-    if (!inviteLink) return;
+  async function shareInviteLink(
+    scope: InviteScope,
+  ) {
+    const link =
+      invites[scope].link;
+
+    if (!link) return;
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `VINSS — ${room?.label ?? "Private room"}`,
-          text: "You're invited to a private VINSS deal room.",
-          url: inviteLink,
+          title:
+            scope === "direct"
+              ? `VINSS Chat — ${room?.label ?? "Private room"}`
+              : `VINSS Group — ${room?.label ?? "Private room"}`,
+          text:
+            scope === "direct"
+              ? "You're invited to a private VINSS chat."
+              : "You're invited to a VINSS group.",
+          url: link,
         });
       } catch {
         // User cancelled native sharing.
       }
+
       return;
     }
 
-    await copyInviteLink();
+    await copyInviteLink(scope);
   }
 
+  const directInvite: InviteUiState = {
+    ...invites.direct,
+    expired:
+      directTiming.expired,
+    countdown:
+      directTiming.countdown,
+  };
+
+  const groupInvite: InviteUiState = {
+    ...invites.group,
+    expired:
+      groupTiming.expired,
+    countdown:
+      groupTiming.countdown,
+  };
+
   return {
-    inviteLink,
-    inviteCopied,
-    invitePending,
-    inviteCompleted,
-    inviteJoinedNotice,
-    inviteExpired,
-    inviteCountdown,
+    directInvite,
+    groupInvite,
+    joinedNoticeScope,
+    groupDuration,
+    setGroupDuration,
     createInviteLink,
     copyInviteLink,
     shareInviteLink,

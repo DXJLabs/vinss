@@ -15,6 +15,7 @@ import {
   decodeInviteToken,
   consumeInviteOnchain,
   type InvitePayload,
+  type InviteScope,
 } from "@/lib/deal-room/invitation";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
@@ -24,32 +25,43 @@ interface LocalRoom {
   label: string;
   roomSecret: string;
   createdAt: string;
+  joinedVia?: InviteScope;
 }
 
-const ROOM_STORAGE_KEY = "vinss:local-rooms";
+const ROOM_STORAGE_KEY =
+  "vinss:local-rooms";
+
 const CONSUMED_STORAGE_KEY =
   "vinss:consumed-invites:v2";
 
 function loadConsumedInviteIds(): string[] {
   try {
-    const raw = window.localStorage.getItem(
-      CONSUMED_STORAGE_KEY,
-    );
+    const raw =
+      window.localStorage.getItem(
+        CONSUMED_STORAGE_KEY,
+      );
 
     return raw
-      ? (JSON.parse(raw) as string[])
+      ? (JSON.parse(
+          raw,
+        ) as string[])
       : [];
   } catch {
     return [];
   }
 }
 
-function markInviteConsumed(inviteId: string) {
-  const existing = loadConsumedInviteIds();
+function markInviteConsumed(
+  inviteId: string,
+) {
+  const existing =
+    loadConsumedInviteIds();
 
   const next = [
     inviteId,
-    ...existing.filter((id) => id !== inviteId),
+    ...existing.filter(
+      (id) => id !== inviteId,
+    ),
   ].slice(0, 100);
 
   window.localStorage.setItem(
@@ -59,14 +71,27 @@ function markInviteConsumed(inviteId: string) {
 }
 
 export default function InvitePage() {
-  const params = useParams<{ token: string }>();
-  const router = useRouter();
-  const { session } = useWallet();
+  const params =
+    useParams<{
+      token: string;
+    }>();
 
-  const attempted = useRef(false);
+  const router =
+    useRouter();
 
-  const [invite, setInvite] =
-    useState<InvitePayload | null>(null);
+  const { session } =
+    useWallet();
+
+  const attempted =
+    useRef(false);
+
+  const [
+    invite,
+    setInvite,
+  ] =
+    useState<InvitePayload | null>(
+      null,
+    );
 
   const [error, setError] =
     useState<string | null>(null);
@@ -75,22 +100,28 @@ export default function InvitePage() {
     let cancelled = false;
 
     void (async () => {
-      const token = params.token;
+      const token =
+        params.token;
 
       if (!token) {
-        setError("Invalid invitation.");
+        setError(
+          "Invalid invitation.",
+        );
         return;
       }
 
-      const fragment = new URLSearchParams(
-        window.location.hash.replace(/^#/, ""),
-      );
+      const fragment =
+        new URLSearchParams(
+          window.location.hash.replace(
+            /^#/,
+            "",
+          ),
+        );
 
-      const inviteKey = fragment.get("k");
+      const inviteKey =
+        fragment.get("k");
 
-      // Keep #k until the invitation has been consumed successfully.
-      // The fragment is not sent to Vercel/backend, and keeping it here
-      // allows this page to recover if opening Ready X causes a remount.
+      // Keep #k until consume succeeds so Ready X remounts can recover.
       if (!inviteKey) {
         setError(
           "This invitation is missing its private access key.",
@@ -98,10 +129,11 @@ export default function InvitePage() {
         return;
       }
 
-      const decoded = await decodeInviteToken(
-        token,
-        inviteKey,
-      );
+      const decoded =
+        await decodeInviteToken(
+          token,
+          inviteKey,
+        );
 
       if (cancelled) return;
 
@@ -145,7 +177,6 @@ export default function InvitePage() {
 
     void (async () => {
       try {
-        // On-chain one-time + expiry validation happens first.
         await consumeInviteOnchain(
           session.account,
           invite.onchainSecret,
@@ -155,24 +186,34 @@ export default function InvitePage() {
 
         const room: LocalRoom = {
           id: invite.roomId,
-          label: invite.label || "Joined room",
-          roomSecret: invite.roomSecret,
-          createdAt: new Date().toISOString(),
+          label:
+            invite.label ||
+            "Joined room",
+          roomSecret:
+            invite.roomSecret,
+          createdAt:
+            new Date().toISOString(),
+          joinedVia:
+            invite.scope,
         };
 
-        const raw = window.localStorage.getItem(
-          ROOM_STORAGE_KEY,
-        );
+        const raw =
+          window.localStorage.getItem(
+            ROOM_STORAGE_KEY,
+          );
 
         const rooms = raw
-          ? (JSON.parse(raw) as LocalRoom[])
+          ? (JSON.parse(
+              raw,
+            ) as LocalRoom[])
           : [];
 
         const next = [
           room,
           ...rooms.filter(
             (existing) =>
-              existing.id !== room.id,
+              existing.id !==
+              room.id,
           ),
         ];
 
@@ -181,11 +222,42 @@ export default function InvitePage() {
           JSON.stringify(next),
         );
 
-        markInviteConsumed(invite.inviteId);
+        markInviteConsumed(
+          invite.inviteId,
+        );
 
-        router.replace(`/room/${room.id}`);
-      } catch {
-        attempted.current = false;
+        if (
+          invite.scope ===
+          "group"
+        ) {
+          router.replace(
+            `/room/${room.id}?message=group`,
+          );
+          return;
+        }
+
+        if (
+          invite.inviterAddress
+        ) {
+          router.replace(
+            `/room/${room.id}?chat=${encodeURIComponent(
+              invite.inviterAddress,
+            )}`,
+          );
+          return;
+        }
+
+        router.replace(
+          `/room/${room.id}?message=chat`,
+        );
+      } catch (err) {
+        console.error(
+          "[VINSS INVITE CONSUME ERROR]",
+          err,
+        );
+
+        attempted.current =
+          false;
 
         if (!cancelled) {
           setError(
@@ -198,7 +270,11 @@ export default function InvitePage() {
     return () => {
       cancelled = true;
     };
-  }, [invite, session, router]);
+  }, [
+    invite,
+    session,
+    router,
+  ]);
 
   if (error) {
     return (
@@ -232,7 +308,10 @@ export default function InvitePage() {
       <main className="flex min-h-screen items-center justify-center px-5">
         <div className="max-w-md text-center">
           <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
-            Private invitation
+            {invite.scope ===
+            "group"
+              ? "Group invitation"
+              : "Private Chat invitation"}
           </p>
 
           <p className="mt-3 text-sm text-paper/40">
@@ -251,7 +330,10 @@ export default function InvitePage() {
     <main className="flex min-h-screen items-center justify-center px-5">
       <div className="text-center">
         <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
-          Encrypted invitation
+          {invite?.scope ===
+          "group"
+            ? "Encrypted Group invitation"
+            : "Encrypted Chat invitation"}
         </p>
 
         <p className="mt-3 font-display text-xs uppercase tracking-widest text-paper/30">

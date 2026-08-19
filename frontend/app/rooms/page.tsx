@@ -225,7 +225,7 @@ export default function RoomsPage() {
                       href={`/room/${room.id}?access=1`}
                       className="text-[10px] uppercase tracking-widest text-paper/25 transition hover:text-paper/60"
                     >
-                      Invite counterparty →
+                      Invite to Chat / Group →
                     </Link>
                   </div>
                 </article>
@@ -249,12 +249,12 @@ export default function RoomsPage() {
               </p>
 
               <h2 className="mt-2 text-lg text-paper">
-                Start a private deal
+                Create a private workspace
               </h2>
 
               <p className="mt-2 text-xs leading-relaxed text-paper/35">
-                Choose a local label. The room secret is generated on your
-                device.
+                Choose a local label. Chat and Group invitations are created
+                separately inside the room.
               </p>
             </div>
 
@@ -292,7 +292,7 @@ export default function RoomsPage() {
                   </p>
 
                   <p className="mt-1 text-xs text-paper/25">
-                    Open an invitation shared by your counterparty
+                    Open a Chat or Group invitation shared with you
                   </p>
                 </div>
 
