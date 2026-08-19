@@ -7,7 +7,6 @@ import {
   sendMessage,
   discoverMessages,
 } from "@/lib/deal-room/messaging";
-import { discoverOfferActions } from "@/lib/deal-room/offers";
 import {
   deriveDirectMessageKey,
   getOrCreateMessagingIdentity,
@@ -222,6 +221,14 @@ export function useRoomConversation({
                 found.transactionHash,
               actionLocator: locator,
               sentAt: found.message.sentAt,
+
+              // Preserve the decrypted scope so Group and direct chats stay separate.
+              scope: found.message.scope ?? "group",
+
+              // Preserve the decrypted recipient only in local UI state.
+              recipientAddress: found.message.recipientAddress,
+
+              // Preserve the decrypted sender only in local UI state.
               senderAddress:
                 found.message.senderIdentity?.address,
             },
@@ -379,6 +386,14 @@ export function useRoomConversation({
                 transactionHash: "",
                 actionLocator: preparedLocator!,
                 sentAt: payload.sentAt,
+
+                // Preserve the local message scope for immediate chat filtering.
+                scope: payload.scope ?? "group",
+
+                // Preserve the intended direct recipient only in local UI state.
+                recipientAddress: payload.recipientAddress,
+
+                // Preserve the local sender identity only in local UI state.
                 senderAddress:
                   session.account.address,
               },
@@ -446,6 +461,14 @@ export function useRoomConversation({
               result.transactionHash,
             actionLocator: confirmedLocator,
             sentAt: payload.sentAt,
+
+            // Preserve the local message scope after wallet confirmation.
+            scope: payload.scope ?? "group",
+
+            // Preserve the intended direct recipient only in local UI state.
+            recipientAddress: payload.recipientAddress,
+
+            // Preserve the local sender identity only in local UI state.
             senderAddress:
               session.account.address,
           },
@@ -638,15 +661,6 @@ export function useRoomConversation({
           ) === index,
       );
 
-      const offers = await discoverOfferActions(
-        BACKEND_URL,
-        channelKey,
-      ).catch((err) => {
-        console.error("[VINSS OFFER DISCOVERY FAILED]", err);
-        return [];
-      });
-
-
       const messageEntries: ConversationEntry[] =
         messages.map((m) => ({
           id: crypto.randomUUID(),
@@ -656,29 +670,21 @@ export function useRoomConversation({
           actionLocator:
             m.actionLocator.replace(/^0x/, ""),
           sentAt: m.message.sentAt,
+
+          // Preserve decrypted scope only on the client for chat separation.
+          scope: m.message.scope ?? "group",
+
+          // Preserve the decrypted recipient only on the client.
+          recipientAddress: m.message.recipientAddress,
+
+          // Preserve the decrypted sender only on the client.
           senderAddress:
             m.message.senderIdentity?.address,
         }));
 
-      const offerEntries: ConversationEntry[] = offers.map(
-        (o) => ({
-          id: crypto.randomUUID(),
-          kind: "offer",
-          summary: `${o.action.kind} — ${o.action.amount} ${o.action.asset}`,
-          transactionHash: o.transactionHash,
-          actionLocator:
-            o.actionLocator.replace(/^0x/, ""),
-          sentAt: new Date(
-            o.blockNumber * 1000,
-          ).toISOString(),
-        }),
-      );
-
       setEntries((prev) => {
-        const incoming = [
-          ...messageEntries,
-          ...offerEntries,
-        ];
+        // Keep the generic conversation timeline limited to chat messages.
+        const incoming = messageEntries;
 
         const byLocator = new Map(
           prev.map((entry) => [
@@ -786,7 +792,7 @@ export function useRoomConversation({
     messagingIdentity?.publicKey,
   ]);
 
-  // [VINSS CHAT AUTO SCROLL]
+  // Keep the selected chat pinned to the newest visible message.
   useEffect(() => {
     if (
       !active ||

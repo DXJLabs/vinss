@@ -10,6 +10,15 @@ export interface ConversationEntry {
   transactionHash: string;
   actionLocator: string;
   sentAt: string;
+
+  // Preserve the encrypted message scope after local decryption so the UI can
+  // keep the Group conversation separate from pairwise chats.
+  scope?: "group" | "direct";
+
+  // Preserve the encrypted recipient only in local application state.
+  recipientAddress?: string;
+
+  // Preserve the decrypted sender only in local application state.
   senderAddress?: string;
 }
 
@@ -39,6 +48,16 @@ function explorerUrl(transactionHash: string): string {
     : `https://sepolia.voyager.online/tx/${transactionHash}`;
 }
 
+// Render a compact wallet label until optional username resolution is added.
+function shortAddress(address: string): string {
+  // Keep very short values unchanged.
+  if (address.length <= 14) return address;
+
+  // Show enough prefix and suffix characters to distinguish participants.
+  return `${address.slice(0, 7)}…${address.slice(-5)}`;
+}
+
+// Format a message timestamp for the chat timeline.
 function messageTime(sentAt: string): string {
   return new Date(sentAt).toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -61,51 +80,136 @@ export function ConversationPanel({
   onSendMessage,
   onRefresh,
 }: ConversationPanelProps) {
+  // Normalize the currently connected wallet once for direct-chat filtering.
+  const normalizedWallet = walletAddress?.toLowerCase() ?? "";
+
+  // Normalize the selected chat target once for direct-chat filtering.
+  const normalizedTarget = messageTarget.toLowerCase();
+
+  // Keep Group and pairwise conversations visually separate.
+  const visibleEntries = entries.filter((entry) => {
+    // Offer cards are intentionally excluded from the generic chat timeline
+    // until they are routed through the pairwise Offer flow.
+    if (entry.kind === "offer") return false;
+
+    // Treat legacy messages without an explicit scope as Group messages.
+    const scope = entry.scope ?? "group";
+
+    // Show only Group messages while the Group chat is selected.
+    if (messageTarget === "group") {
+      return scope === "group";
+    }
+
+    // Ignore Group messages while a participant chat is selected.
+    if (scope !== "direct") return false;
+
+    // Normalize the locally decrypted sender address.
+    const sender = entry.senderAddress?.toLowerCase() ?? "";
+
+    // Normalize the locally decrypted recipient address.
+    const recipient = entry.recipientAddress?.toLowerCase() ?? "";
+
+    // Show messages sent by the selected participant to the current wallet.
+    const incomingFromTarget =
+      sender === normalizedTarget &&
+      (!recipient || recipient === normalizedWallet);
+
+    // Show messages sent by the current wallet to the selected participant.
+    const outgoingToTarget =
+      sender === normalizedWallet &&
+      recipient === normalizedTarget;
+
+    // Keep only messages belonging to this pairwise conversation.
+    return incomingFromTarget || outgoingToTarget;
+  });
+
+  // Resolve the current chat label without introducing a username dependency yet.
+  const activeChatLabel =
+    messageTarget === "group"
+      ? "Group"
+      : shortAddress(messageTarget);
+
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between border border-wire bg-vault/30 px-4 py-3.5">
-        <div>
-          <div className="flex items-center gap-3">
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
-              Private conversation
-            </p>
+      <div className="border border-wire bg-vault/30">
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div>
+            <div className="flex items-center gap-3">
+              <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
+                Chat
+              </p>
 
-            <span className="flex items-center gap-1.5 font-display text-[8px] uppercase tracking-[0.14em] text-signal/65">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" />
-              Live
-            </span>
+              <span className="flex items-center gap-1.5 font-display text-[8px] uppercase tracking-[0.14em] text-signal/65">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" />
+                Live
+              </span>
+            </div>
+
+            <p className="mt-1.5 text-[11px] text-paper/35">
+              {activeChatLabel} · end-to-end encrypted
+            </p>
           </div>
 
-          <p className="mt-1.5 text-[11px] text-paper/35">
-            End-to-end encrypted · auto-sync
-          </p>
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={!channelReady || busy}
+            className="border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-[0.14em] text-paper/35 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
+            title="Force room sync"
+          >
+            {busy ? "Syncing…" : "Sync"}
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void onRefresh()}
-          disabled={!channelReady || busy}
-          className="border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-[0.14em] text-paper/35 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
-          title="Force room sync"
-        >
-          {busy ? "Syncing…" : "Sync"}
-        </button>
+        {/* Keep chat selection simple: Group first, then one tab per participant. */}
+        <div className="flex gap-2 overflow-x-auto border-t border-wire px-3 py-2">
+          <button
+            type="button"
+            onClick={() => onMessageTargetChange("group")}
+            className={
+              messageTarget === "group"
+                ? "shrink-0 border border-signal bg-signal px-3 py-2 font-display text-[9px] uppercase tracking-widest text-ink"
+                : "shrink-0 border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:border-signal/50 hover:text-signal"
+            }
+          >
+            Group
+          </button>
+
+          {participants.map((participant) => (
+            <button
+              key={participant.address}
+              type="button"
+              onClick={() => onMessageTargetChange(participant.address)}
+              className={
+                messageTarget.toLowerCase() === participant.address.toLowerCase()
+                  ? "shrink-0 border border-signal bg-signal px-3 py-2 font-display text-[9px] uppercase tracking-widest text-ink"
+                  : "shrink-0 border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:border-signal/50 hover:text-signal"
+              }
+              title={participant.address}
+            >
+              {shortAddress(participant.address)}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="min-h-[420px] max-h-[58vh] overflow-y-auto border-x border-b border-wire bg-black/10">
-        {entries.length === 0 ? (
+        {visibleEntries.length === 0 ? (
           <div className="flex min-h-[420px] flex-col items-center justify-center px-8 text-center">
             <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
               <span className="text-lg text-signal">✦</span>
             </div>
 
             <h3 className="font-display text-sm text-paper/70">
-              Start the conversation
+              {messageTarget === "group"
+                ? "Start the group chat"
+                : `Chat with ${activeChatLabel}`}
             </h3>
 
             <p className="mt-2 max-w-xs text-xs leading-relaxed text-paper/35">
-              Private messages appear here automatically once they are recorded
-              and decrypted on your device.
+              {messageTarget === "group"
+                ? "Messages here are shared with everyone in this room."
+                : "Messages here use a pairwise key shared only with this participant."}
             </p>
 
             <div className="mt-5 flex items-center gap-2 font-display text-[8px] uppercase tracking-[0.16em] text-paper/25">
@@ -116,7 +220,7 @@ export function ConversationPanel({
         ) : (
           <div className="flex min-h-[420px] flex-col justify-end">
             <ul className="space-y-5 p-4 sm:p-5">
-              {[...entries]
+              {[...visibleEntries]
                 .sort(
                   (a, b) =>
                     new Date(a.sentAt).getTime() -
@@ -311,26 +415,14 @@ export function ConversationPanel({
       </div>
 
       <div className="border border-wire bg-vault/20 p-2">
-        <div className="mb-2 flex items-center gap-2 border-b border-wire/60 px-2 pb-2">
+        <div className="mb-2 flex items-center justify-between border-b border-wire/60 px-2 pb-2">
           <span className="font-display text-[9px] uppercase tracking-widest text-paper/30">
-            To
+            {activeChatLabel}
           </span>
 
-          <select
-            value={messageTarget}
-            onChange={(event) => onMessageTargetChange(event.target.value)}
-            disabled={!connected || busy}
-            className="min-w-0 flex-1 bg-transparent text-xs text-paper/65 outline-none"
-          >
-            <option value="group">Group · everyone in this room</option>
-
-            {participants.map((participant) => (
-              <option key={participant.address} value={participant.address}>
-                Direct · {participant.address.slice(0, 8)}…
-                {participant.address.slice(-6)}
-              </option>
-            ))}
-          </select>
+          <span className="text-[9px] text-paper/25">
+            {messageTarget === "group" ? "Group" : "Direct"}
+          </span>
         </div>
 
         <div className="flex items-end gap-2">
