@@ -5,26 +5,44 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import type { ConversationEntry } from "@/components/room/conversation/types";
-import { useRoomParticipants } from "@/hooks/room/useRoomParticipants";
-import { useGroupConversation } from "@/hooks/room/useGroupConversation";
-import { useDirectConversation } from "@/hooks/room/useDirectConversation";
+import type {
+  VinssWalletSession,
+} from "@/lib/starknet/walletClient";
+import type {
+  ConversationEntry,
+} from "@/components/room/conversation/types";
+import {
+  useRoomParticipants,
+} from "@/hooks/room/useRoomParticipants";
+import {
+  useGroupConversation,
+} from "@/hooks/room/useGroupConversation";
+import {
+  useDirectConversation,
+} from "@/hooks/room/useDirectConversation";
+import {
+  useRoomGroups,
+} from "@/hooks/room/useRoomGroups";
 
 interface UseRoomConversationOptions {
   roomId: string | null;
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
   active: boolean;
-  setBusy: (value: boolean) => void;
-  setError: (value: string | null) => void;
+  setBusy: (
+    value: boolean,
+  ) => void;
+  setError: (
+    value: string | null,
+  ) => void;
 }
 
 /**
- * Thin conversation coordinator.
+ * Conversation coordinator.
  *
- * "chat" is the private conversation directory, "group" is the room-wide
- * conversation, and a Starknet address selects one private pair.
+ * "chat" opens the private-chat directory, "groups" opens the Group directory,
+ * "group:<id>" selects one admin-created Group, and a Starknet address selects
+ * one private pair.
  */
 export function useRoomConversation({
   roomId,
@@ -42,7 +60,19 @@ export function useRoomConversation({
   const [
     activityEntries,
     setActivityEntries,
-  ] = useState<ConversationEntry[]>([]);
+  ] =
+    useState<ConversationEntry[]>(
+      [],
+    );
+
+  const selectedGroupId =
+    messageTarget.startsWith(
+      "group:",
+    )
+      ? messageTarget.slice(
+          "group:".length,
+        )
+      : null;
 
   const participantState =
     useRoomParticipants({
@@ -56,23 +86,40 @@ export function useRoomConversation({
       ),
     });
 
+  const groupState =
+    useRoomGroups({
+      roomId,
+      session,
+      selectedGroupId,
+      active: Boolean(
+        roomId && session,
+      ),
+      setError,
+    });
+
   const group =
     useGroupConversation({
       roomId,
       session,
-      channelKey,
+      group:
+        groupState.selectedGroup,
+      groupKey:
+        groupState.selectedGroupKey,
       messagingIdentity:
         participantState.messagingIdentity,
       active:
         active &&
-        messageTarget === "group",
+        Boolean(
+          groupState.selectedGroup,
+        ),
       setBusy,
       setError,
     });
 
   const hasDirectPeer =
-    messageTarget !== "group" &&
-    messageTarget !== "chat";
+    messageTarget !== "chat" &&
+    messageTarget !== "groups" &&
+    !selectedGroupId;
 
   const direct =
     useDirectConversation({
@@ -103,19 +150,26 @@ export function useRoomConversation({
   ];
 
   const setEntries: Dispatch<
-    SetStateAction<ConversationEntry[]>
+    SetStateAction<
+      ConversationEntry[]
+    >
   > = setActivityEntries;
+
+  const usingGroup =
+    Boolean(
+      groupState.selectedGroup,
+    );
 
   const setDraft: Dispatch<
     SetStateAction<string>
   > =
-    messageTarget === "group"
+    usingGroup
       ? group.setDraft
       : direct.setDraft;
 
   async function handleSendMessage():
     Promise<void> {
-    if (messageTarget === "group") {
+    if (usingGroup) {
       await group.sendGroupMessage();
       return;
     }
@@ -133,13 +187,17 @@ export function useRoomConversation({
         true,
       );
 
-      if (messageTarget === "group") {
-        await group.refreshGroup(silent);
+      if (usingGroup) {
+        await group.refreshGroup(
+          silent,
+        );
         return;
       }
 
       if (hasDirectPeer) {
-        await direct.refreshDirect(silent);
+        await direct.refreshDirect(
+          silent,
+        );
       }
     } catch (err) {
       console.error(
@@ -153,21 +211,32 @@ export function useRoomConversation({
     entries,
     setEntries,
     draft:
-      messageTarget === "group"
+      usingGroup
         ? group.draft
         : direct.draft,
     setDraft,
     chatEndRef:
-      messageTarget === "group"
+      usingGroup
         ? group.chatEndRef
         : direct.chatEndRef,
     participants:
       participantState.participants,
     setParticipants:
       participantState.setParticipants,
+    groups:
+      groupState.groups,
+    selectedGroup:
+      groupState.selectedGroup,
+    selectedGroupKey:
+      groupState.selectedGroupKey,
+    isSelectedGroupAdmin:
+      groupState.isSelectedGroupAdmin,
+    createGroup:
+      groupState.createGroup,
     messageTarget,
     setMessageTarget,
-    peerTyping: direct.peerTyping,
+    peerTyping:
+      direct.peerTyping,
     handleSendMessage,
     handleRefresh,
   };

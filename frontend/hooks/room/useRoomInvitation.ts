@@ -11,6 +11,10 @@ import {
   type GroupInviteDuration,
   type InviteScope,
 } from "@/lib/deal-room/invitation";
+import {
+  isGroupAdmin,
+  type LocalRoomGroup,
+} from "@/lib/groups/localGroups";
 
 interface RoomInvitationContext {
   id: string;
@@ -20,6 +24,7 @@ interface RoomInvitationContext {
 
 interface UseRoomInvitationOptions {
   room: RoomInvitationContext | null;
+  group: LocalRoomGroup | null;
   session: VinssWalletSession | null;
   setError: (
     value: string | null,
@@ -62,11 +67,16 @@ const EMPTY_INVITE: MutableInviteState = {
 function inviteStorageKey(
   roomId: string,
   scope: InviteScope,
+  groupId?: string | null,
 ): string {
-  return (
-    `vinss:invite:v3:${roomId}:` +
-    scope
-  );
+  if (scope === "group") {
+    return (
+      `vinss:invite:v3:${roomId}:group:` +
+      (groupId ?? "none")
+    );
+  }
+
+  return `vinss:invite:v3:${roomId}:direct`;
 }
 
 function formatCountdown(
@@ -162,6 +172,7 @@ function formatCountdown(
 
 export function useRoomInvitation({
   room,
+  group,
   session,
   setError,
 }: UseRoomInvitationOptions) {
@@ -253,10 +264,20 @@ export function useRoomInvitation({
       "direct",
       "group",
     ] as const) {
+      if (
+        scope === "group" &&
+        !group
+      ) {
+        continue;
+      }
+
       const key =
         inviteStorageKey(
           room.id,
           scope,
+          scope === "group"
+            ? group?.id
+            : undefined,
         );
 
       try {
@@ -305,7 +326,10 @@ export function useRoomInvitation({
 
     setInvites(restored);
     setNow(Date.now());
-  }, [room?.id]);
+  }, [
+    room?.id,
+    group?.id,
+  ]);
 
   const directTiming =
     formatCountdown(
@@ -354,6 +378,37 @@ export function useRoomInvitation({
       return;
     }
 
+    if (
+      scope === "direct" &&
+      !room.roomSecret
+    ) {
+      setError(
+        "This device joined through a Group invite. A private Chat invite requires direct room access.",
+      );
+      return;
+    }
+
+    if (scope === "group") {
+      if (!group) {
+        setError(
+          "Create or open a Group before inviting members.",
+        );
+        return;
+      }
+
+      if (
+        !isGroupAdmin(
+          group,
+          session.account.address,
+        )
+      ) {
+        setError(
+          "Only the Group admin can create member invitations.",
+        );
+        return;
+      }
+    }
+
     clearInvite(scope);
     setJoinedNoticeScope(null);
     setNow(Date.now());
@@ -362,6 +417,9 @@ export function useRoomInvitation({
       inviteStorageKey(
         room.id,
         scope,
+        scope === "group"
+          ? group?.id
+          : undefined,
       );
 
     window.localStorage.removeItem(
@@ -393,6 +451,22 @@ export function useRoomInvitation({
             groupDuration:
               scope === "group"
                 ? groupDuration
+                : undefined,
+            groupId:
+              scope === "group"
+                ? group?.id
+                : undefined,
+            groupName:
+              scope === "group"
+                ? group?.name
+                : undefined,
+            groupSecret:
+              scope === "group"
+                ? group?.groupSecret
+                : undefined,
+            groupOwnerAddress:
+              scope === "group"
+                ? group?.ownerAddress
                 : undefined,
           },
           (prepared) => {
@@ -581,6 +655,9 @@ export function useRoomInvitation({
                 inviteStorageKey(
                   room.id,
                   scope,
+                  scope === "group"
+                    ? group?.id
+                    : undefined,
                 ),
               );
 
@@ -603,6 +680,9 @@ export function useRoomInvitation({
                 inviteStorageKey(
                   room.id,
                   scope,
+                  scope === "group"
+                    ? group?.id
+                    : undefined,
                 );
 
               try {
@@ -648,6 +728,7 @@ export function useRoomInvitation({
     };
   }, [
     room?.id,
+    group?.id,
     invites.direct.commitment,
     invites.direct.expiresAt,
     invites.direct.pending,
@@ -718,11 +799,11 @@ export function useRoomInvitation({
           title:
             scope === "direct"
               ? `VINSS Chat — ${room?.label ?? "Private room"}`
-              : `VINSS Group — ${room?.label ?? "Private room"}`,
+              : `VINSS Group — ${group?.name ?? "Private Group"}`,
           text:
             scope === "direct"
               ? "You're invited to a private VINSS chat."
-              : "You're invited to a VINSS group.",
+              : `You're invited to the VINSS Group ${group?.name ?? ""}.`,
           url: link,
         });
       } catch {

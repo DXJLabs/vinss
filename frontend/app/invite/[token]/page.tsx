@@ -19,6 +19,10 @@ import {
 } from "@/lib/deal-room/invitation";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
+import {
+  upsertLocalGroup,
+  type LocalRoomGroup,
+} from "@/lib/groups/localGroups";
 
 interface LocalRoom {
   id: string;
@@ -190,7 +194,7 @@ export default function InvitePage() {
             invite.label ||
             "Joined room",
           roomSecret:
-            invite.roomSecret,
+            invite.roomSecret ?? "",
           createdAt:
             new Date().toISOString(),
           joinedVia:
@@ -208,6 +212,30 @@ export default function InvitePage() {
             ) as LocalRoom[])
           : [];
 
+        const existingRoom =
+          rooms.find(
+            (existing) =>
+              existing.id ===
+              room.id,
+          );
+
+        // A Group-only invite must never erase room-level Chat access that
+        // this device already obtained through an earlier direct invite.
+        if (
+          !room.roomSecret &&
+          existingRoom?.roomSecret
+        ) {
+          room.roomSecret =
+            existingRoom.roomSecret;
+        }
+
+        if (
+          existingRoom?.createdAt
+        ) {
+          room.createdAt =
+            existingRoom.createdAt;
+        }
+
         const next = [
           room,
           ...rooms.filter(
@@ -222,16 +250,81 @@ export default function InvitePage() {
           JSON.stringify(next),
         );
 
+        let joinedGroupId:
+          | string
+          | null = null;
+
+        if (
+          invite.scope ===
+          "group"
+        ) {
+          const now =
+            new Date().toISOString();
+
+          joinedGroupId =
+            invite.groupId ??
+            `legacy-${invite.roomId}`;
+
+          const ownerAddress =
+            invite.groupOwnerAddress ??
+            invite.inviterAddress ??
+            session.account.address;
+
+          const joinedGroup:
+            LocalRoomGroup = {
+            id: joinedGroupId,
+            roomId:
+              invite.roomId,
+            name:
+              invite.groupName ??
+              `${invite.label} Group`,
+            groupSecret:
+              invite.groupSecret ??
+              invite.roomSecret ??
+              "",
+            ownerAddress,
+            createdAt: now,
+            members: [
+              {
+                address:
+                  ownerAddress,
+                role: "admin",
+                joinedAt: now,
+              },
+              {
+                address:
+                  session.account
+                    .address,
+                role:
+                  ownerAddress ===
+                  session.account
+                    .address
+                    ? "admin"
+                    : "member",
+                joinedAt: now,
+              },
+            ],
+          };
+
+          upsertLocalGroup(
+            room.id,
+            joinedGroup,
+          );
+        }
+
         markInviteConsumed(
           invite.inviteId,
         );
 
         if (
           invite.scope ===
-          "group"
+            "group" &&
+          joinedGroupId
         ) {
           router.replace(
-            `/room/${room.id}?message=group`,
+            `/room/${room.id}?group=${encodeURIComponent(
+              joinedGroupId,
+            )}`,
           );
           return;
         }

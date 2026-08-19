@@ -43,6 +43,23 @@ export function generateRoomSecret(): string {
     .join("");
 }
 
+/**
+ * Group keys use their own domain separator so a Group secret never produces
+ * the same symmetric key as a room secret with identical bytes.
+ */
+export async function deriveGroupKeyFromSecret(
+  groupSecret: string,
+): Promise<Uint8Array> {
+  const encoded = new TextEncoder().encode(
+    `VINSS_GROUP_KEY_V1:${groupSecret}`,
+  );
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    encoded,
+  );
+  return new Uint8Array(digest);
+}
+
 // --- Path 2: STRK20-native ECDH (scaffolded, not yet wired to UI) ----------
 
 export interface EphemeralChannelOpen {

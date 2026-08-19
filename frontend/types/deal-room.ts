@@ -34,6 +34,10 @@ export interface MessagePayload {
   senderIdentity?: MessageSenderIdentity;
   recipientAddress?: string;
 
+  // Group id is encrypted with the payload. The public helper still sees only
+  // opaque routing tags and ciphertext.
+  groupId?: string;
+
   attachmentUri?: string;
   sentAt: string; // ISO timestamp, part of the encrypted payload by choice —
   // block timestamp is already public, but an app-level timestamp lets the

@@ -63,10 +63,17 @@ export interface InvitePayload {
   inviteId: string;
   scope: InviteScope;
   roomId: string;
-  roomSecret: string;
+  roomSecret?: string;
   onchainSecret: string;
   label: string;
   inviterAddress?: string;
+
+  // Group metadata is present only for admin-created Group invites.
+  groupId?: string;
+  groupName?: string;
+  groupSecret?: string;
+  groupOwnerAddress?: string;
+
   expiresAt: string;
 }
 
@@ -86,6 +93,12 @@ export interface CreateInvitePayload {
   label: string;
   scope: InviteScope;
   groupDuration?: GroupInviteDuration;
+
+  // Group invites are bound to one concrete admin-created Group.
+  groupId?: string;
+  groupName?: string;
+  groupSecret?: string;
+  groupOwnerAddress?: string;
 }
 
 export interface EncryptedInviteToken {
@@ -240,6 +253,18 @@ export async function createInviteToken(
     );
   }
 
+  if (
+    input.scope === "group" &&
+    (!input.groupId ||
+      !input.groupName ||
+      !input.groupSecret ||
+      !input.groupOwnerAddress)
+  ) {
+    throw new Error(
+      "A Group invite must be bound to an admin-created Group.",
+    );
+  }
+
   const keyBytes = crypto.getRandomValues(
     new Uint8Array(32),
   );
@@ -271,10 +296,29 @@ export async function createInviteToken(
     inviteId: randomHex(16),
     scope: input.scope,
     roomId: input.roomId,
-    roomSecret: input.roomSecret,
+    roomSecret:
+      input.scope === "direct"
+        ? input.roomSecret
+        : undefined,
     onchainSecret: toFelt(onchainSecret),
     label: input.label,
     inviterAddress: account.address,
+    groupId:
+      input.scope === "group"
+        ? input.groupId
+        : undefined,
+    groupName:
+      input.scope === "group"
+        ? input.groupName
+        : undefined,
+    groupSecret:
+      input.scope === "group"
+        ? input.groupSecret
+        : undefined,
+    groupOwnerAddress:
+      input.scope === "group"
+        ? input.groupOwnerAddress
+        : undefined,
     expiresAt,
   };
 
@@ -403,7 +447,6 @@ function isValidCommonInvite(
   payload: {
     inviteId?: unknown;
     roomId?: unknown;
-    roomSecret?: unknown;
     onchainSecret?: unknown;
     label?: unknown;
     expiresAt?: unknown;
@@ -414,8 +457,6 @@ function isValidCommonInvite(
       payload.inviteId &&
       typeof payload.roomId === "string" &&
       payload.roomId &&
-      typeof payload.roomSecret === "string" &&
-      payload.roomSecret &&
       typeof payload.onchainSecret === "string" &&
       payload.onchainSecret &&
       typeof payload.label === "string" &&
@@ -452,6 +493,39 @@ export async function decodeInviteToken(
       return null;
     }
 
+    if (
+      payload.scope === "direct" &&
+      (typeof payload.roomSecret !== "string" ||
+        !payload.roomSecret)
+    ) {
+      return null;
+    }
+
+    if (
+      payload.scope === "group"
+    ) {
+      const hasBoundGroup =
+        typeof payload.groupId === "string" &&
+        Boolean(payload.groupId) &&
+        typeof payload.groupName === "string" &&
+        Boolean(payload.groupName) &&
+        typeof payload.groupSecret === "string" &&
+        Boolean(payload.groupSecret) &&
+        typeof payload.groupOwnerAddress === "string" &&
+        Boolean(payload.groupOwnerAddress);
+
+      const isLegacyRoomWideGroup =
+        typeof payload.roomSecret === "string" &&
+        Boolean(payload.roomSecret);
+
+      if (
+        !hasBoundGroup &&
+        !isLegacyRoomWideGroup
+      ) {
+        return null;
+      }
+    }
+
     return payload as InvitePayload;
   } catch {
     // Existing V2 links remain consumable during the migration.
@@ -470,6 +544,8 @@ export async function decodeInviteToken(
     if (
       legacy.v !== LEGACY_INVITE_VERSION ||
       !isValidCommonInvite(legacy) ||
+      typeof legacy.roomSecret !== "string" ||
+      !legacy.roomSecret ||
       !isUsableExpiry(legacy.expiresAt!)
     ) {
       return null;

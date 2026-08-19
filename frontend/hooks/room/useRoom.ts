@@ -41,6 +41,10 @@ export function useRoom(roomId: string) {
     // Stop before key derivation when this device does not know the room.
     if (!nextRoom) return;
 
+    // Group-only invites intentionally do not disclose the room secret. They
+    // can use their Group key but cannot enter room-level private Chat.
+    if (!nextRoom.roomSecret) return;
+
     // Derive the in-memory encryption key from the persisted room secret.
     deriveChannelKeyFromRoomSecret(nextRoom.roomSecret)
       .then((key) => {

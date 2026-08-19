@@ -10,6 +10,7 @@ export interface ConversationEntry {
   scope?: "group" | "direct";
   recipientAddress?: string;
   senderAddress?: string;
+  groupId?: string;
   offerAction?: OfferActionPayload;
   readAt?: string;
 }

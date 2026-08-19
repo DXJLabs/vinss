@@ -26,6 +26,9 @@ import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
 import { useRoomOffers } from "@/hooks/room/useRoomOffers";
+import {
+  isGroupAdmin,
+} from "@/lib/groups/localGroups";
 
 type TimelineEntry = ConversationEntry;
 
@@ -36,6 +39,7 @@ export default function DealRoomPage() {
   const showAccessDetails = searchParams.get("access") === "1";
   const invitedChatTarget = searchParams.get("chat");
   const invitedMessageMode = searchParams.get("message");
+  const invitedGroupId = searchParams.get("group");
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
   const { room, channelKey } = useRoom(params.roomId);
@@ -53,7 +57,10 @@ export default function DealRoomPage() {
     setDraft,
     chatEndRef,
     participants,
-    setParticipants,
+    groups,
+    selectedGroup,
+    selectedGroupKey,
+    createGroup,
     messageTarget,
     setMessageTarget,
     peerTyping,
@@ -95,6 +102,15 @@ export default function DealRoomPage() {
     setTab,
   });
 
+  const accessGroup =
+    invitedGroupId
+      ? groups.find(
+          (group) =>
+            group.id ===
+            invitedGroupId,
+        ) ?? null
+      : null;
+
   const {
     directInvite,
     groupInvite,
@@ -106,6 +122,7 @@ export default function DealRoomPage() {
     shareInviteLink,
   } = useRoomInvitation({
     room,
+    group: accessGroup,
     session,
     setError,
   });
@@ -122,10 +139,17 @@ export default function DealRoomPage() {
       return;
     }
 
+    if (invitedGroupId) {
+      setMessageTarget(
+        `group:${invitedGroupId}`,
+      );
+      return;
+    }
+
     if (
       invitedMessageMode === "group"
     ) {
-      setMessageTarget("group");
+      setMessageTarget("groups");
       return;
     }
 
@@ -138,6 +162,7 @@ export default function DealRoomPage() {
     room?.id,
     invitedChatTarget,
     invitedMessageMode,
+    invitedGroupId,
   ]);
 
 
@@ -180,6 +205,22 @@ export default function DealRoomPage() {
           Boolean(room)
         }
         roomId={room?.id ?? ""}
+        group={accessGroup}
+        canInviteDirect={
+          Boolean(
+            room?.roomSecret,
+          )
+        }
+        canInviteGroup={
+          Boolean(
+            accessGroup &&
+              session &&
+              isGroupAdmin(
+                accessGroup,
+                session.account.address,
+              ),
+          )
+        }
         directInvite={directInvite}
         groupInvite={groupInvite}
         joinedNoticeScope={
@@ -217,17 +258,22 @@ export default function DealRoomPage() {
 
       {tab === "timeline" && (
         <ConversationPanel
+          roomId={room?.id ?? params.roomId}
           entries={entries}
           offerEntries={offerEntries}
           walletAddress={session?.account.address}
           connected={Boolean(session)}
           channelReady={Boolean(channelKey)}
+          groupReady={Boolean(selectedGroupKey)}
           busy={busy}
           draft={draft}
           messageTarget={messageTarget}
           participants={participants}
+          groups={groups}
+          selectedGroup={selectedGroup}
           peerTyping={peerTyping}
           chatEndRef={chatEndRef}
+          onCreateGroup={createGroup}
           onDraftChange={setDraft}
           onMessageTargetChange={(value) => {
             // A new chat selection exits any stale counter flow.

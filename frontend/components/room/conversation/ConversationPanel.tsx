@@ -1,14 +1,30 @@
 "use client";
 
-import type { MutableRefObject } from "react";
-import { GroupConversationPanel } from "@/components/room/conversation/GroupConversationPanel";
-import { DirectConversationPanel } from "@/components/room/conversation/DirectConversationPanel";
-import { DirectConversationList } from "@/components/room/conversation/DirectConversationList";
-import { shortAddress } from "@/components/room/conversation/chatFormat";
+import type {
+  MutableRefObject,
+} from "react";
+import {
+  GroupConversationPanel,
+} from "@/components/room/conversation/GroupConversationPanel";
+import {
+  GroupConversationList,
+} from "@/components/room/conversation/GroupConversationList";
+import {
+  DirectConversationPanel,
+} from "@/components/room/conversation/DirectConversationPanel";
+import {
+  DirectConversationList,
+} from "@/components/room/conversation/DirectConversationList";
+import {
+  shortAddress,
+} from "@/components/room/conversation/chatFormat";
 import type {
   ConversationEntry,
   ConversationParticipant,
 } from "@/components/room/conversation/types";
+import type {
+  LocalRoomGroup,
+} from "@/lib/groups/localGroups";
 
 export type {
   ConversationEntry,
@@ -16,21 +32,36 @@ export type {
 } from "@/components/room/conversation/types";
 
 interface ConversationPanelProps {
+  roomId: string;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
   walletAddress?: string;
   connected: boolean;
   channelReady: boolean;
+  groupReady: boolean;
   busy: boolean;
   draft: string;
   messageTarget: string;
   participants: ConversationParticipant[];
+  groups: LocalRoomGroup[];
+  selectedGroup: LocalRoomGroup | null;
   peerTyping: boolean;
-  chatEndRef: MutableRefObject<HTMLDivElement | null>;
-  onDraftChange: (value: string) => void;
-  onMessageTargetChange: (value: string) => void;
-  onSendMessage: () => void | Promise<void>;
-  onRefresh: () => void | Promise<void>;
+  chatEndRef: MutableRefObject<
+    HTMLDivElement | null
+  >;
+  onCreateGroup: (
+    name: string,
+  ) => LocalRoomGroup | null;
+  onDraftChange: (
+    value: string,
+  ) => void;
+  onMessageTargetChange: (
+    value: string,
+  ) => void;
+  onSendMessage:
+    () => void | Promise<void>;
+  onRefresh:
+    () => void | Promise<void>;
   onAcceptOffer: (
     entry: ConversationEntry,
   ) => Promise<boolean>;
@@ -43,17 +74,22 @@ interface ConversationPanelProps {
 }
 
 export function ConversationPanel({
+  roomId,
   entries,
   offerEntries,
   walletAddress,
   connected,
   channelReady,
+  groupReady,
   busy,
   draft,
   messageTarget,
   participants,
+  groups,
+  selectedGroup,
   peerTyping,
   chatEndRef,
+  onCreateGroup,
   onDraftChange,
   onMessageTargetChange,
   onSendMessage,
@@ -62,15 +98,25 @@ export function ConversationPanel({
   onRejectOffer,
   onCounterOffer,
 }: ConversationPanelProps) {
-  const directMode =
-    messageTarget !== "group";
+  const groupMode =
+    messageTarget ===
+      "groups" ||
+    messageTarget.startsWith(
+      "group:",
+    );
 
   const activeLabel =
-    messageTarget === "group"
-      ? "Group"
-      : messageTarget === "chat"
-        ? "Chat"
-        : shortAddress(messageTarget);
+    selectedGroup
+      ? selectedGroup.name
+      : messageTarget ===
+          "groups"
+        ? "Groups"
+        : messageTarget ===
+            "chat"
+          ? "Chat"
+          : shortAddress(
+              messageTarget,
+            );
 
   return (
     <section className="space-y-0">
@@ -95,23 +141,31 @@ export function ConversationPanel({
 
           <button
             type="button"
-            onClick={() => void onRefresh()}
-            disabled={!channelReady || busy}
+            onClick={() =>
+              void onRefresh()
+            }
+            disabled={
+              !connected ||
+              busy
+            }
             className="border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-[0.14em] text-paper/35 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
           >
-            {busy ? "Syncing…" : "Sync"}
+            {busy
+              ? "Syncing…"
+              : "Sync"}
           </button>
         </div>
 
-        {/* Messages has two clear modes. Individual addresses live inside Chat. */}
         <div className="grid grid-cols-2 border-t border-wire">
           <button
             type="button"
             onClick={() =>
-              onMessageTargetChange("chat")
+              onMessageTargetChange(
+                "chat",
+              )
             }
             className={
-              directMode
+              !groupMode
                 ? "border-r border-wire bg-signal px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-ink"
                 : "border-r border-wire px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:text-signal"
             }
@@ -122,35 +176,87 @@ export function ConversationPanel({
           <button
             type="button"
             onClick={() =>
-              onMessageTargetChange("group")
+              onMessageTargetChange(
+                "groups",
+              )
             }
             className={
-              messageTarget === "group"
+              groupMode
                 ? "bg-signal px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-ink"
                 : "px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:text-signal"
             }
           >
-            Group
+            Groups
           </button>
         </div>
       </div>
 
-      {messageTarget === "group" ? (
+      {messageTarget ===
+      "groups" ? (
+        <GroupConversationList
+          groups={groups}
+          connected={
+            connected
+          }
+          walletAddress={
+            walletAddress
+          }
+          onCreateGroup={
+            onCreateGroup
+          }
+          onOpenGroup={(
+            groupId,
+          ) =>
+            onMessageTargetChange(
+              `group:${groupId}`,
+            )
+          }
+        />
+      ) : selectedGroup ? (
         <GroupConversationPanel
+          roomId={roomId}
+          group={selectedGroup}
           entries={entries}
-          participants={participants}
-          walletAddress={walletAddress}
-          connected={connected}
-          channelReady={channelReady}
+          walletAddress={
+            walletAddress
+          }
+          connected={
+            connected
+          }
+          channelReady={
+            groupReady
+          }
           busy={busy}
           draft={draft}
-          chatEndRef={chatEndRef}
-          onDraftChange={onDraftChange}
-          onSendMessage={onSendMessage}
+          chatEndRef={
+            chatEndRef
+          }
+          onBack={() =>
+            onMessageTargetChange(
+              "groups",
+            )
+          }
+          onDraftChange={
+            onDraftChange
+          }
+          onSendMessage={
+            onSendMessage
+          }
         />
-      ) : messageTarget === "chat" ? (
+      ) : messageTarget.startsWith(
+        "group:",
+      ) ? (
+        <div className="flex min-h-[320px] items-center justify-center border-x border-b border-wire bg-black/10 px-6 text-center">
+          <p className="text-xs text-paper/35">
+            Loading Group…
+          </p>
+        </div>
+      ) : messageTarget ===
+        "chat" ? (
         <DirectConversationList
-          participants={participants}
+          participants={
+            participants
+          }
           onOpenChat={
             onMessageTargetChange
           }
@@ -158,23 +264,49 @@ export function ConversationPanel({
       ) : (
         <DirectConversationPanel
           entries={entries}
-          offerEntries={offerEntries}
-          walletAddress={walletAddress}
-          peerAddress={messageTarget}
-          connected={connected}
-          channelReady={channelReady}
+          offerEntries={
+            offerEntries
+          }
+          walletAddress={
+            walletAddress
+          }
+          peerAddress={
+            messageTarget
+          }
+          connected={
+            connected
+          }
+          channelReady={
+            channelReady
+          }
           busy={busy}
           draft={draft}
-          peerTyping={peerTyping}
-          chatEndRef={chatEndRef}
-          onBack={() =>
-            onMessageTargetChange("chat")
+          peerTyping={
+            peerTyping
           }
-          onDraftChange={onDraftChange}
-          onSendMessage={onSendMessage}
-          onAcceptOffer={onAcceptOffer}
-          onRejectOffer={onRejectOffer}
-          onCounterOffer={onCounterOffer}
+          chatEndRef={
+            chatEndRef
+          }
+          onBack={() =>
+            onMessageTargetChange(
+              "chat",
+            )
+          }
+          onDraftChange={
+            onDraftChange
+          }
+          onSendMessage={
+            onSendMessage
+          }
+          onAcceptOffer={
+            onAcceptOffer
+          }
+          onRejectOffer={
+            onRejectOffer
+          }
+          onCounterOffer={
+            onCounterOffer
+          }
         />
       )}
     </section>

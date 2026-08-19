@@ -63,8 +63,9 @@ export function OfferPanel({
   // A new Offer uses the participant currently selected in Chat.
   const selectedParticipant = useMemo(
     () =>
-      messageTarget === "group" ||
-      messageTarget === "chat"
+      messageTarget === "chat" ||
+      messageTarget === "groups" ||
+      messageTarget.startsWith("group:")
         ? null
         : participants.find(
             (participant) =>

@@ -8,44 +8,73 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+import type {
+  VinssWalletSession,
+} from "@/lib/starknet/walletClient";
+import {
+  BACKEND_URL,
+} from "@/lib/starknet/constants";
 import {
   discoverMessages,
   sendMessage,
 } from "@/lib/deal-room/messaging";
-import type { MessagingIdentity } from "@/lib/privacy/participantKeys";
-import type { MessagePayload } from "@/types/deal-room";
-import type { ConversationEntry } from "@/components/room/conversation/types";
-import { humanizeError } from "@/lib/errors/uiError";
+import type {
+  MessagingIdentity,
+} from "@/lib/privacy/participantKeys";
+import type {
+  MessagePayload,
+} from "@/types/deal-room";
+import type {
+  ConversationEntry,
+} from "@/components/room/conversation/types";
+import {
+  humanizeError,
+} from "@/lib/errors/uiError";
+import type {
+  LocalRoomGroup,
+} from "@/lib/groups/localGroups";
 
 interface UseGroupConversationOptions {
   roomId: string | null;
   session: VinssWalletSession | null;
-  channelKey: Uint8Array | null;
+  group: LocalRoomGroup | null;
+  groupKey: Uint8Array | null;
   messagingIdentity: MessagingIdentity | null;
   active: boolean;
-  setBusy: (value: boolean) => void;
-  setError: (value: string | null) => void;
+  setBusy: (
+    value: boolean,
+  ) => void;
+  setError: (
+    value: string | null,
+  ) => void;
 }
 
 interface UseGroupConversationResult {
   entries: ConversationEntry[];
   draft: string;
-  setDraft: Dispatch<SetStateAction<string>>;
-  chatEndRef: MutableRefObject<HTMLDivElement | null>;
+  setDraft: Dispatch<
+    SetStateAction<string>
+  >;
+  chatEndRef: MutableRefObject<
+    HTMLDivElement | null
+  >;
   sendGroupMessage: () => Promise<void>;
-  refreshGroup: (silent?: boolean) => Promise<void>;
+  refreshGroup: (
+    silent?: boolean,
+  ) => Promise<void>;
 }
 
-function locatorHex(value: string): string {
+function locatorHex(
+  value: string,
+): string {
   return BigInt(value).toString(16);
 }
 
 export function useGroupConversation({
   roomId,
   session,
-  channelKey,
+  group,
+  groupKey,
   messagingIdentity,
   active,
   setBusy,
@@ -54,16 +83,37 @@ export function useGroupConversation({
   const [entries, setEntries] =
     useState<ConversationEntry[]>([]);
 
-  const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
+  const [draft, setDraft] =
+    useState("");
+
+  const [pending, setPending] =
+    useState(false);
+
+  const pendingBodyRef =
+    useRef<string | null>(null);
 
   const chatEndRef =
-    useRef<HTMLDivElement | null>(null);
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+  useEffect(() => {
+    // Never carry one Group's decrypted timeline into another Group.
+    setEntries([]);
+    setDraft("");
+    setPending(false);
+    pendingBodyRef.current = null;
+  }, [group?.id]);
 
   async function refreshGroup(
     silent = false,
   ): Promise<void> {
-    if (!channelKey) return;
+    if (
+      !group ||
+      !groupKey
+    ) {
+      return;
+    }
 
     if (!silent) {
       setBusy(true);
@@ -71,56 +121,80 @@ export function useGroupConversation({
     }
 
     try {
-      const discovered = await discoverMessages(
-        BACKEND_URL,
-        channelKey,
-      );
+      const discovered =
+        await discoverMessages(
+          BACKEND_URL,
+          groupKey,
+        );
 
-      const incoming: ConversationEntry[] =
+      const incoming:
+        ConversationEntry[] =
         discovered
           .filter(
             (item) =>
-              (item.message.scope ?? "group") ===
-              "group",
+              (item.message.scope ??
+                "group") ===
+                "group" &&
+              item.message.groupId ===
+                group.id,
           )
           .map((item) => ({
-            id: `group:${locatorHex(
+            id: `group:${group.id}:${locatorHex(
               item.actionLocator,
             )}`,
             kind: "message",
-            summary: item.message.body,
+            summary:
+              item.message.body,
             transactionHash:
               item.transactionHash,
-            actionLocator: locatorHex(
-              item.actionLocator,
-            ),
-            sentAt: item.message.sentAt,
+            actionLocator:
+              locatorHex(
+                item.actionLocator,
+              ),
+            sentAt:
+              item.message.sentAt,
             scope: "group",
+            groupId:
+              group.id,
             senderAddress:
-              item.message.senderIdentity?.address,
+              item.message
+                .senderIdentity
+                ?.address,
           }));
 
       setEntries((previous) => {
-        const byLocator = new Map(
-          previous.map((entry) => [
-            entry.actionLocator,
-            entry,
-          ]),
-        );
+        const byLocator =
+          new Map(
+            previous.map(
+              (entry) => [
+                entry.actionLocator,
+                entry,
+              ],
+            ),
+          );
 
         for (const entry of incoming) {
-          byLocator.set(entry.actionLocator, {
-            ...byLocator.get(
-              entry.actionLocator,
-            ),
-            ...entry,
-          });
+          byLocator.set(
+            entry.actionLocator,
+            {
+              ...byLocator.get(
+                entry.actionLocator,
+              ),
+              ...entry,
+            },
+          );
         }
 
-        return [...byLocator.values()].sort(
+        return [
+          ...byLocator.values(),
+        ].sort(
           (left, right) =>
-            new Date(left.sentAt).getTime() -
-            new Date(right.sentAt).getTime(),
+            new Date(
+              left.sentAt,
+            ).getTime() -
+            new Date(
+              right.sentAt,
+            ).getTime(),
         );
       });
     } catch (err) {
@@ -133,7 +207,7 @@ export function useGroupConversation({
         setError(
           humanizeError(
             err,
-            "We couldn't refresh the group chat.",
+            "We couldn't refresh this Group.",
           ),
         );
       }
@@ -144,10 +218,29 @@ export function useGroupConversation({
     }
   }
 
-  async function sendGroupMessage(): Promise<void> {
+  function pendingStorageKey():
+    | string
+    | null {
+    if (
+      !roomId ||
+      !session ||
+      !group
+    ) {
+      return null;
+    }
+
+    return (
+      `vinss:pending-group-message:${roomId}:` +
+      `${group.id}:` +
+      session.account.address.toLowerCase()
+    );
+  }
+
+  async function sendGroupMessage():
+    Promise<void> {
     if (pending) {
       setError(
-        "Your previous group message is still being confirmed.",
+        "Your previous Group message is still being confirmed.",
       );
       return;
     }
@@ -155,91 +248,120 @@ export function useGroupConversation({
     if (
       !roomId ||
       !session ||
-      !channelKey ||
+      !group ||
+      !groupKey ||
       !messagingIdentity ||
       !draft.trim()
     ) {
       return;
     }
 
-    const body = draft.trim();
-    const sentAt = new Date().toISOString();
-
     const storageKey =
-      `vinss:pending-group-message:${roomId}:` +
-      session.account.address.toLowerCase();
+      pendingStorageKey();
+
+    if (!storageKey) return;
+
+    const body =
+      draft.trim();
+
+    const sentAt =
+      new Date().toISOString();
 
     setBusy(true);
     setError(null);
 
-    let preparedLocator: string | null = null;
+    let preparedLocator:
+      | string
+      | null = null;
 
     try {
-      const payload: MessagePayload = {
+      const payload:
+        MessagePayload = {
         kind: "text",
         scope: "group",
+        groupId: group.id,
         body,
         senderIdentity: {
-          address: session.account.address,
+          address:
+            session.account.address,
           messagingPublicKey:
             messagingIdentity.publicKey,
         },
         sentAt,
       };
 
-      const result = await sendMessage(
-        session.account,
-        channelKey,
-        payload,
-        undefined,
-        (prepared) => {
-          preparedLocator =
-            prepared.actionLocator.toString(16);
+      const result =
+        await sendMessage(
+          session.account,
+          groupKey,
+          payload,
+          undefined,
+          (prepared) => {
+            preparedLocator =
+              prepared.actionLocator.toString(
+                16,
+              );
 
-          setPending(true);
+            pendingBodyRef.current =
+              body;
 
-          window.localStorage.setItem(
-            storageKey,
-            JSON.stringify({
-              actionLocator:
-                preparedLocator,
-              body,
-              sentAt,
-              createdAt: Date.now(),
-            }),
-          );
+            setPending(true);
 
-          setEntries((previous) => [
-            ...previous.filter(
-              (entry) =>
-                entry.actionLocator !==
-                preparedLocator,
-            ),
-            {
-              id: `group:${preparedLocator}`,
-              kind: "message",
-              summary: body,
-              transactionHash: "",
-              actionLocator:
-                preparedLocator!,
-              sentAt,
-              scope: "group",
-              senderAddress:
-                session.account.address,
-            },
-          ]);
+            // Persist only non-plaintext recovery metadata.
+            window.localStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                actionLocator:
+                  preparedLocator,
+                sentAt,
+                createdAt:
+                  Date.now(),
+              }),
+            );
 
-          setDraft("");
-        },
-      );
+            setEntries(
+              (previous) => [
+                ...previous.filter(
+                  (entry) =>
+                    entry.actionLocator !==
+                    preparedLocator,
+                ),
+                {
+                  id: `group:${group.id}:${preparedLocator}`,
+                  kind: "message",
+                  summary: body,
+                  transactionHash:
+                    "",
+                  actionLocator:
+                    preparedLocator!,
+                  sentAt,
+                  scope: "group",
+                  groupId:
+                    group.id,
+                  senderAddress:
+                    session.account
+                      .address,
+                },
+              ],
+            );
+
+            setDraft("");
+          },
+        );
 
       window.localStorage.removeItem(
         storageKey,
       );
+
+      pendingBodyRef.current =
+        null;
+
       setPending(false);
 
       const confirmedLocator =
-        result.actionLocator.toString(16);
+        result.actionLocator.toString(
+          16,
+        );
 
       setEntries((previous) =>
         previous.map((entry) =>
@@ -287,6 +409,9 @@ export function useGroupConversation({
           ),
         );
 
+        pendingBodyRef.current =
+          null;
+
         setDraft(body);
 
         setError(
@@ -300,13 +425,15 @@ export function useGroupConversation({
       }
 
       if (preparedLocator) {
-        // An interrupted wallet callback may still have landed on-chain.
-        // Give discovery a short, bounded recovery window.
         setError(
           "Group message is being confirmed in the background.",
         );
       } else {
+        pendingBodyRef.current =
+          null;
+
         setDraft(body);
+
         setError(
           humanizeError(
             err,
@@ -320,11 +447,19 @@ export function useGroupConversation({
   }
 
   useEffect(() => {
-    if (!roomId || !session) return;
+    if (
+      !active ||
+      !roomId ||
+      !session ||
+      !group
+    ) {
+      return;
+    }
 
     const storageKey =
-      `vinss:pending-group-message:${roomId}:` +
-      session.account.address.toLowerCase();
+      pendingStorageKey();
+
+    if (!storageKey) return;
 
     let stopped = false;
 
@@ -343,7 +478,6 @@ export function useGroupConversation({
 
       let pendingRecord: {
         actionLocator: string;
-        body?: string;
         createdAt: number;
       };
 
@@ -365,18 +499,26 @@ export function useGroupConversation({
           .replace(/^0x/, "")
           .toLowerCase();
 
-      const recovered = entries.find(
-        (entry) =>
-          entry.actionLocator
-            .replace(/^0x/, "")
-            .toLowerCase() === locator &&
-          Boolean(entry.transactionHash),
-      );
+      const recovered =
+        entries.find(
+          (entry) =>
+            entry.actionLocator
+              .replace(/^0x/, "")
+              .toLowerCase() ===
+              locator &&
+            Boolean(
+              entry.transactionHash,
+            ),
+        );
 
       if (recovered) {
         window.localStorage.removeItem(
           storageKey,
         );
+
+        pendingBodyRef.current =
+          null;
+
         setPending(false);
         setError(null);
         return;
@@ -403,11 +545,17 @@ export function useGroupConversation({
           ),
         );
 
-        if (pendingRecord.body) {
+        const body =
+          pendingBodyRef.current;
+
+        pendingBodyRef.current =
+          null;
+
+        if (body) {
           setDraft((current) =>
             current.trim()
               ? current
-              : pendingRecord.body!,
+              : body,
           );
         }
 
@@ -419,17 +567,22 @@ export function useGroupConversation({
 
     checkPending();
 
-    const timer = window.setInterval(
-      checkPending,
-      2_000,
-    );
+    const timer =
+      window.setInterval(
+        checkPending,
+        2_000,
+      );
 
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      window.clearInterval(
+        timer,
+      );
     };
   }, [
+    active,
     roomId,
+    group?.id,
     session?.account.address,
     entries,
   ]);
@@ -438,7 +591,8 @@ export function useGroupConversation({
     if (
       !active ||
       !roomId ||
-      !channelKey ||
+      !group ||
+      !groupKey ||
       !session
     ) {
       return;
@@ -448,12 +602,19 @@ export function useGroupConversation({
     let running = false;
 
     const sync = async () => {
-      if (stopped || running) return;
+      if (
+        stopped ||
+        running
+      ) {
+        return;
+      }
 
       running = true;
 
       try {
-        await refreshGroup(true);
+        await refreshGroup(
+          true,
+        );
       } finally {
         running = false;
       }
@@ -461,19 +622,28 @@ export function useGroupConversation({
 
     void sync();
 
-    const timer = window.setInterval(() => {
-      void sync();
-    }, 2500);
+    const timer =
+      window.setInterval(
+        () => {
+          void sync();
+        },
+        2500,
+      );
 
     const onVisible = () => {
       if (
-        document.visibilityState === "visible"
+        document.visibilityState ===
+        "visible"
       ) {
         void sync();
       }
     };
 
-    window.addEventListener("focus", sync);
+    window.addEventListener(
+      "focus",
+      sync,
+    );
+
     document.addEventListener(
       "visibilitychange",
       onVisible,
@@ -481,7 +651,9 @@ export function useGroupConversation({
 
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      window.clearInterval(
+        timer,
+      );
       window.removeEventListener(
         "focus",
         sync,
@@ -494,27 +666,38 @@ export function useGroupConversation({
   }, [
     active,
     roomId,
-    channelKey,
+    group?.id,
+    groupKey,
     session?.account.address,
     messagingIdentity?.publicKey,
   ]);
 
   useEffect(() => {
-    if (!active || entries.length === 0) {
+    if (
+      !active ||
+      entries.length === 0
+    ) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
-    }, 80);
+    const timer =
+      window.setTimeout(() => {
+        chatEndRef.current
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "end",
+          });
+      }, 80);
 
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(
+        timer,
+      );
     };
-  }, [entries.length, active]);
+  }, [
+    entries.length,
+    active,
+  ]);
 
   return {
     entries,

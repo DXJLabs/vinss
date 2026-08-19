@@ -5,7 +5,12 @@ import type {
   GroupInviteDuration,
   InviteScope,
 } from "@/lib/deal-room/invitation";
-import type { InviteUiState } from "@/hooks/room/useRoomInvitation";
+import type {
+  InviteUiState,
+} from "@/hooks/room/useRoomInvitation";
+import type {
+  LocalRoomGroup,
+} from "@/lib/groups/localGroups";
 
 interface InviteCardProps {
   scope: InviteScope;
@@ -14,6 +19,7 @@ interface InviteCardProps {
   lifetime: string;
   state: InviteUiState;
   joined: boolean;
+  disabled?: boolean;
   groupDuration?: GroupInviteDuration;
   onGroupDurationChange?: (
     value: GroupInviteDuration,
@@ -30,6 +36,7 @@ function InviteCard({
   lifetime,
   state,
   joined,
+  disabled = false,
   groupDuration,
   onGroupDurationChange,
   onCreate,
@@ -39,7 +46,7 @@ function InviteCard({
   const label =
     scope === "direct"
       ? "Private Chat"
-      : "Group";
+      : "Group member";
 
   return (
     <article className="border border-wire bg-vault/20 p-4 sm:p-5">
@@ -86,13 +93,14 @@ function InviteCard({
                       duration,
                     )
                   }
-                  disabled={Boolean(
-                    state.link,
-                  )}
+                  disabled={
+                    disabled ||
+                    Boolean(state.link)
+                  }
                   className={
                     groupDuration ===
                     duration
-                      ? "bg-signal px-3 py-2 font-display text-[8px] uppercase tracking-widest text-ink disabled:opacity-60"
+                      ? "bg-signal px-3 py-2 font-display text-[8px] uppercase tracking-widest text-ink disabled:opacity-50"
                       : "px-3 py-2 font-display text-[8px] uppercase tracking-widest text-paper/35 transition hover:text-signal disabled:opacity-30"
                   }
                 >
@@ -122,11 +130,12 @@ function InviteCard({
           onClick={() =>
             void onCreate()
           }
-          className="mt-5 flex h-10 w-full items-center justify-center border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink"
+          disabled={disabled}
+          className="mt-5 flex h-10 w-full items-center justify-center border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
         >
           {scope === "direct"
             ? "Create Chat invite →"
-            : "Create Group invite →"}
+            : "Create member invite →"}
         </button>
       ) : (
         <div className="mt-5">
@@ -162,6 +171,7 @@ function InviteCard({
                 void onCopy()
               }
               disabled={
+                disabled ||
                 state.pending ||
                 state.expired
               }
@@ -178,6 +188,7 @@ function InviteCard({
                 void onShare()
               }
               disabled={
+                disabled ||
                 state.pending ||
                 state.expired
               }
@@ -199,7 +210,8 @@ function InviteCard({
               onClick={() =>
                 void onCreate()
               }
-              className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal"
+              disabled={disabled}
+              className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal disabled:opacity-30"
             >
               Regenerate
             </button>
@@ -213,6 +225,9 @@ function InviteCard({
 interface InvitationPanelProps {
   visible: boolean;
   roomId: string;
+  group: LocalRoomGroup | null;
+  canInviteDirect: boolean;
+  canInviteGroup: boolean;
   directInvite: InviteUiState;
   groupInvite: InviteUiState;
   joinedNoticeScope:
@@ -236,6 +251,9 @@ interface InvitationPanelProps {
 export function InvitationPanel({
   visible,
   roomId,
+  group,
+  canInviteDirect,
+  canInviteGroup,
   directInvite,
   groupInvite,
   joinedNoticeScope,
@@ -259,11 +277,11 @@ export function InvitationPanel({
           </p>
 
           <h2 className="mt-2 text-lg text-paper">
-            Chat or Group
+            Invite access
           </h2>
 
           <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
-            Create the link for the conversation you want to start. Chat links are short-lived; Group links can stay active longer.
+            Chat invitations start a private 1-to-1. Group invitations are created only for a Group that an admin already created.
           </p>
         </div>
 
@@ -279,9 +297,14 @@ export function InvitationPanel({
         <InviteCard
           scope="direct"
           title="Start a private 1-to-1"
-          description="For one person you want to message, negotiate and exchange Offers with directly."
+          description={
+            canInviteDirect
+              ? "Invite one person for private messages, negotiation and Offers."
+              : "This device has Group-only access. Private Chat access must be shared through a direct invite."
+          }
           lifetime="1 hour"
           state={directInvite}
+          disabled={!canInviteDirect}
           joined={
             joinedNoticeScope ===
             "direct"
@@ -297,41 +320,58 @@ export function InvitationPanel({
           }
         />
 
-        <InviteCard
-          scope="group"
-          title="Invite a Group member"
-          description="For someone joining the room-wide Group. Each link is still one-time, but it can remain valid much longer."
-          lifetime={
-            groupDuration === "24h"
-              ? "24 hours"
-              : "7 days"
-          }
-          state={groupInvite}
-          joined={
-            joinedNoticeScope ===
-            "group"
-          }
-          groupDuration={
-            groupDuration
-          }
-          onGroupDurationChange={
-            onGroupDurationChange
-          }
-          onCreate={() =>
-            onCreate("group")
-          }
-          onCopy={() =>
-            onCopy("group")
-          }
-          onShare={() =>
-            onShare("group")
-          }
-        />
-      </div>
+        {group ? (
+          <InviteCard
+            scope="group"
+            title={`Invite to ${group.name}`}
+            description={
+              canInviteGroup
+                ? "This link adds one member to this specific Group. After it is used, you can generate another one."
+                : "Only this Group's admin can create member invitations."
+            }
+            lifetime={
+              groupDuration === "24h"
+                ? "24 hours"
+                : "7 days"
+            }
+            state={groupInvite}
+            joined={
+              joinedNoticeScope ===
+              "group"
+            }
+            disabled={!canInviteGroup}
+            groupDuration={
+              groupDuration
+            }
+            onGroupDurationChange={
+              onGroupDurationChange
+            }
+            onCreate={() =>
+              onCreate("group")
+            }
+            onCopy={() =>
+              onCopy("group")
+            }
+            onShare={() =>
+              onShare("group")
+            }
+          />
+        ) : (
+          <article className="border border-dashed border-wire bg-vault/10 p-5">
+            <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/30">
+              Group invite
+            </p>
 
-      <p className="mt-4 text-[10px] leading-relaxed text-paper/20">
-        Both invitation types remain one-time and are validated on Starknet before entry.
-      </p>
+            <h3 className="mt-2 text-sm text-paper/60">
+              Create a Group first
+            </h3>
+
+            <p className="mt-2 text-xs leading-relaxed text-paper/30">
+              Open Messages → Groups, create or open a Group, then use Invite member from that Group.
+            </p>
+          </article>
+        )}
+      </div>
     </section>
   );
 }

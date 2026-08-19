@@ -1,6 +1,10 @@
 import type { ChannelKey } from "@/lib/privacy/envelope";
 
-export type PresenceKind = "typing" | "read" | "participant";
+export type PresenceKind =
+  | "typing"
+  | "read"
+  | "participant"
+  | "group_member";
 
 export interface PresencePayload {
   version: 1;
@@ -13,6 +17,10 @@ export interface PresencePayload {
   // Participant identity is encrypted with the room key and never exposed
   // to the relay in plaintext.
   messagingPublicKey?: string;
+
+  // Group membership announcements are encrypted with that Group's key.
+  groupId?: string;
+  role?: "admin" | "member";
 }
 
 export interface DecryptedPresenceEvent extends PresencePayload {
@@ -183,7 +191,8 @@ async function decryptPresence(
       payload.version !== 1 ||
       (payload.type !== "typing" &&
         payload.type !== "read" &&
-        payload.type !== "participant") ||
+        payload.type !== "participant" &&
+        payload.type !== "group_member") ||
       typeof payload.senderAddress !== "string" ||
       typeof payload.sentAt !== "string"
     ) {
