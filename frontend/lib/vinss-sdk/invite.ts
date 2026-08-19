@@ -1,5 +1,5 @@
-import { hash, type WalletAccountV6 } from "starknet";
-import { CONTRACTS } from "../starknet/constants";
+import { hash, RpcProvider, type WalletAccountV6 } from "starknet";
+import { CONTRACTS, RPC_URL } from "../starknet/constants";
 import {
   shortStringToFelt,
   toFelt,
@@ -9,6 +9,40 @@ const INVITE_VERSION = 2 as const;
 const INVITE_TTL_MS = 30 * 60 * 1000;
 const INVITE_AAD_TEXT = "VINSS_INVITE_V2";
 const INVITE_COMMITMENT_TAG = "VINSS_INVITE_V1";
+
+const inviteReadProvider = new RpcProvider({
+  nodeUrl: RPC_URL,
+});
+
+async function waitForInviteOnchain(
+  commitment: bigint,
+  attempts = 8,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const result = await inviteReadProvider.callContract({
+        contractAddress: CONTRACTS.invite,
+        entrypoint: "get_invite",
+        calldata: [toFelt(commitment)],
+      });
+
+      // InviteEntry = [expires_at, consumed, exists]
+      if (BigInt(result[2] ?? "0") !== 0n) {
+        return true;
+      }
+    } catch {
+      // RPC may not see the new state immediately.
+    }
+
+    if (attempt + 1 < attempts) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1500),
+      );
+    }
+  }
+
+  return false;
+}
 
 export interface InvitePayload {
   v: 2;
@@ -30,6 +64,7 @@ export interface EncryptedInviteToken {
   token: string;
   key: string;
   expiresAt: string;
+  commitment: string;
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -82,6 +117,17 @@ function randomHex(byteLength: number): string {
 function getInviteAad(): ArrayBuffer {
   return toArrayBuffer(
     new TextEncoder().encode(INVITE_AAD_TEXT),
+  );
+}
+
+function computeInviteCommitment(
+  onchainSecret: string | bigint,
+): bigint {
+  return BigInt(
+    hash.computePoseidonHashOnElements([
+      String(shortStringToFelt(INVITE_COMMITMENT_TAG)),
+      String(BigInt(onchainSecret)),
+    ]),
   );
 }
 
@@ -152,12 +198,16 @@ async function invokeInvite(
 export async function createInviteToken(
   account: WalletAccountV6,
   input: CreateInvitePayload,
+  onPrepared?: (
+    invite: EncryptedInviteToken,
+  ) => void | Promise<void>,
 ): Promise<EncryptedInviteToken> {
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
     );
   }
+
   const keyBytes = crypto.getRandomValues(
     new Uint8Array(32),
   );
@@ -175,28 +225,15 @@ export async function createInviteToken(
     onchainSecret = 1n;
   }
 
-  const commitment = BigInt(
-    hash.computePoseidonHashOnElements([
-      String(shortStringToFelt(INVITE_COMMITMENT_TAG)),
-      String(onchainSecret),
-    ]),
-  );
+  const commitment =
+    computeInviteCommitment(onchainSecret);
 
   const expiresAtSeconds =
     Math.floor(Date.parse(expiresAt) / 1000);
 
-  // VinssInvite privacy_invoke calldata:
-  // CREATE = [0, commitment, expires_at].
-  // STRK20 selects privacy_invoke; first felt serializes Span length.
-  await invokeInvite(
-    account,
-    [
-      0,
-      commitment,
-      expiresAtSeconds,
-    ],
-  );
-
+  // Build the private invite BEFORE asking Ready to submit.
+  // If Ready submits successfully but its callback times out,
+  // this exact token/key can still be returned after on-chain recovery.
   const payload: InvitePayload = {
     v: INVITE_VERSION,
     inviteId: randomHex(16),
@@ -240,11 +277,62 @@ export async function createInviteToken(
   packed.set(iv, 0);
   packed.set(encrypted, iv.length);
 
-  return {
+  const invite: EncryptedInviteToken = {
     token: bytesToBase64Url(packed),
     key: bytesToBase64Url(keyBytes),
     expiresAt,
+    commitment: toFelt(commitment),
   };
+
+  // Persistable token/key are available BEFORE opening Ready X.
+  // This lets the dapp recover the invitation if the browser
+  // backgrounds or remounts while wallet approval is in progress.
+  if (onPrepared) {
+    await onPrepared(invite);
+  }
+
+  try {
+    // CREATE = [0, commitment, expires_at]
+    await invokeInvite(
+      account,
+      [
+        0,
+        commitment,
+        expiresAtSeconds,
+      ],
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : String(err);
+
+    const isAmbiguousTimeout =
+      /timeout|timed out/i.test(message);
+
+    if (!isAmbiguousTimeout) {
+      throw err;
+    }
+
+    console.warn(
+      "[VINSS INVITE] Ready callback timed out; checking on-chain state",
+      err,
+    );
+
+    const exists =
+      await waitForInviteOnchain(commitment);
+
+    if (!exists) {
+      throw err;
+    }
+
+    console.info(
+      "[VINSS INVITE] recovered successful create from get_invite",
+      toFelt(commitment),
+    );
+  }
+
+  return invite;
 }
 
 export async function decodeInviteToken(
@@ -320,6 +408,36 @@ export async function decodeInviteToken(
   } catch {
     return null;
   }
+}
+
+
+export interface InviteOnchainState {
+  expiresAt: number;
+  consumed: boolean;
+  exists: boolean;
+}
+
+export async function getInviteOnchainState(
+  commitment: string | bigint,
+): Promise<InviteOnchainState> {
+  if (!CONTRACTS.invite) {
+    throw new Error(
+      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
+    );
+  }
+
+  const result = await inviteReadProvider.callContract({
+    contractAddress: CONTRACTS.invite,
+    entrypoint: "get_invite",
+    calldata: [toFelt(commitment)],
+  });
+
+  // InviteEntry = [expires_at, consumed, exists]
+  return {
+    expiresAt: Number(BigInt(result[0] ?? "0")),
+    consumed: BigInt(result[1] ?? "0") !== 0n,
+    exists: BigInt(result[2] ?? "0") !== 0n,
+  };
 }
 
 

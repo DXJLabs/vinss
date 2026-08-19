@@ -31,11 +31,19 @@ import {
 } from "./messageRouting";
 import type { MessagePayload, SendActionResult } from "./types";
 
+export interface PreparedMessageSend {
+  actionLocator: bigint;
+  payloadCommitment: bigint;
+}
+
 export async function sendMessage(
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: MessagePayload,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedMessageSend,
+  ) => void | Promise<void>,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.messageHelper) {
     throw new Error(
@@ -81,6 +89,14 @@ export async function sendMessage(
     recipientTag,
     ciphertextChunks,
   );
+
+  // Persist recovery metadata BEFORE Ready X takes over the screen.
+  if (onPrepared) {
+    await onPrepared({
+      actionLocator,
+      payloadCommitment,
+    });
+  }
 
   // No selector prepended — the STRK20 Wallet API calls the helper's
   // `privacy_invoke` itself; `calldata` is deserialized directly into that
@@ -243,12 +259,21 @@ export async function discoverMessages(
 
   const decrypted = [];
 
+  console.log("[VINSS MSG DISCOVER RAW]", {
+    records: records.length,
+    routes: candidateRoutes.length,
+    locators: records.map((record) => record.actionLocator),
+  });
+
   for (const record of records) {
     if (!record.senderTag || !record.recipientTag) {
+      console.warn("[VINSS MSG SKIP missing-tags]", record.actionLocator);
       continue;
     }
 
     const actionLocator = BigInt(record.actionLocator);
+
+    let routeIndex = 0;
 
     for (const candidate of candidateRoutes) {
       try {
@@ -267,8 +292,23 @@ export async function discoverMessages(
           );
 
         if (BigInt(record.recipientTag) !== expectedRecipientTag) {
+          console.log("[VINSS MSG ROUTE MISS]", {
+            locator: record.actionLocator,
+            routeIndex,
+            recipientIdentity: candidate.recipientIdentity,
+            actual: record.recipientTag,
+            expected: "0x" + expectedRecipientTag.toString(16),
+          });
+
+          routeIndex++;
           continue;
         }
+
+        console.log("[VINSS MSG ROUTE MATCH]", {
+          locator: record.actionLocator,
+          routeIndex,
+          recipientIdentity: candidate.recipientIdentity,
+        });
 
         const message = (await decryptPayload(
           encryptionKey,

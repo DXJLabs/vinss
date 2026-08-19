@@ -88,12 +88,9 @@ export default function InvitePage() {
 
       const inviteKey = fragment.get("k");
 
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname,
-      );
-
+      // Keep #k until the invitation has been consumed successfully.
+      // The fragment is not sent to Vercel/backend, and keeping it here
+      // allows this page to recover if opening Ready X causes a remount.
       if (!inviteKey) {
         setError(
           "This invitation is missing its private access key.",

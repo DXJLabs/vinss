@@ -1,7 +1,11 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -26,11 +30,14 @@ import {
 } from "@/lib/vinss-sdk/participantKeys";
 import type { MessagePayload, OfferActionPayload, DealType } from "@/lib/vinss-sdk/types";
 import type { MessageRoute } from "@/lib/vinss-sdk/messageRouting";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+import { BACKEND_URL, NETWORK } from "@/lib/starknet/constants";
 import { AgentPanel } from "@/components/AgentPanel";
 import type { AgentProposal } from "@/lib/agent";
 import { FeeBreakdown } from "@/components/FeeBreakdown";
-import { createInviteToken } from "@/lib/vinss-sdk/invite";
+import {
+  createInviteToken,
+  getInviteOnchainState,
+} from "@/lib/vinss-sdk/invite";
 
 type Tab = "timeline" | "offer" | "escrow" | "loyalty";
 
@@ -41,6 +48,7 @@ interface TimelineEntry {
   transactionHash: string;
   actionLocator: string;
   sentAt: string;
+  senderAddress?: string;
 }
 
 interface LocalRoom {
@@ -94,6 +102,9 @@ export default function DealRoomPage() {
   const [tab, setTab] = useState<Tab>("timeline");
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [draft, setDraft] = useState("");
+  const chatEndRef =
+    useRef<HTMLDivElement | null>(null);
+  const [messagePending, setMessagePending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [room, setRoom] = useState<LocalRoom | null>(null);
@@ -110,8 +121,13 @@ export default function DealRoomPage() {
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [inviteCommitment, setInviteCommitment] =
+    useState<string | null>(null);
   const [inviteNow, setInviteNow] = useState(Date.now());
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [invitePending, setInvitePending] = useState(false);
+  const [inviteCompleted, setInviteCompleted] = useState(false);
+  const [inviteJoinedNotice, setInviteJoinedNotice] = useState(false);
 
   const [agentOfferDraft, setAgentOfferDraft] = useState<
     Extract<
@@ -144,6 +160,60 @@ export default function DealRoomPage() {
       });
     }
   }, [params.roomId]);
+
+  useEffect(() => {
+    if (!room) return;
+
+    const completed =
+      window.localStorage.getItem(
+        `vinss:invite-completed:${room.id}`,
+      ) === "1";
+
+    setInviteCompleted(completed);
+
+    if (completed) {
+      setInviteLink(null);
+      setInviteExpiresAt(null);
+      setInviteCommitment(null);
+      setInvitePending(false);
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(
+        `vinss:invite:${room.id}`,
+      );
+
+      if (!raw) return;
+
+      const saved = JSON.parse(raw) as {
+        link?: string;
+        expiresAt?: string;
+        commitment?: string;
+        status?: "pending" | "ready";
+      };
+
+      if (
+        saved.link &&
+        saved.expiresAt &&
+        Date.parse(saved.expiresAt) > Date.now()
+      ) {
+        setInviteLink(saved.link);
+        setInviteExpiresAt(saved.expiresAt);
+        setInviteCommitment(saved.commitment ?? null);
+        setInvitePending(saved.status === "pending");
+        setInviteNow(Date.now());
+      } else {
+        window.localStorage.removeItem(
+          `vinss:invite:${room.id}`,
+        );
+      }
+    } catch {
+      window.localStorage.removeItem(
+        `vinss:invite:${room.id}`,
+      );
+    }
+  }, [room]);
 
   useEffect(() => {
     if (!room || !session) {
@@ -181,6 +251,28 @@ export default function DealRoomPage() {
       return;
     }
 
+    // A new invitation must not inherit stale/expired/completed state.
+    setInviteLink(null);
+    setInviteExpiresAt(null);
+    setInviteCommitment(null);
+    setInviteCopied(false);
+    setInvitePending(false);
+    setInviteCompleted(false);
+    setInviteJoinedNotice(false);
+    setInviteNow(Date.now());
+
+    window.localStorage.removeItem(
+      `vinss:invite:${room.id}`,
+    );
+
+    window.localStorage.removeItem(
+      `vinss:invite-completed:${room.id}`,
+    );
+
+    let preparedLink: string | null = null;
+    let preparedCommitment: string | null = null;
+    let preparedExpiresAt: string | null = null;
+
     try {
       const invite = await createInviteToken(
         session.account,
@@ -189,21 +281,107 @@ export default function DealRoomPage() {
           roomSecret: room.roomSecret,
           label: room.label,
         },
+        (prepared) => {
+          // IMPORTANT: this runs BEFORE Ready X is opened.
+          const link =
+            `${window.location.origin}/invite/${prepared.token}` +
+            `#k=${prepared.key}`;
+
+          preparedLink = link;
+          preparedCommitment = prepared.commitment;
+          preparedExpiresAt = prepared.expiresAt;
+
+          setInviteLink(link);
+          setInviteExpiresAt(prepared.expiresAt);
+          setInviteCommitment(prepared.commitment);
+          setInvitePending(true);
+          setInviteNow(Date.now());
+
+          window.localStorage.setItem(
+            `vinss:invite:${room.id}`,
+            JSON.stringify({
+              link,
+              expiresAt: prepared.expiresAt,
+              commitment: prepared.commitment,
+              status: "pending",
+            }),
+          );
+        },
       );
 
-      // The AES key lives only in the URL fragment. Browsers do not send
-      // fragments as part of HTTP requests to Vercel/backend.
       const link =
+        preparedLink ??
         `${window.location.origin}/invite/${invite.token}` +
-        `#k=${invite.key}`;
+          `#k=${invite.key}`;
 
       setInviteLink(link);
       setInviteExpiresAt(invite.expiresAt);
+      setInviteCommitment(invite.commitment);
+      setInvitePending(false);
       setInviteNow(Date.now());
-      setInviteCopied(false);
+
+      window.localStorage.setItem(
+        `vinss:invite:${room.id}`,
+        JSON.stringify({
+          link,
+          expiresAt: invite.expiresAt,
+          commitment: invite.commitment,
+          status: "ready",
+        }),
+      );
     } catch (err) {
       console.error("[VINSS INVITE CREATE]", err);
-      setError("Could not create the private invitation.");
+
+      // Wallet callbacks can fail/disappear after mobile app switching
+      // even when the chain transaction actually landed. Recover using
+      // the commitment created before Ready X was opened.
+      if (
+        preparedCommitment &&
+        preparedLink &&
+        preparedExpiresAt
+      ) {
+        try {
+          const state =
+            await getInviteOnchainState(
+              preparedCommitment,
+            );
+
+          if (state.exists) {
+            setInviteLink(preparedLink);
+            setInviteExpiresAt(preparedExpiresAt);
+            setInviteCommitment(preparedCommitment);
+            setInvitePending(false);
+            setInviteNow(Date.now());
+
+            window.localStorage.setItem(
+              `vinss:invite:${room.id}`,
+              JSON.stringify({
+                link: preparedLink,
+                expiresAt: preparedExpiresAt,
+                commitment: preparedCommitment,
+                status: "ready",
+              }),
+            );
+
+            return;
+          }
+        } catch {
+          // Fall through to real failure cleanup.
+        }
+      }
+
+      setInviteLink(null);
+      setInviteExpiresAt(null);
+      setInviteCommitment(null);
+      setInvitePending(false);
+
+      window.localStorage.removeItem(
+        `vinss:invite:${room.id}`,
+      );
+
+      setError(
+        "Could not create the private invitation.",
+      );
     }
   }
 
@@ -237,6 +415,256 @@ export default function DealRoomPage() {
 
   const inviteCountdown =
     `${inviteMinutes}:${inviteSeconds.toString().padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (
+      !room ||
+      participants.length === 0 ||
+      inviteCompleted
+    ) {
+      return;
+    }
+
+    setInviteCompleted(true);
+    setInviteJoinedNotice(true);
+    setInviteLink(null);
+    setInviteExpiresAt(null);
+    setInviteCommitment(null);
+
+    window.localStorage.setItem(
+      `vinss:invite-completed:${room.id}`,
+      "1",
+    );
+
+    window.localStorage.removeItem(
+      `vinss:invite:${room.id}`,
+    );
+
+  }, [room, participants.length, inviteCompleted]);
+
+  useEffect(() => {
+    if (
+      !inviteLink ||
+      inviteExpired ||
+      !channelKey ||
+      !session ||
+      participants.length > 0
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkCounterparty = async () => {
+      try {
+        const messages = await discoverMessages(
+          BACKEND_URL,
+          channelKey,
+        );
+
+        const map = new Map<string, RoomParticipant>();
+
+        for (const item of messages) {
+          const sender = item.message.senderIdentity;
+
+          if (
+            !sender?.address ||
+            !sender.messagingPublicKey
+          ) {
+            continue;
+          }
+
+          if (
+            sender.address.toLowerCase() ===
+            session.account.address.toLowerCase()
+          ) {
+            continue;
+          }
+
+          map.set(sender.address.toLowerCase(), {
+            address: sender.address,
+            publicKey: sender.messagingPublicKey,
+          });
+        }
+
+        if (!cancelled && map.size > 0) {
+          setParticipants([...map.values()]);
+        }
+      } catch (err) {
+        console.debug(
+          "[VINSS INVITE PARTICIPANT CHECK]",
+          err,
+        );
+      }
+    };
+
+    void checkCounterparty();
+
+    const timer = window.setInterval(() => {
+      void checkCounterparty();
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    inviteLink,
+    inviteExpired,
+    channelKey,
+    session,
+    participants.length,
+  ]);
+
+  useEffect(() => {
+    if (
+      !room ||
+      !inviteCommitment ||
+      inviteExpired ||
+      inviteCompleted
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkConsumed = async () => {
+      try {
+        const state =
+          await getInviteOnchainState(inviteCommitment);
+
+        if (
+          cancelled ||
+          !state.exists ||
+          !state.consumed
+        ) {
+          return;
+        }
+
+        setInviteCompleted(true);
+        setInviteJoinedNotice(true);
+
+        setInviteLink(null);
+        setInviteExpiresAt(null);
+        setInviteCommitment(null);
+
+        window.localStorage.setItem(
+          `vinss:invite-completed:${room.id}`,
+          "1",
+        );
+
+        window.localStorage.removeItem(
+          `vinss:invite:${room.id}`,
+        );
+      } catch (err) {
+        console.debug(
+          "[VINSS INVITE CONSUMED CHECK]",
+          err,
+        );
+      }
+    };
+
+    void checkConsumed();
+
+    const timer = window.setInterval(() => {
+      void checkConsumed();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    room,
+    inviteCommitment,
+    inviteExpired,
+    inviteCompleted,
+  ]);
+
+  useEffect(() => {
+    if (!inviteJoinedNotice) return;
+
+    const timer = window.setTimeout(() => {
+      setInviteJoinedNotice(false);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [inviteJoinedNotice]);
+
+  useEffect(() => {
+    if (
+      !room ||
+      !invitePending ||
+      !inviteCommitment ||
+      inviteExpired
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const recoverPendingInvite = async () => {
+      try {
+        const state =
+          await getInviteOnchainState(
+            inviteCommitment,
+          );
+
+        if (
+          cancelled ||
+          !state.exists
+        ) {
+          return;
+        }
+
+        setInvitePending(false);
+
+        const raw =
+          window.localStorage.getItem(
+            `vinss:invite:${room.id}`,
+          );
+
+        if (!raw) return;
+
+        const saved = JSON.parse(raw) as {
+          link?: string;
+          expiresAt?: string;
+          commitment?: string;
+        };
+
+        window.localStorage.setItem(
+          `vinss:invite:${room.id}`,
+          JSON.stringify({
+            ...saved,
+            status: "ready",
+          }),
+        );
+      } catch (err) {
+        console.debug(
+          "[VINSS INVITE PENDING RECOVERY]",
+          err,
+        );
+      }
+    };
+
+    void recoverPendingInvite();
+
+    const timer = window.setInterval(() => {
+      void recoverPendingInvite();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    room,
+    invitePending,
+    inviteCommitment,
+    inviteExpired,
+  ]);
 
   async function copyInviteLink() {
     if (!inviteLink) return;
@@ -294,7 +722,207 @@ export default function DealRoomPage() {
     }
   }
 
+  useEffect(() => {
+    if (
+      !room ||
+      !session ||
+      !channelKey ||
+      !messagingIdentity
+    ) {
+      return;
+    }
+
+    const storageKey =
+      `vinss:pending-message:${room.id}:` +
+      session.account.address.toLowerCase();
+
+    const raw =
+      window.localStorage.getItem(storageKey);
+
+    if (!raw) {
+      setMessagePending(false);
+      return;
+    }
+
+    let pending: {
+      actionLocator: string;
+      body: string;
+      sentAt: string;
+      scope: "group" | "direct";
+      recipientAddress: string | null;
+      createdAt: number;
+    };
+
+    try {
+      pending = JSON.parse(raw);
+    } catch {
+      window.localStorage.removeItem(storageKey);
+      setMessagePending(false);
+      return;
+    }
+
+    setMessagePending(true);
+
+    let cancelled = false;
+
+    const recover = async () => {
+      if (cancelled) return;
+
+      // Don't leave a dead pending message around forever.
+      if (
+        Date.now() - pending.createdAt >
+        90_000
+      ) {
+        window.localStorage.removeItem(storageKey);
+        setMessagePending(false);
+        setBusy(false);
+
+        setError(
+          "Message was not confirmed. You can try sending it again.",
+        );
+
+        return;
+      }
+
+      try {
+        let route: MessageRoute | undefined;
+
+        if (
+          pending.scope === "direct" &&
+          pending.recipientAddress
+        ) {
+          const participant =
+            participants.find(
+              (item) =>
+                item.address.toLowerCase() ===
+                pending.recipientAddress!.toLowerCase(),
+            );
+
+          if (!participant) {
+            return;
+          }
+
+          const directKey =
+            await deriveDirectMessageKey(
+              room.id,
+              messagingIdentity.privateKey,
+              participant.publicKey,
+            );
+
+          route = {
+            recipientIdentity:
+              participant.address,
+            encryptionKey: directKey,
+            routingKey: directKey,
+          };
+        }
+
+        const discovered =
+          await discoverMessages(
+            BACKEND_URL,
+            channelKey,
+            route,
+          );
+
+        const found = discovered.find(
+          (item) =>
+            BigInt(item.actionLocator).toString(16) ===
+            pending.actionLocator,
+        );
+
+        if (!found || cancelled) {
+          return;
+        }
+
+        const locator =
+          BigInt(found.actionLocator).toString(16);
+
+        setEntries((prev) => {
+          let matched = false;
+
+          const next = prev.map((entry) => {
+            if (
+              entry.kind === "message" &&
+              entry.actionLocator === locator
+            ) {
+              matched = true;
+
+              return {
+                ...entry,
+                transactionHash:
+                  found.transactionHash,
+                senderAddress:
+                  found.message.senderIdentity?.address ??
+                  entry.senderAddress,
+              };
+            }
+
+            return entry;
+          });
+
+          if (matched) return next;
+
+          return [
+            ...next,
+            {
+              id: crypto.randomUUID(),
+              kind: "message",
+              summary: found.message.body,
+              transactionHash:
+                found.transactionHash,
+              actionLocator: locator,
+              sentAt: found.message.sentAt,
+              senderAddress:
+                found.message.senderIdentity?.address,
+            },
+          ];
+        });
+
+        window.localStorage.removeItem(storageKey);
+
+        setMessagePending(false);
+        setBusy(false);
+        setError(null);
+
+        setDraft((current) =>
+          current.trim() === pending.body
+            ? ""
+            : current,
+        );
+      } catch (err) {
+        console.debug(
+          "[VINSS MESSAGE RECOVERY]",
+          err,
+        );
+      }
+    };
+
+    void recover();
+
+    const timer = window.setInterval(() => {
+      void recover();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    room,
+    session,
+    channelKey,
+    messagingIdentity,
+    participants,
+  ]);
+
   async function handleSendMessage() {
+    if (messagePending) {
+      setError(
+        "Your previous message is still being confirmed.",
+      );
+      return;
+    }
+
     if (
       !session ||
       !room ||
@@ -307,6 +935,14 @@ export default function DealRoomPage() {
 
     setBusy(true);
     setError(null);
+
+    const body = draft.trim();
+
+    const storageKey =
+      `vinss:pending-message:${room.id}:` +
+      session.account.address.toLowerCase();
+
+    let preparedLocator: string | null = null;
 
     try {
       let route: MessageRoute | undefined;
@@ -343,7 +979,7 @@ export default function DealRoomPage() {
       const payload: MessagePayload = {
         kind: "text",
         scope: route ? "direct" : "group",
-        body: draft.trim(),
+        body,
         senderIdentity: {
           address: session.account.address,
           messagingPublicKey: messagingIdentity.publicKey,
@@ -352,42 +988,196 @@ export default function DealRoomPage() {
         sentAt: new Date().toISOString(),
       };
 
-      const result = await sendMessage(
+      const sendPromise = sendMessage(
         session.account,
         channelKey,
         payload,
         route,
+        (prepared) => {
+          preparedLocator =
+            prepared.actionLocator.toString(16);
+
+          setMessagePending(true);
+
+          window.localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              actionLocator: preparedLocator,
+              body,
+              sentAt: payload.sentAt,
+              scope: payload.scope ?? "group",
+              recipientAddress:
+                payload.recipientAddress ?? null,
+              createdAt: Date.now(),
+            }),
+          );
+
+          // Show the message immediately on the sender device.
+          setEntries((prev) => {
+            if (
+              prev.some(
+                (entry) =>
+                  entry.kind === "message" &&
+                  entry.actionLocator === preparedLocator,
+              )
+            ) {
+              return prev;
+            }
+
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                kind: "message",
+                summary: body,
+                transactionHash: "",
+                actionLocator: preparedLocator!,
+                sentAt: payload.sentAt,
+                senderAddress:
+                  session.account.address,
+              },
+            ];
+          });
+
+          // Composer feels instant; chain confirmation continues
+          // in the background.
+          setDraft("");
+        },
       );
 
-      setEntries((prev) => [
-        {
-          id: crypto.randomUUID(),
-          kind: "message",
-          summary: draft.trim(),
-          transactionHash: result.transactionHash,
-          actionLocator: result.actionLocator.toString(16),
-          sentAt: payload.sentAt,
-        },
-        ...prev,
+      // Ready X may background/remount the dapp and never resolve
+      // its original JS callback. Don't let VINSS stay busy forever.
+      const result = await Promise.race([
+        sendPromise,
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(
+              new Error(
+                "VINSS_MESSAGE_CALLBACK_TIMEOUT",
+              ),
+            );
+          }, 20000);
+        }),
       ]);
 
-      setDraft("");
+      window.localStorage.removeItem(storageKey);
+      setMessagePending(false);
+
+      const confirmedLocator =
+        result.actionLocator.toString(16);
+
+      setEntries((prev) => {
+        let matched = false;
+
+        const next = prev.map((entry) => {
+          if (
+            entry.kind === "message" &&
+            entry.actionLocator === confirmedLocator
+          ) {
+            matched = true;
+
+            return {
+              ...entry,
+              transactionHash:
+                result.transactionHash,
+              senderAddress:
+                session.account.address,
+            };
+          }
+
+          return entry;
+        });
+
+        if (matched) return next;
+
+        return [
+          ...next,
+          {
+            id: crypto.randomUUID(),
+            kind: "message",
+            summary: body,
+            transactionHash:
+              result.transactionHash,
+            actionLocator: confirmedLocator,
+            sentAt: payload.sentAt,
+            senderAddress:
+              session.account.address,
+          },
+        ];
+      });
     } catch (err) {
       const raw =
-        err instanceof Error ? err.message : String(err);
+        err instanceof Error
+          ? err.message
+          : String(err);
 
       console.error("[VINSS SEND ERROR]", err);
+
+      // These errors mean the request did not become an ambiguous
+      // background transaction. Clear the pending record immediately.
+      const definitelyFailed =
+        /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
+          raw,
+        );
+
+      if (definitelyFailed) {
+        window.localStorage.removeItem(storageKey);
+        setMessagePending(false);
+
+        if (preparedLocator) {
+          setEntries((prev) =>
+            prev.filter(
+              (entry) =>
+                entry.actionLocator !==
+                preparedLocator,
+            ),
+          );
+        }
+
+        setDraft(body);
+        setError(raw || "Message could not be sent.");
+        return;
+      }
+
+      if (preparedLocator) {
+        // Keep recovery metadata. The polling effect below determines
+        // whether the transaction actually landed on-chain.
+        setMessagePending(true);
+
+        if (
+          raw.includes(
+            "VINSS_MESSAGE_CALLBACK_TIMEOUT",
+          )
+        ) {
+          setError(
+            "Message is being confirmed in the background.",
+          );
+        } else {
+          setError(
+            "Wallet response was interrupted. VINSS is checking the message on-chain.",
+          );
+        }
+
+        return;
+      }
+
+      setMessagePending(false);
       setError(raw || "Unknown send error");
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleRefresh() {
+
+  async function handleRefresh(
+    silent = false,
+  ) {
     if (!channelKey) return;
 
-    setBusy(true);
-    setError(null);
+    if (!silent) {
+      setBusy(true);
+      setError(null);
+    }
 
     try {
       // Pass 1: decrypt GROUP messages.
@@ -513,6 +1303,8 @@ export default function DealRoomPage() {
           actionLocator:
             m.actionLocator.replace(/^0x/, ""),
           sentAt: m.message.sentAt,
+          senderAddress:
+            m.message.senderIdentity?.address,
         }));
 
       const offerEntries: TimelineEntry[] = offers.map(
@@ -530,34 +1322,141 @@ export default function DealRoomPage() {
       );
 
       setEntries((prev) => {
-        const seen = new Set(
-          prev.map((e) => e.actionLocator),
-        );
-
-        const fresh = [
+        const incoming = [
           ...messageEntries,
           ...offerEntries,
-        ].filter(
-          (e) => !seen.has(e.actionLocator),
+        ];
+
+        const byLocator = new Map(
+          prev.map((entry) => [
+            `${entry.kind}:${entry.actionLocator}`,
+            entry,
+          ]),
         );
 
-        return [...fresh, ...prev].sort(
+        for (const entry of incoming) {
+          const key =
+            `${entry.kind}:${entry.actionLocator}`;
+
+          const existing = byLocator.get(key);
+
+          byLocator.set(key, {
+            ...existing,
+            ...entry,
+            senderAddress:
+              entry.senderAddress ??
+              existing?.senderAddress,
+          });
+        }
+
+        return [...byLocator.values()].sort(
           (a, b) =>
-            new Date(b.sentAt).getTime() -
-            new Date(a.sentAt).getTime(),
+            new Date(a.sentAt).getTime() -
+            new Date(b.sentAt).getTime(),
         );
       });
     } catch (err) {
-      setError(
-        humanizeError(
+      if (!silent) {
+        setError(
+          humanizeError(
+            err,
+            "We couldn't refresh the room. Please try again in a moment.",
+          ),
+        );
+      } else {
+        console.debug(
+          "[VINSS LIVE SYNC]",
           err,
-          "We couldn't refresh the room. Please try again in a moment.",
-        ),
-      );
+        );
+      }
     } finally {
-      setBusy(false);
+      if (!silent) {
+        setBusy(false);
+      }
     }
   }
+
+  useEffect(() => {
+    if (
+      tab !== "timeline" ||
+      !room ||
+      !channelKey ||
+      !session
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    let running = false;
+
+    const sync = async () => {
+      if (stopped || running) return;
+
+      running = true;
+
+      try {
+        await handleRefresh(true);
+      } finally {
+        running = false;
+      }
+    };
+
+    // Langsung sync saat masuk room.
+    void sync();
+
+    const timer = window.setInterval(() => {
+      void sync();
+    }, 2500);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void sync();
+      }
+    };
+
+    window.addEventListener("focus", sync);
+    document.addEventListener(
+      "visibilitychange",
+      onVisible,
+    );
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible,
+      );
+    };
+  }, [
+    tab,
+    room?.id,
+    channelKey,
+    session?.account.address,
+    messagingIdentity?.publicKey,
+  ]);
+
+  // [VINSS CHAT AUTO SCROLL]
+  useEffect(() => {
+    if (
+      tab !== "timeline" ||
+      entries.length === 0
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [entries.length, tab]);
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-16">
@@ -629,99 +1528,151 @@ export default function DealRoomPage() {
         </p>
       )}
 
-      {showAccessDetails && room && (
-        <section
-          className="mb-6 border border-signal/25 bg-signal/[0.025] p-5 sm:p-6"
-          data-testid="access-details"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
-                Private invitation
-              </p>
+      {showAccessDetails &&
+        room &&
+        (!inviteCompleted || inviteJoinedNotice) && (
+          <section
+            className="mb-6 border border-signal/25 bg-signal/[0.025] p-5 sm:p-6"
+            data-testid="access-details"
+          >
+            {inviteJoinedNotice ? (
+              <div className="flex min-h-[130px] flex-col items-center justify-center text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-signal/30 bg-signal/10 text-lg text-signal">
+                  ✓
+                </div>
 
-              <h2 className="mt-2 text-lg text-paper">
-                Invite your counterparty
-              </h2>
-
-              <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
-                Create one private link. Your counterparty can open it and
-                join this room without entering credentials manually.
-              </p>
-            </div>
-
-            <Link
-              href={`/room/${room.id}`}
-              className="shrink-0 text-xs text-paper/35 transition hover:text-signal"
-            >
-              Close
-            </Link>
-          </div>
-
-          {!inviteLink ? (
-            <button
-              type="button"
-              onClick={createInviteLink}
-              className="mt-6 flex h-11 w-full items-center justify-center border border-signal bg-signal px-4 font-display text-xs uppercase tracking-[0.16em] text-ink transition hover:bg-transparent hover:text-signal sm:w-auto"
-            >
-              Create invite link →
-            </button>
-          ) : (
-            <div className="mt-6">
-              <div className="border border-wire bg-ink/40 p-3">
-                <p className="mb-2 text-[9px] uppercase tracking-widest text-paper/25">
-                  Private invite link
+                <p className="mt-4 font-display text-[10px] uppercase tracking-[0.22em] text-signal">
+                  Counterparty joined
                 </p>
 
-                <p className="break-all font-mono text-[11px] leading-relaxed text-paper/60">
-                  {inviteLink}
+                <h2 className="mt-2 text-lg text-paper">
+                  Private room is ready.
+                </h2>
+
+                <p className="mt-2 text-xs text-paper/35">
+                  Invitation completed successfully.
                 </p>
               </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
+                      {inviteLink
+                        ? "Invitation ready"
+                        : "Private invitation"}
+                    </p>
 
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={copyInviteLink}
-                  className="flex h-10 flex-1 items-center justify-center border border-signal bg-signal px-4 font-display text-[10px] uppercase tracking-[0.16em] text-ink transition hover:bg-transparent hover:text-signal"
-                >
-                  {inviteCopied ? "Copied ✓" : "Copy invite link"}
-                </button>
+                    <h2 className="mt-2 text-lg text-paper">
+                      {inviteLink
+                        ? "Private link created"
+                        : "Invite your counterparty"}
+                    </h2>
 
-                <button
-                  type="button"
-                  onClick={shareInviteLink}
-                  className="flex h-10 flex-1 items-center justify-center border border-wire px-4 font-display text-[10px] uppercase tracking-[0.16em] text-paper/60 transition hover:border-paper/40 hover:text-paper"
-                >
-                  Share
-                </button>
-              </div>
+                    <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
+                      {inviteLink
+                        ? "Share this private link with your counterparty. VINSS will detect when they join the room."
+                        : "Create one private link. Your counterparty can open it and join this room without entering credentials manually."}
+                    </p>
+                  </div>
 
-              <div className="mt-4 border-t border-wire/60 pt-3">
-                <p className="text-[10px] uppercase tracking-widest text-paper/35">
-                  {inviteExpired
-                    ? "Invite expired"
-                    : `Expires in ${inviteCountdown}`}
-                </p>
+                  <Link
+                    href={`/room/${room.id}`}
+                    className="shrink-0 text-xs text-paper/35 transition hover:text-signal"
+                  >
+                    Close
+                  </Link>
+                </div>
 
-                <p className="mt-2 text-[10px] leading-relaxed text-paper/25">
-                  Anyone holding the complete link can use it, so share it
-                  only with your intended counterparty.
-                </p>
+                {!inviteLink ? (
+                  <button
+                    type="button"
+                    onClick={createInviteLink}
+                    className="mt-6 flex h-11 w-full items-center justify-center border border-signal bg-signal px-4 font-display text-xs uppercase tracking-[0.16em] text-ink transition hover:bg-transparent hover:text-signal sm:w-auto"
+                  >
+                    Create invite link →
+                  </button>
+                ) : (
+                  <div className="mt-6">
+                    <div className="border border-signal/20 bg-signal/[0.035] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-display text-[9px] uppercase tracking-[0.18em] text-signal">
+                          Private invite link
+                        </p>
 
-                <button
-                  type="button"
-                  onClick={() => void createInviteLink()}
-                  className="mt-3 flex h-9 w-full items-center justify-center border border-wire px-4 font-display text-[10px] uppercase tracking-[0.16em] text-paper/50 transition hover:border-signal hover:text-signal"
-                >
-                  {inviteExpired
-                    ? "Generate new private link"
-                    : "Create new invite"}
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
+                        <span className="font-display text-[9px] uppercase tracking-widest text-signal/70">
+                          ✓ Ready
+                        </span>
+                      </div>
+
+                      <p
+                        className="mt-3 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-paper/55"
+                        title={inviteLink}
+                      >
+                        {inviteLink.length > 58
+                          ? `${inviteLink.slice(0, 38)}…${inviteLink.slice(-16)}`
+                          : inviteLink}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={copyInviteLink}
+                        disabled={invitePending}
+                        className="flex h-10 flex-1 items-center justify-center border border-signal bg-signal px-4 font-display text-[10px] uppercase tracking-[0.16em] text-ink transition hover:bg-transparent hover:text-signal"
+                      >
+                        {invitePending
+                          ? "Finalizing..."
+                          : inviteCopied
+                            ? "✓ Copied"
+                            : "Copy private link"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={shareInviteLink}
+                        disabled={invitePending}
+                        className="flex h-10 flex-1 items-center justify-center border border-wire px-4 font-display text-[10px] uppercase tracking-[0.16em] text-paper/60 transition hover:border-paper/40 hover:text-paper"
+                      >
+                        Share
+                      </button>
+                    </div>
+
+                    <div className="mt-4 border-t border-wire/60 pt-4">
+                      {!inviteExpired && (
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 animate-pulse rounded-full bg-signal" />
+                          <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/45">
+                            {invitePending
+                              ? "Finalizing invitation..."
+                              : "Waiting for counterparty..."}
+                          </p>
+                        </div>
+                      )}
+
+                      <p className="mt-3 text-[10px] uppercase tracking-widest text-paper/30">
+                        {inviteExpired
+                          ? "Invite expired"
+                          : `Expires in ${inviteCountdown}`}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => void createInviteLink()}
+                        className="mt-3 text-[10px] text-paper/30 transition hover:text-signal"
+                      >
+                        {inviteExpired
+                          ? "Generate new private link →"
+                          : "Regenerate invitation"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
 
       <div className="mb-6">
         <AgentPanel
@@ -740,32 +1691,39 @@ export default function DealRoomPage() {
         <section className="space-y-5">
 
           {/* CHAT HEADER */}
-          <div className="flex items-center justify-between border border-wire bg-vault/30 px-4 py-3">
+          <div className="flex items-center justify-between border border-wire bg-vault/30 px-4 py-3.5">
             <div>
-              <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
-                Private conversation
-              </p>
-              <p className="mt-1 text-xs text-paper/40">
-                End-to-end encrypted
+              <div className="flex items-center gap-3">
+                <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
+                  Private conversation
+                </p>
+
+                <span className="flex items-center gap-1.5 font-display text-[8px] uppercase tracking-[0.14em] text-signal/65">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" />
+                  Live
+                </span>
+              </div>
+
+              <p className="mt-1.5 text-[11px] text-paper/35">
+                End-to-end encrypted · auto-sync
               </p>
             </div>
 
             <button
-              onClick={handleRefresh}
+              type="button"
+              onClick={() => void handleRefresh(false)}
               disabled={!channelKey || busy}
-              className="border border-wire px-3 py-2 font-display text-[10px] uppercase tracking-widest text-paper/50 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
-              title="Load the latest encrypted messages"
+              className="border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-[0.14em] text-paper/35 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
+              title="Force room sync"
             >
-              {busy ? "Loading…" : "Refresh"}
+              {busy ? "Syncing…" : "Sync"}
             </button>
           </div>
 
           {/* CHAT AREA */}
-          <div className="min-h-[360px] border border-wire bg-black/10">
-
+          <div className="min-h-[420px] max-h-[58vh] overflow-y-auto border-x border-b border-wire bg-black/10">
             {entries.length === 0 ? (
-              <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
-
+              <div className="flex min-h-[420px] flex-col items-center justify-center px-8 text-center">
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
                   <span className="text-lg text-signal">✦</span>
                 </div>
@@ -774,88 +1732,235 @@ export default function DealRoomPage() {
                   Start the conversation
                 </h3>
 
-                <p className="mt-2 max-w-sm text-xs leading-relaxed text-paper/35">
-                  Messages in this room are encrypted before they leave your
-                  device.
+                <p className="mt-2 max-w-xs text-xs leading-relaxed text-paper/35">
+                  Private messages appear here automatically once they are
+                  recorded and decrypted on your device.
                 </p>
 
+                <div className="mt-5 flex items-center gap-2 font-display text-[8px] uppercase tracking-[0.16em] text-paper/25">
+                  <span className="h-1.5 w-1.5 rounded-full bg-signal/70" />
+                  Live encrypted channel
+                </div>
               </div>
             ) : (
-              <ul className="space-y-4 p-4">
+              <div className="flex min-h-[420px] flex-col justify-end">
+                <ul className="space-y-5 p-4 sm:p-5">
+                  {[...entries]
+                    .sort(
+                      (a, b) =>
+                        new Date(a.sentAt).getTime() -
+                        new Date(b.sentAt).getTime(),
+                    )
+                    .map((entry) => {
+                      const isOwnMessage =
+                        entry.kind === "message" &&
+                        Boolean(
+                          entry.senderAddress &&
+                            session &&
+                            entry.senderAddress.toLowerCase() ===
+                              session.account.address.toLowerCase(),
+                        );
 
-                {entries.map((entry) => (
-                  <li key={entry.id} className="group">
+                      const isPeerMessage =
+                        entry.kind === "message" &&
+                        Boolean(
+                          entry.senderAddress &&
+                            session &&
+                            entry.senderAddress.toLowerCase() !==
+                              session.account.address.toLowerCase(),
+                        );
 
-                    {entry.kind === "message" ? (
-                      <div className="flex justify-end">
-                        <div className="max-w-[86%]">
+                      const voyagerUrl =
+                        NETWORK === "mainnet"
+                          ? `https://voyager.online/tx/${entry.transactionHash}`
+                          : `https://sepolia.voyager.online/tx/${entry.transactionHash}`;
 
-                          <div className="border border-signal/20 bg-signal/5 px-4 py-3">
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-paper/85">
-                              {entry.summary}
-                            </p>
-                          </div>
+                      return (
+                        <li
+                          key={`${entry.kind}:${entry.actionLocator}`}
+                          className="group"
+                        >
+                          {entry.kind === "message" ? (
+                            <div
+                              className={
+                                isPeerMessage
+                                  ? "flex justify-start"
+                                  : "flex justify-end"
+                              }
+                            >
+                              <div className="max-w-[82%]">
+                                <div
+                                  className={
+                                    isOwnMessage
+                                      ? "mb-1 text-right font-display text-[8px] uppercase tracking-[0.14em] text-signal/55"
+                                      : "mb-1 text-left font-display text-[8px] uppercase tracking-[0.14em] text-paper/30"
+                                  }
+                                >
+                                  {isOwnMessage
+                                    ? "You"
+                                    : "Counterparty"}
+                                </div>
 
-                          <div className="mt-1 flex justify-end">
-                            <span className="text-[9px] text-paper/25">
-                              {new Date(entry.sentAt).toLocaleTimeString(
-                                "en-US",
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
-                              )}
-                              {" · "}
-                              Encrypted
-                            </span>
-                          </div>
+                                <div
+                                  className={
+                                    isOwnMessage
+                                      ? "rounded-lg rounded-br-sm border border-signal/30 bg-signal/[0.07] px-4 py-3 shadow-[0_0_30px_rgba(45,212,191,0.025)]"
+                                      : "rounded-lg rounded-bl-sm border border-wire bg-vault/45 px-4 py-3"
+                                  }
+                                >
+                                  <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-paper/85">
+                                    {entry.summary}
+                                  </p>
+                                </div>
 
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mx-auto max-w-[92%] border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                                <div
+                                  className={
+                                    isOwnMessage
+                                      ? "mt-1.5 flex justify-end"
+                                      : "mt-1.5 flex justify-start"
+                                  }
+                                >
+                                  <span className="text-[9px] text-paper/25">
+                                    {new Date(
+                                      entry.sentAt,
+                                    ).toLocaleTimeString(
+                                      "en-US",
+                                      {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      },
+                                    )}
+                                    {" · "}
+                                    Encrypted
+                                    {" · "}
+                                    {!entry.transactionHash ? (
+                                      <span
+                                        className="inline-flex h-3 w-3 items-center justify-center"
+                                        title="Recording on Starknet"
+                                        aria-label="Recording on Starknet"
+                                      >
+                                        <span className="h-2.5 w-2.5 animate-spin rounded-full border border-paper/15 border-t-signal/70" />
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="text-signal/55"
+                                        title="Recorded on Starknet"
+                                        aria-label="Recorded on Starknet"
+                                      >
+                                        ✓
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mx-auto max-w-[92%] rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                              <div className="mb-1 flex items-center justify-between gap-4">
+                                <span className="font-display text-[9px] uppercase tracking-[0.16em] text-amber-400/70">
+                                  Deal update
+                                </span>
 
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="font-display text-[9px] uppercase tracking-[0.16em] text-amber-400/70">
-                            Deal update
-                          </span>
+                                <span className="text-[9px] text-paper/25">
+                                  {new Date(
+                                    entry.sentAt,
+                                  ).toLocaleTimeString(
+                                    "en-US",
+                                    {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    },
+                                  )}
+                                </span>
+                              </div>
 
-                          <span className="text-[9px] text-paper/25">
-                            {new Date(entry.sentAt).toLocaleTimeString(
-                              "en-US",
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              },
-                            )}
-                          </span>
-                        </div>
+                              <p className="text-sm text-paper/70">
+                                {entry.summary}
+                              </p>
+                            </div>
+                          )}
 
-                        <p className="text-sm text-paper/70">
-                          {entry.summary}
-                        </p>
+                          <details
+                            className={
+                              !entry.transactionHash
+                                ? "hidden"
+                                : entry.kind === "message"
+                                  ? isPeerMessage
+                                    ? "mt-2 max-w-[82%]"
+                                    : "ml-auto mt-2 max-w-[82%]"
+                                  : "mx-auto mt-2 max-w-[92%]"
+                            }
+                          >
+                            <summary
+                              className={
+                                entry.kind === "message" &&
+                                !isPeerMessage
+                                  ? "cursor-pointer list-none text-right font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
+                                  : "cursor-pointer list-none text-left font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
+                              }
+                            >
+                              Proof on-chain ↓
+                            </summary>
 
-                      </div>
-                    )}
+                            <div className="mt-2 border border-wire bg-vault/60 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-display text-[8px] uppercase tracking-[0.16em] text-signal/60">
+                                  Starknet proof
+                                </p>
 
-                    {/* Technical details stay available, but hidden from
-                        the normal conversation view. */}
-                    <details className="mt-1 opacity-0 transition group-hover:opacity-100">
-                      <summary className="cursor-pointer text-right text-[8px] uppercase tracking-widest text-paper/20">
-                        Technical details
-                      </summary>
+                                <span className="font-display text-[8px] uppercase tracking-[0.12em] text-signal/45">
+                                  ✓ Recorded
+                                </span>
+                              </div>
 
-                      <div className="mt-1 text-right text-[8px] text-paper/20">
-                        tx {entry.transactionHash} · locator 0x{entry.actionLocator}
-                      </div>
-                    </details>
+                              <div className="mt-3 space-y-2 font-mono text-[9px] text-paper/35">
+                                <div>
+                                  <p className="mb-1 font-display text-[7px] uppercase tracking-[0.13em] text-paper/20">
+                                    Transaction
+                                  </p>
+                                  <p className="break-all">
+                                    {entry.transactionHash}
+                                  </p>
+                                </div>
 
-                  </li>
-                ))}
+                                <div>
+                                  <p className="mb-1 font-display text-[7px] uppercase tracking-[0.13em] text-paper/20">
+                                    Action locator
+                                  </p>
+                                  <p className="break-all">
+                                    0x{entry.actionLocator}
+                                  </p>
+                                </div>
+                              </div>
 
-              </ul>
+                              <p className="mt-3 text-[9px] leading-relaxed text-paper/25">
+                                The transaction proves this encrypted action
+                                was recorded on Starknet. Message plaintext is
+                                not exposed on-chain.
+                              </p>
+
+                              <a
+                                href={voyagerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 flex h-9 items-center justify-center border border-signal/25 font-display text-[8px] uppercase tracking-[0.15em] text-signal/65 transition hover:border-signal hover:bg-signal hover:text-ink"
+                              >
+                                Open in Voyager ↗
+                              </a>
+                            </div>
+                          </details>
+                        </li>
+                      );
+                    })}
+
+                  <div
+                    ref={chatEndRef}
+                    className="h-px"
+                    aria-hidden="true"
+                  />
+                </ul>
+              </div>
             )}
-
           </div>
 
           {/* MESSAGE COMPOSER */}
@@ -914,7 +2019,7 @@ export default function DealRoomPage() {
                 disabled={!session || !channelKey || busy || !draft.trim()}
                 className="flex h-[46px] min-w-[72px] items-center justify-center border border-signal bg-signal px-4 font-display text-[10px] uppercase tracking-widest text-ink transition hover:bg-transparent hover:text-signal disabled:border-wire disabled:bg-transparent disabled:text-paper/20"
               >
-                {busy ? "…" : "Send"}
+                {busy ? "…" : "Send →"}
               </button>
 
             </div>

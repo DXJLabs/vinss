@@ -50,6 +50,33 @@ function WalletState({
   const [session, setSession] =
     useState<VinssWalletSession | null>(null);
 
+  // Ready X can temporarily background/remount the dapp on mobile.
+  // Bump this value whenever VINSS becomes active again so wallet
+  // connection/session restoration is retried without a manual refresh.
+  const [resumeNonce, setResumeNonce] = useState(0);
+
+  useEffect(() => {
+    const resume = () => {
+      setResumeNonce((value) => value + 1);
+    };
+
+    const visibility = () => {
+      if (document.visibilityState === "visible") {
+        resume();
+      }
+    };
+
+    window.addEventListener("focus", resume);
+    window.addEventListener("pageshow", resume);
+    document.addEventListener("visibilitychange", visibility);
+
+    return () => {
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pageshow", resume);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, []);
+
   /*
    * Keep wallet discovery alive while the app is open.
    */
@@ -112,7 +139,7 @@ function WalletState({
     return () => {
       cancelled = true;
     };
-  }, [connected]);
+  }, [connected, resumeNonce]);
 
   /*
    * RESTORE AFTER BROWSER REFRESH
@@ -133,64 +160,77 @@ function WalletState({
         lastWalletId =
           localStorage.getItem(LAST_WALLET_KEY);
       } catch {
-        return;
+        // Storage may be unavailable; silent wallet probing can
+        // still recover an already-approved connection.
       }
 
-      if (!lastWalletId) return;
+      const available = wallets.filter(
+        (entry) => entry.state === "available",
+      );
 
-      const match = wallets.find((entry) => {
-        if (entry.state !== "available") return false;
+      if (available.length === 0) return;
 
-        try {
-          return (
-            entry.wallet.features[StarknetWalletApi].id ===
-            lastWalletId
-          );
-        } catch {
-          return false;
-        }
-      });
+      // Prefer the previously connected wallet, but on FIRST connect
+      // there is no saved wallet id yet. In that case silently probe
+      // discovered wallets. `silent: true` must never open a popup.
+      const candidates = lastWalletId
+        ? [
+            ...available.filter((entry) => {
+              try {
+                return (
+                  entry.wallet.features[StarknetWalletApi].id ===
+                  lastWalletId
+                );
+              } catch {
+                return false;
+              }
+            }),
+            ...available.filter((entry) => {
+              try {
+                return (
+                  entry.wallet.features[StarknetWalletApi].id !==
+                  lastWalletId
+                );
+              } catch {
+                return true;
+              }
+            }),
+          ]
+        : available;
 
-      if (!match || match.state !== "available") return;
-
-      try {
-        /*
-         * IMPORTANT:
-         * Do not open the wallet popup again.
-         *
-         * Wallet Standard's silent=true asks the wallet whether
-         * the existing permission/connection can be restored.
-         */
-        const result =
-          await match.wallet.features[
-            StandardConnect
-          ].connect({
-            silent: true,
-          });
-
+      for (const entry of candidates) {
         if (cancelled) return;
 
-        if (result.accounts.length > 0) {
-          await connect(match.wallet);
+        try {
+          const result =
+            await entry.wallet.features[
+              StandardConnect
+            ].connect({
+              silent: true,
+            });
+
+          if (
+            cancelled ||
+            result.accounts.length === 0
+          ) {
+            continue;
+          }
+
+          // Synchronize get-starknet-ui state. Because the wallet is
+          // already silently connected this should not request approval.
+          await connect(entry.wallet);
+          return;
+        } catch {
+          // This wallet has no approved connection. Try the next one.
         }
-      } catch (error) {
-        /*
-         * Silent restore failing is not an application error.
-         * The user can simply press Connect Wallet again.
-         */
-        console.info(
-          "[VINSS] silent wallet restore unavailable",
-          error,
-        );
       }
     }
-
     void restoreWallet();
 
     return () => {
       cancelled = true;
     };
-  }, [connected, wallets, connect]);
+  }, [connected, wallets, connect, resumeNonce]);
 
   const value = useMemo<WalletContextValue>(
     () => ({

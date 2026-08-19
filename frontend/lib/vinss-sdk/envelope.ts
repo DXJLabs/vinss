@@ -2,7 +2,7 @@
  * Shared encrypted-envelope helpers.
  *
  * Every VINSS helper contract (messaging, offer, private_escrow,
- * private_escrow_settlement) shares the same public calldata shape:
+ * escrow_rekber) shares the same public calldata shape:
  *
  *   [envelope_version, action_locator, claimed_payload_commitment,
  *    payload_chunk_count, ...ciphertext_chunks]
