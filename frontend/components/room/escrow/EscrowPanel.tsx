@@ -23,6 +23,7 @@ export function EscrowPanel({
   setBusy,
   setError,
   agentDraft,
+  acceptedOffer,
 }: {
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
@@ -34,6 +35,7 @@ export function EscrowPanel({
     AgentProposal,
     { type: "prepare_escrow" }
   > | null;
+  acceptedOffer?: ConversationEntry | null;
 }) {
   const [dealOfferLocator, setDealOfferLocator] = useState("");
   const [token, setToken] = useState("");
@@ -49,6 +51,14 @@ export function EscrowPanel({
       );
     }
 
+    if (agentDraft.payload.amount) {
+      setAmount(agentDraft.payload.amount);
+    }
+
+    if (agentDraft.payload.token) {
+      setToken(agentDraft.payload.token);
+    }
+
     if (agentDraft.payload.refundHours) {
       setRefundHours(agentDraft.payload.refundHours);
     }
@@ -59,6 +69,31 @@ export function EscrowPanel({
     releaseSecret: bigint;
     refundSecret: bigint;
   } | null>(null);
+
+  useEffect(() => {
+    const acceptedAction =
+      acceptedOffer?.offerAction;
+
+    if (
+      !acceptedOffer ||
+      !acceptedAction ||
+      acceptedAction.kind !== "accept"
+    ) {
+      return;
+    }
+
+    // The parent locator identifies the exact create/counter action whose
+    // encrypted terms were accepted. The accept action remains the proof.
+    setDealOfferLocator(
+      acceptedAction.parentOfferLocator ??
+        acceptedOffer.actionLocator,
+    );
+    setAmount(acceptedAction.amount);
+
+    // Loading a different accepted deal starts a fresh local coordination view.
+    setAgreedCustodyCommitment(null);
+    setLastSecrets(null);
+  }, [acceptedOffer?.actionLocator]);
 
   async function handleCreateCoordination() {
     if (!session || !channelKey || !dealOfferLocator.trim()) return;
@@ -256,8 +291,9 @@ export function EscrowPanel({
             </div>
 
             <p className="mt-2 text-[10px] leading-relaxed text-paper/25">
-              Use the reference from the offer you accepted. VINSS uses it to
-              establish the shared escrow coordination.
+              {acceptedOffer?.offerAction?.kind === "accept"
+                ? "Accepted Offer loaded from your private Chat. Review the reference, then connect it to escrow."
+                : "Use the reference from the Offer you accepted. VINSS uses it to establish the shared escrow coordination."}
             </p>
           </div>
         </div>

@@ -25,6 +25,9 @@ import {
   deriveMessageRoutingTag,
   type MessageRoute,
 } from "@/lib/privacy/messageRouting";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
 
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
@@ -397,8 +400,10 @@ export async function discoverOfferActions(
         // the route that matched the opaque recipient tag.
         if (
           action.recipientAddress &&
-          action.recipientAddress.toLowerCase() !==
-            candidate.recipientIdentity.toLowerCase()
+          !sameStarknetAddress(
+            action.recipientAddress,
+            candidate.recipientIdentity,
+          )
         ) {
           continue;
         }

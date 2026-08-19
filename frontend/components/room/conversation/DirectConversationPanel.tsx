@@ -37,6 +37,9 @@ interface DirectConversationPanelProps {
   onCounterOffer: (
     entry: ConversationEntry,
   ) => void;
+  onOpenEscrow: (
+    entry: ConversationEntry,
+  ) => void;
 }
 
 export function DirectConversationPanel({
@@ -56,6 +59,7 @@ export function DirectConversationPanel({
   onAcceptOffer,
   onRejectOffer,
   onCounterOffer,
+  onOpenEscrow,
 }: DirectConversationPanelProps) {
   const [proofEntry, setProofEntry] =
     useState<ConversationEntry | null>(null);
@@ -220,6 +224,9 @@ export function DirectConversationPanel({
                     }
                     onCounter={
                       onCounterOffer
+                    }
+                    onOpenEscrow={
+                      onOpenEscrow
                     }
                   />
 

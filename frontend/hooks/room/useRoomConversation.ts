@@ -221,6 +221,8 @@ export function useRoomConversation({
         : direct.chatEndRef,
     participants:
       participantState.participants,
+    selfRoutingIdentities:
+      participantState.selfRoutingIdentities,
     setParticipants:
       participantState.setParticipants,
     groups:

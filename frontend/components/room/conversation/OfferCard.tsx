@@ -17,20 +17,38 @@ interface OfferCardProps {
   onCounter: (
     entry: ConversationEntry,
   ) => void;
+  onOpenEscrow?: (
+    entry: ConversationEntry,
+  ) => void;
 }
 
 function cardTitle(
   kind: NonNullable<
-    ConversationEntry["offerAction"]
+    ConversationEntry[
+      "offerAction"
+    ]
   >["kind"],
 ): string {
-  if (kind === "counter") return "Counter";
+  if (kind === "counter") {
+    return "Counter";
+  }
+
+  if (kind === "accept") {
+    return "Agreement";
+  }
+
+  if (kind === "reject") {
+    return "Response";
+  }
+
   return "Offer";
 }
 
 function stateLabel(
   kind: NonNullable<
-    ConversationEntry["offerAction"]
+    ConversationEntry[
+      "offerAction"
+    ]
   >["kind"],
   ownAction: boolean,
   actionable: boolean,
@@ -38,22 +56,22 @@ function stateLabel(
   if (kind === "accept") {
     return ownAction
       ? "Accepted by you"
-      : "Accepted by counterparty";
+      : "Accepted";
   }
 
   if (kind === "reject") {
     return ownAction
       ? "Rejected by you"
-      : "Rejected by counterparty";
+      : "Rejected";
   }
 
   if (actionable) {
-    return "Your response needed";
+    return "Response needed";
   }
 
   return ownAction
-    ? "Waiting for response"
-    : "Waiting";
+    ? "Waiting"
+    : "Received";
 }
 
 export function OfferCard({
@@ -64,10 +82,14 @@ export function OfferCard({
   onAccept,
   onReject,
   onCounter,
+  onOpenEscrow,
 }: OfferCardProps) {
-  const action = entry.offerAction;
+  const action =
+    entry.offerAction;
 
-  if (!action) return null;
+  if (!action) {
+    return null;
+  }
 
   const ownAction =
     sameStarknetAddress(
@@ -85,14 +107,24 @@ export function OfferCard({
     <div
       className={
         ownAction
-          ? "ml-auto max-w-[86%]"
-          : "mr-auto max-w-[86%]"
+          ? "ml-auto w-[82%] max-w-sm"
+          : "mr-auto w-[82%] max-w-sm"
       }
     >
-      <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.04] px-3.5 py-3">
+      <div
+        className={
+          accepted
+            ? "border border-signal/25 border-l-2 border-l-signal bg-vault/35 px-3.5 py-3"
+            : rejected
+              ? "border border-danger/20 border-l-2 border-l-danger/60 bg-vault/35 px-3.5 py-3"
+              : "border border-wire border-l-2 border-l-amber-400/60 bg-vault/35 px-3.5 py-3"
+        }
+      >
         <div className="flex items-center justify-between gap-3">
-          <span className="font-display text-[9px] uppercase tracking-[0.16em] text-amber-300/75">
-            {cardTitle(action.kind)}
+          <span className="font-display text-[8px] uppercase tracking-[0.16em] text-amber-300/70">
+            {cardTitle(
+              action.kind,
+            )}
             {" · "}
             {ownAction
               ? "Sent"
@@ -116,27 +148,54 @@ export function OfferCard({
           </span>
         </div>
 
-        <div className="mt-2.5">
-          <p className="text-lg leading-none text-paper">
-            {action.amount}{" "}
-            <span className="text-sm text-paper/55">
-              {action.asset}
-            </span>
-          </p>
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xl leading-none text-paper">
+              {action.amount}
+            </p>
 
-          <p className="mt-2 text-[11px] leading-relaxed text-paper/45">
-            Payment:{" "}
-            <span className="text-paper/65">
+            <p className="mt-1 truncate text-[11px] text-paper/50">
+              {action.asset}
+            </p>
+          </div>
+
+          {action.dealType && (
+            <span className="max-w-[46%] truncate border border-wire px-2 py-1 font-display text-[7px] uppercase tracking-[0.12em] text-paper/30">
+              {action.dealType === "otc"
+                ? "Token trade"
+                : action.dealType === "freelance"
+                  ? "Service"
+                  : action.dealType === "goods"
+                    ? "Goods"
+                    : action.dealType === "digital_goods"
+                      ? "Digital"
+                      : action.dealType === "bounty"
+                        ? "Bounty"
+                        : action.dealType === "nft"
+                          ? "NFT"
+                          : "Custom"}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 border-t border-wire/60 pt-2.5">
+          <p className="text-[10px] leading-relaxed text-paper/35">
+            Terms{" "}
+            <span className="text-paper/55">
+              ·{" "}
               {action.paymentTerms ||
                 "Not specified"}
             </span>
           </p>
 
           {action.conditions && (
-            <p className="mt-1 text-[11px] leading-relaxed text-paper/35">
-              Condition:{" "}
-              <span className="text-paper/55">
-                {action.conditions}
+            <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
+              Condition{" "}
+              <span className="text-paper/50">
+                ·{" "}
+                {
+                  action.conditions
+                }
               </span>
             </p>
           )}
@@ -147,10 +206,12 @@ export function OfferCard({
             <button
               type="button"
               onClick={() =>
-                void onReject(entry)
+                void onReject(
+                  entry,
+                )
               }
               disabled={busy}
-              className="h-9 border border-danger/30 px-2 font-display text-[8px] uppercase tracking-widest text-danger/80 transition hover:bg-danger/10 disabled:opacity-30"
+              className="h-9 border border-danger/25 px-2 font-display text-[8px] uppercase tracking-widest text-danger/75 transition hover:bg-danger/10 disabled:opacity-30"
             >
               Reject
             </button>
@@ -161,7 +222,7 @@ export function OfferCard({
                 onCounter(entry)
               }
               disabled={busy}
-              className="h-9 border border-wire px-2 font-display text-[8px] uppercase tracking-widest text-paper/55 transition hover:border-amber-400/50 hover:text-amber-300 disabled:opacity-30"
+              className="h-9 border border-wire px-2 font-display text-[8px] uppercase tracking-widest text-paper/50 transition hover:border-amber-400/40 hover:text-amber-300 disabled:opacity-30"
             >
               Counter
             </button>
@@ -169,10 +230,12 @@ export function OfferCard({
             <button
               type="button"
               onClick={() =>
-                void onAccept(entry)
+                void onAccept(
+                  entry,
+                )
               }
               disabled={busy}
-              className="h-9 border border-signal/40 px-2 font-display text-[8px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+              className="h-9 border border-signal/35 px-2 font-display text-[8px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
             >
               Accept
             </button>
@@ -180,9 +243,24 @@ export function OfferCard({
         )}
 
         {accepted && (
-          <p className="mt-2.5 border-t border-signal/15 pt-2.5 text-[10px] text-signal/65">
-            Agreement confirmed. Escrow is the next step.
-          </p>
+          <div className="mt-3 border-t border-signal/15 pt-2.5">
+            <p className="text-[10px] text-signal/65">
+              Agreement confirmed · Escrow next
+            </p>
+
+            {onOpenEscrow && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenEscrow(entry)
+                }
+                disabled={busy}
+                className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+              >
+                Continue to Escrow →
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

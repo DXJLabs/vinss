@@ -75,6 +75,10 @@ export default function DealRoomPage() {
   const [counterSource, setCounterSource] =
     useState<ConversationEntry | null>(null);
 
+  // Accepted Offer handoff stays local and only pre-fills the Escrow workflow.
+  const [escrowOfferSource, setEscrowOfferSource] =
+    useState<ConversationEntry | null>(null);
+
   const {
     entries,
     setEntries,
@@ -82,6 +86,7 @@ export default function DealRoomPage() {
     setDraft,
     chatEndRef,
     participants,
+    selfRoutingIdentities,
     groups,
     selectedGroup,
     selectedGroupKey,
@@ -113,6 +118,7 @@ export default function DealRoomPage() {
     session,
     channelKey,
     participants,
+    selfRoutingIdentities,
     active: tab === "timeline" || tab === "offer",
     setBusy,
     setError,
@@ -480,6 +486,7 @@ export default function DealRoomPage() {
             // A new chat selection exits any stale counter flow.
             setMessageTarget(value);
             setCounterSource(null);
+            setEscrowOfferSource(null);
           }}
           onSendMessage={handleSendMessage}
           onRefresh={async () => {
@@ -493,6 +500,11 @@ export default function DealRoomPage() {
             // Counter editing happens in the Offer tab, but stays bound to this parent.
             setCounterSource(entry);
             setTab("offer");
+          }}
+          onOpenEscrow={(entry) => {
+            // The encrypted acceptance contains the final terms and accepted parent locator.
+            setEscrowOfferSource(entry);
+            setTab("escrow");
           }}
         />
       )}
@@ -528,6 +540,7 @@ export default function DealRoomPage() {
           setError={setError}
           busy={busy}
           agentDraft={agentEscrowDraft}
+          acceptedOffer={escrowOfferSource}
         />
       )}
 

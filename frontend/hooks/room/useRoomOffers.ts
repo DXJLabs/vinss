@@ -41,6 +41,7 @@ interface UseRoomOffersOptions {
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
   participants: RoomParticipant[];
+  selfRoutingIdentities: string[];
   active: boolean;
   setBusy: (value: boolean) => void;
   setError: (value: string | null) => void;
@@ -59,6 +60,26 @@ function stripLocator(locator: string): string {
 // Store lifecycle parent/root references as explicit hex strings.
 function canonicalLocator(locator: string): string {
   return `0x${stripLocator(locator)}`;
+}
+
+function uniqueOfferRoutingIdentities(
+  identities: Array<string | null | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const identity of identities) {
+    if (!identity?.trim()) continue;
+
+    const exact = identity.trim().toLowerCase();
+
+    if (!seen.has(exact)) {
+      seen.add(exact);
+      result.push(identity.trim());
+    }
+  }
+
+  return result;
 }
 
 // Produce a compact Agent/UI summary without leaking it outside local state.
@@ -80,6 +101,7 @@ export function useRoomOffers({
   session,
   channelKey,
   participants,
+  selfRoutingIdentities,
   active,
   setBusy,
   setError,
@@ -169,7 +191,12 @@ export function useRoomOffers({
     return {
       peer,
       route: {
-        recipientIdentity,
+        // Canonical felt formatting makes future Alice -> Bob and Bob -> Alice
+        // Offer routing independent from wallet leading-zero address formatting.
+        recipientIdentity:
+          canonicalStarknetAddress(
+            recipientIdentity,
+          ),
         encryptionKey: directKey,
         routingKey: directKey,
       },
@@ -244,19 +271,35 @@ export function useRoomOffers({
           participant.publicKey,
         );
 
-        // Incoming action: the opaque recipient tag represents this wallet.
-        routes.push({
-          recipientIdentity: session.account.address,
-          encryptionKey: directKey,
-          routingKey: directKey,
-        });
+        // Incoming actions may have used any exact address string this wallet
+        // previously announced. Try those aliases plus canonical felt form.
+        for (const identity of uniqueOfferRoutingIdentities([
+          session.account.address,
+          ...selfRoutingIdentities,
+          canonicalStarknetAddress(
+            session.account.address,
+          ),
+        ])) {
+          routes.push({
+            recipientIdentity: identity,
+            encryptionKey: directKey,
+            routingKey: directKey,
+          });
+        }
 
-        // Outgoing action: the opaque recipient tag represents the peer.
-        routes.push({
-          recipientIdentity: participant.address,
-          encryptionKey: directKey,
-          routingKey: directKey,
-        });
+        // Outgoing history may contain the peer's old textual address form.
+        for (const identity of uniqueOfferRoutingIdentities([
+          participant.address,
+          canonicalStarknetAddress(
+            participant.address,
+          ),
+        ])) {
+          routes.push({
+            recipientIdentity: identity,
+            encryptionKey: directKey,
+            routingKey: directKey,
+          });
+        }
       }
 
       // The backend returns ciphertext only; decryption remains local.
@@ -737,6 +780,7 @@ export function useRoomOffers({
     channelKey,
     messagingIdentity?.publicKey,
     participantFingerprint,
+    selfRoutingIdentities.join("|"),
   ]);
 
   return {
