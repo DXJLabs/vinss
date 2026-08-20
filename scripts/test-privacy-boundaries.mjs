@@ -3,12 +3,17 @@ import { readFile } from 'node:fs/promises';
 
 const agentClient = await readFile(new URL('../frontend/lib/agent.ts', import.meta.url), 'utf8');
 const rooms = await readFile(new URL('../frontend/app/rooms/page.tsx', import.meta.url), 'utf8');
-const agent = await readFile(new URL('../backend/src/agent/groq.ts', import.meta.url), 'utf8');
+const agent = await readFile(new URL('../backend/src/agent/providers/groq.ts', import.meta.url), 'utf8');
 
 assert.equal(agentClient.includes('GROQ_API_KEY'), false, 'Groq secret must never be referenced by frontend code');
 assert.equal(rooms.includes('secret {room.roomSecret}'), false, 'Room secret must not be rendered in the room list');
-assert.equal(/never.*sign.*send/i.test(agent), true, 'Agent system policy must prohibit transaction signing');
-assert.equal(agent.includes('viewing keys'), true, 'Agent system policy must prohibit viewing-key access');
+const agentPrompt = await readFile(new URL('../backend/src/agent/prompts.ts', import.meta.url), 'utf8');
+const runtime = await readFile(new URL('../backend/src/agent/runtime.ts', import.meta.url), 'utf8');
+assert.equal(/never.*sign.*send/i.test(agentPrompt), true, 'Agent system policy must prohibit transaction signing');
+assert.equal(agentPrompt.includes('viewing keys'), true, 'Agent system policy must prohibit viewing-key access');
+assert.equal(runtime.includes('Tool not allowed for'), true, 'Skill runtime must enforce tool scope');
+assert.equal(agentClient.includes('privacySafeTimeline'), true, 'Frontend must sanitize private timeline before Agent network request');
+assert.equal(agentClient.includes('roomLabel: input.context.roomLabel'), false, 'Room label must not be sent to remote Agent');
 console.log('privacy boundary checks: PASS');
 
 const discoverRoute = await readFile(new URL('../backend/src/routes/discover.ts', import.meta.url), 'utf8');

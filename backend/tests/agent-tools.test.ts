@@ -2,6 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  executeSkillTool,
+  toolDefinitionsForSkill,
+} from "../src/agent/runtime.ts";
+import {
+  getAgentSkill,
+} from "../src/agent/skills/registry.ts";
+
+import {
   analyzeOffer,
   calculateFee,
   draftCounterOffer,
@@ -99,5 +107,92 @@ test("agent tool allowlist has no execution tools", () => {
         25,
       ),
     /Tool not allowed/,
+  );
+});
+
+
+test("skills expose only domain tools", () => {
+  const chatNames =
+    toolDefinitionsForSkill(
+      getAgentSkill("chat"),
+    ).map(
+      (tool) =>
+        tool.function.name,
+    );
+
+  assert.deepEqual(
+    chatNames.sort(),
+    [
+      "draft_message",
+      "inspect_deal_state",
+    ].sort(),
+  );
+
+  const offerNames =
+    toolDefinitionsForSkill(
+      getAgentSkill("offer"),
+    ).map(
+      (tool) =>
+        tool.function.name,
+    );
+
+  assert.equal(
+    offerNames.includes(
+      "prepare_escrow",
+    ),
+    false,
+  );
+
+  const escrowNames =
+    toolDefinitionsForSkill(
+      getAgentSkill("escrow"),
+    ).map(
+      (tool) =>
+        tool.function.name,
+    );
+
+  assert.equal(
+    escrowNames.includes(
+      "draft_message",
+    ),
+    false,
+  );
+});
+
+test("skill boundary blocks cross-domain tool execution", () => {
+  assert.throws(
+    () =>
+      executeSkillTool(
+        getAgentSkill("chat"),
+        "draft_offer",
+        {},
+        {},
+        25,
+      ),
+    /Tool not allowed for chat skill/,
+  );
+
+  assert.throws(
+    () =>
+      executeSkillTool(
+        getAgentSkill("offer"),
+        "prepare_escrow",
+        {},
+        {},
+        25,
+      ),
+    /Tool not allowed for offer skill/,
+  );
+
+  assert.throws(
+    () =>
+      executeSkillTool(
+        getAgentSkill("escrow"),
+        "draft_message",
+        {},
+        {},
+        25,
+      ),
+    /Tool not allowed for escrow skill/,
   );
 });

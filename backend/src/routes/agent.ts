@@ -4,10 +4,16 @@ import {
   type Response,
 } from "express";
 import {
+  runVinssAgent,
+} from "../agent/index.js";
+import {
   configuredProviders,
   isLlmSelection,
-  runVinssAgent,
-} from "../agent/router.js";
+} from "../agent/providers/registry.js";
+import {
+  isAgentSkillId,
+  listAgentSkills,
+} from "../agent/skills/registry.js";
 
 export const agentRouter =
   Router();
@@ -25,6 +31,8 @@ agentRouter.get(
         "groq",
       configuredProviders:
         configuredProviders(),
+      skills:
+        listAgentSkills(),
     });
   },
 );
@@ -35,21 +43,25 @@ agentRouter.post(
     req: Request,
     res: Response,
   ) => {
-    const body = req.body as {
-      message?: unknown;
-      context?: unknown;
-      provider?: unknown;
-    };
+    const body =
+      req.body as {
+        message?: unknown;
+        context?: unknown;
+        skill?: unknown;
+        provider?: unknown;
+      };
 
     if (
       typeof body.message !==
         "string" ||
       !body.message.trim()
     ) {
-      return res.status(400).json({
-        error:
-          "message is required.",
-      });
+      return res
+        .status(400)
+        .json({
+          error:
+            "message is required.",
+        });
     }
 
     if (
@@ -57,38 +69,57 @@ agentRouter.post(
       typeof body.context !==
         "object"
     ) {
-      return res.status(400).json({
-        error:
-          "context must be explicitly shared by the user.",
-      });
+      return res
+        .status(400)
+        .json({
+          error:
+            "privacy-safe context is required.",
+        });
     }
 
     if (
-      body.provider !== undefined &&
+      !isAgentSkillId(
+        body.skill,
+      )
+    ) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "skill must be chat, offer, or escrow.",
+        });
+    }
+
+    if (
+      body.provider !==
+        undefined &&
       !isLlmSelection(
         body.provider,
       )
     ) {
-      return res.status(400).json({
-        error:
-          "provider must be auto, groq, openai, anthropic, or qwen.",
-      });
+      return res
+        .status(400)
+        .json({
+          error:
+            "provider must be auto, groq, openai, anthropic, or qwen.",
+        });
     }
 
     try {
-      const feeBps = Number(
-        process.env
-          .VINSS_FEE_BPS ??
-          "25",
-      );
-
       const result =
         await runVinssAgent({
           message:
             body.message.trim(),
           context:
             body.context as any,
-          feeBps,
+          feeBps:
+            Number(
+              process.env
+                .VINSS_FEE_BPS ||
+                "25",
+            ),
+          skill:
+            body.skill,
           provider:
             body.provider as any,
         });
@@ -98,12 +129,15 @@ agentRouter.post(
         contextShared: true,
       });
     } catch (err) {
-      return res.status(500).json({
-        error:
-          err instanceof Error
-            ? err.message
-            : "Agent failed.",
-      });
+      return res
+        .status(500)
+        .json({
+          error:
+            err instanceof
+              Error
+              ? err.message
+              : "Agent failed.",
+        });
     }
   },
 );

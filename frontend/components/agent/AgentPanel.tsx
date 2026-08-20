@@ -8,6 +8,7 @@ import {
 import {
   askVinssAgent,
   type AgentProposal,
+  type AgentSkillId,
   type AgentTimelineItem,
   type DealStage,
 } from "@/lib/agent";
@@ -33,6 +34,20 @@ interface AgentPanelProps {
 interface AgentCommand {
   label: string;
   prompt: string;
+}
+
+function skillForContext(
+  contextKind: AgentContextKind,
+): AgentSkillId {
+  if (contextKind === "deal") {
+    return "offer";
+  }
+
+  if (contextKind === "escrow") {
+    return "escrow";
+  }
+
+  return "chat";
 }
 
 function stageLabel(
@@ -345,6 +360,10 @@ export function AgentPanel({
       const result =
         await askVinssAgent({
           message: request,
+          skill:
+            skillForContext(
+              contextKind,
+            ),
           context: {
             roomLabel:
               roomLabel
@@ -523,11 +542,11 @@ export function AgentPanel({
 
                   <span>
                     <span className="block text-xs text-paper/70">
-                      Allow the Agent to read this context
+                      Allow privacy-safe metadata
                     </span>
 
                     <span className="mt-1 block text-[10px] leading-relaxed text-paper/30">
-                      Only the currently selected context is sent for analysis. Wallet keys and private keys are never shared.
+                      Message text, Offer terms, room labels and participant addresses stay on this device. Only privacy-safe workflow metadata is shared. Your Agent instruction itself is sent for analysis.
                     </span>
                   </span>
                 </button>

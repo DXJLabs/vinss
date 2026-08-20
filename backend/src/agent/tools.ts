@@ -9,9 +9,9 @@ export interface DealContext {
   roomLabel?: string;
 
   latestOffer?: {
-    asset: string;
-    amount: string;
-    paymentTerms: string;
+    asset?: string;
+    amount?: string;
+    paymentTerms?: string;
     conditions?: string;
     actionLocator?: string;
   };
@@ -157,18 +157,32 @@ export function analyzeOffer(context: DealContext) {
 
   const findings: string[] = [];
 
-  if (!offer.paymentTerms.trim()) {
-    findings.push("Payment timing is not specified.");
+  if (!offer.paymentTerms?.trim()) {
+    findings.push(
+      "Payment timing is not available in the shared context.",
+    );
   }
 
   if (!offer.conditions?.trim()) {
-    findings.push("No explicit conditions were provided.");
+    findings.push(
+      "Conditions are not available in the shared context.",
+    );
   }
 
-  const numericAmount = Number(offer.amount);
+  const numericAmount = Number(
+    offer.amount,
+  );
 
-  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-    findings.push("Offer amount is missing or invalid.");
+  if (
+    !offer.amount ||
+    !Number.isFinite(
+      numericAmount,
+    ) ||
+    numericAmount <= 0
+  ) {
+    findings.push(
+      "Offer amount is not available or invalid.",
+    );
   }
 
   return {
@@ -234,8 +248,22 @@ export function draftCounterOffer(
     throw new Error("An offer is required to draft a counter-offer.");
   }
 
-  const nextAmount = amount?.trim() || offer.amount;
-  const nextTerms = terms?.trim() || offer.paymentTerms;
+  if (
+    !offer.asset ||
+    !offer.amount ||
+    !offer.paymentTerms
+  ) {
+    throw new Error(
+      "Private Offer terms are not available to the remote Agent. Supply the intended counter terms explicitly.",
+    );
+  }
+
+  const nextAmount =
+    amount?.trim() ||
+    offer.amount;
+  const nextTerms =
+    terms?.trim() ||
+    offer.paymentTerms;
 
   return {
     type: "draft_counter_offer",
