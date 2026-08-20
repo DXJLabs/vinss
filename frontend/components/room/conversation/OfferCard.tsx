@@ -162,18 +162,18 @@ export function OfferCard({
           {action.dealType && (
             <span className="max-w-[46%] truncate border border-wire px-2 py-1 font-display text-[7px] uppercase tracking-[0.12em] text-paper/30">
               {action.dealType === "otc"
-                ? "Token trade"
+                ? "Token Trade"
                 : action.dealType === "freelance"
-                  ? "Service"
+                  ? "Freelance"
                   : action.dealType === "goods"
-                    ? "Goods"
+                    ? "Physical Goods"
                     : action.dealType === "digital_goods"
-                      ? "Digital"
+                      ? "Digital Goods"
                       : action.dealType === "bounty"
                         ? "Bounty"
                         : action.dealType === "nft"
-                          ? "NFT"
-                          : "Custom"}
+                          ? "NFT Deal"
+                          : "Custom Deal"}
             </span>
           )}
         </div>

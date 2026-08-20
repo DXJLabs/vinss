@@ -489,6 +489,13 @@ export default function DealRoomPage() {
             setEscrowOfferSource(null);
           }}
           onSendMessage={handleSendMessage}
+          onCreateOffer={() => {
+            // Offer editing starts from the active private chat and keeps
+            // that exact peer as the encrypted Offer counterparty.
+            setCounterSource(null);
+            setEscrowOfferSource(null);
+            setTab("offer");
+          }}
           onRefresh={async () => {
             // Manual Sync refreshes chat first, then private Offer cards.
             await handleRefresh(false);

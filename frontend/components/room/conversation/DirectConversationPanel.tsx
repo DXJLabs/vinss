@@ -28,6 +28,7 @@ interface DirectConversationPanelProps {
   onBack: () => void;
   onDraftChange: (value: string) => void;
   onSendMessage: () => void | Promise<void>;
+  onCreateOffer: () => void;
   onAcceptOffer: (
     entry: ConversationEntry,
   ) => Promise<boolean>;
@@ -56,6 +57,7 @@ export function DirectConversationPanel({
   onBack,
   onDraftChange,
   onSendMessage,
+  onCreateOffer,
   onAcceptOffer,
   onRejectOffer,
   onCounterOffer,
@@ -270,22 +272,37 @@ export function DirectConversationPanel({
       </div>
 
       <div className="border border-wire bg-vault/20 p-2">
-        <div className="mb-2 flex items-center justify-between border-b border-wire/60 px-2 pb-2">
+        <div className="mb-2 flex items-center justify-between gap-3 border-b border-wire/60 px-2 pb-2">
           <span className="font-display text-[9px] uppercase tracking-widest text-paper/30">
             {peerLabel}
           </span>
 
-          <span
-            className={
-              peerTyping
-                ? "text-[9px] text-signal/70"
-                : "text-[9px] text-paper/25"
-            }
-          >
-            {peerTyping
-              ? "Typing…"
-              : "Private"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              className={
+                peerTyping
+                  ? "text-[9px] text-signal/70"
+                  : "text-[9px] text-paper/25"
+              }
+            >
+              {peerTyping
+                ? "Typing…"
+                : "Private"}
+            </span>
+
+            <button
+              type="button"
+              onClick={onCreateOffer}
+              disabled={
+                !connected ||
+                !channelReady ||
+                busy
+              }
+              className="border border-amber-400/30 px-2.5 py-1.5 font-display text-[8px] uppercase tracking-[0.12em] text-amber-300/75 transition hover:bg-amber-400/10 disabled:opacity-30"
+            >
+              + Create Offer
+            </button>
+          </div>
         </div>
 
         <div className="flex items-end gap-2">

@@ -60,6 +60,7 @@ interface ConversationPanelProps {
   ) => void;
   onSendMessage:
     () => void | Promise<void>;
+  onCreateOffer: () => void;
   onRefresh:
     () => void | Promise<void>;
   onAcceptOffer: (
@@ -96,6 +97,7 @@ export function ConversationPanel({
   onDraftChange,
   onMessageTargetChange,
   onSendMessage,
+  onCreateOffer,
   onRefresh,
   onAcceptOffer,
   onRejectOffer,
@@ -305,6 +307,9 @@ export function ConversationPanel({
           }
           onSendMessage={
             onSendMessage
+          }
+          onCreateOffer={
+            onCreateOffer
           }
           onAcceptOffer={
             onAcceptOffer
