@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  useEffect,
+  useRef,
   useState,
   type MutableRefObject,
 } from "react";
@@ -41,6 +43,9 @@ interface DirectConversationPanelProps {
   onOpenEscrow: (
     entry: ConversationEntry,
   ) => void;
+  onOfferRead: (
+    entry: ConversationEntry,
+  ) => void | Promise<void>;
 }
 
 export function DirectConversationPanel({
@@ -62,9 +67,14 @@ export function DirectConversationPanel({
   onRejectOffer,
   onCounterOffer,
   onOpenEscrow,
+  onOfferRead,
 }: DirectConversationPanelProps) {
   const [proofEntry, setProofEntry] =
     useState<ConversationEntry | null>(null);
+  const scrollBoxRef = useRef<HTMLDivElement | null>(null);
+  const endNodeRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const pairEntries = [
     ...entries,
@@ -128,6 +138,41 @@ export function DirectConversationPanel({
   const peerLabel =
     shortAddress(peerAddress);
 
+  useEffect(() => {
+    autoScrollRef.current = true;
+    setShowJumpToLatest(false);
+    chatEndRef.current = endNodeRef.current;
+
+    const timer = window.setTimeout(() => {
+      endNodeRef.current?.scrollIntoView({ block: "end" });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [peerAddress]);
+
+  const updateScrollIntent = () => {
+    const node = scrollBoxRef.current;
+    if (!node) return;
+
+    const distanceFromBottom =
+      node.scrollHeight - node.scrollTop - node.clientHeight;
+    const nearBottom = distanceFromBottom < 96;
+
+    autoScrollRef.current = nearBottom;
+    setShowJumpToLatest(!nearBottom);
+    chatEndRef.current = nearBottom ? endNodeRef.current : null;
+  };
+
+  const jumpToLatest = () => {
+    autoScrollRef.current = true;
+    setShowJumpToLatest(false);
+    chatEndRef.current = endNodeRef.current;
+    endNodeRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  };
+
   return (
     <>
       <div className="flex items-center justify-between gap-3 border-x border-b border-wire bg-vault/20 px-4 py-3">
@@ -149,7 +194,12 @@ export function DirectConversationPanel({
         </div>
       </div>
 
-      <div className="min-h-[360px] max-h-[58vh] overflow-y-auto border-x border-b border-wire bg-black/10">
+      <div className="relative">
+        <div
+          ref={scrollBoxRef}
+          onScroll={updateScrollIntent}
+          className="min-h-[360px] max-h-[58vh] overflow-y-auto overscroll-contain border-x border-b border-wire bg-black/10"
+        >
         {pairEntries.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
@@ -230,44 +280,38 @@ export function DirectConversationPanel({
                     onOpenEscrow={
                       onOpenEscrow
                     }
+                    onSeen={onOfferRead}
+                    onViewProof={
+                      setProofEntry
+                    }
                   />
 
-                  {entry.transactionHash && (
-                    <div
-                      className={
-                        sameStarknetAddress(
-                          entry.senderAddress,
-                          walletAddress,
-                        )
-                          ? "mt-1.5 text-right"
-                          : "mt-1.5 text-left"
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setProofEntry(
-                            entry,
-                          )
-                        }
-                        className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/20 transition hover:text-signal/70"
-                      >
-                        View proof
-                      </button>
-                    </div>
-                  )}
                 </li>
               );
             })}
 
             <div
               ref={(node) => {
-                chatEndRef.current = node;
+                endNodeRef.current = node;
+                if (autoScrollRef.current) {
+                  chatEndRef.current = node;
+                }
               }}
               className="h-px"
               aria-hidden="true"
             />
           </ul>
+        )}
+        </div>
+
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            className="absolute bottom-3 right-3 border border-signal/30 bg-vault/95 px-3 py-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal shadow-lg backdrop-blur"
+          >
+            ↓ Latest
+          </button>
         )}
       </div>
 

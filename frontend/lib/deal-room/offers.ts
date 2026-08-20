@@ -32,6 +32,11 @@ import {
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
 
+export interface PreparedOfferSend {
+  actionLocator: bigint;
+  payloadCommitment: bigint;
+}
+
 /**
  * Commit the exact public Offer envelope that the Cairo helper records.
  * The encrypted payload itself remains private.
@@ -68,6 +73,9 @@ export async function sendOfferAction(
   channelKey: ChannelKey,
   payload: OfferActionPayload,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.offerHelper) {
     throw new Error(
@@ -133,6 +141,15 @@ export async function sendOfferAction(
     ciphertextChunks,
   );
 
+  // Reflect recovery metadata before Ready X can background the app.
+  // A delayed wallet callback must not make an already-submitted Offer look failed.
+  if (onPrepared) {
+    await onPrepared({
+      actionLocator,
+      payloadCommitment,
+    });
+  }
+
   // Keep calldata aligned with VinssOfferHelper.privacy_invoke V2.
   const calldata = [
     OFFER_ENVELOPE_VERSION,
@@ -184,12 +201,16 @@ export const createOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "create" },
     route,
+    onPrepared,
   );
 
 export const counterOffer = (
@@ -197,12 +218,16 @@ export const counterOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "counter" },
     route,
+    onPrepared,
   );
 
 export const acceptOffer = (
@@ -210,12 +235,16 @@ export const acceptOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "accept" },
     route,
+    onPrepared,
   );
 
 export const rejectOffer = (
@@ -223,12 +252,16 @@ export const rejectOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "reject" },
     route,
+    onPrepared,
   );
 
 export const cancelOffer = (
@@ -236,12 +269,16 @@ export const cancelOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "cancel" },
     route,
+    onPrepared,
   );
 
 export const expireOffer = (
@@ -249,12 +286,16 @@ export const expireOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "expire" },
     route,
+    onPrepared,
   );
 
 export const prepareEscrowFromOffer = (
@@ -262,12 +303,16 @@ export const prepareEscrowFromOffer = (
   channelKey: ChannelKey,
   payload: Omit<OfferActionPayload, "kind">,
   route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedOfferSend,
+  ) => void | Promise<void>,
 ) =>
   sendOfferAction(
     account,
     channelKey,
     { ...payload, kind: "prepare_escrow" },
     route,
+    onPrepared,
   );
 
 /**

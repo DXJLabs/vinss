@@ -112,6 +112,7 @@ export default function DealRoomPage() {
     counterDirectOffer,
     acceptDirectOffer,
     rejectDirectOffer,
+    markOfferRead,
     handleOfferRefresh,
   } = useRoomOffers({
     roomId: room?.id ?? null,
@@ -503,6 +504,7 @@ export default function DealRoomPage() {
           }}
           onAcceptOffer={acceptDirectOffer}
           onRejectOffer={rejectDirectOffer}
+          onOfferRead={markOfferRead}
           onCounterOffer={(entry) => {
             // Counter editing happens in the Offer tab, but stays bound to this parent.
             setCounterSource(entry);

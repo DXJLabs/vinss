@@ -75,6 +75,9 @@ interface ConversationPanelProps {
   onOpenEscrow: (
     entry: ConversationEntry,
   ) => void;
+  onOfferRead: (
+    entry: ConversationEntry,
+  ) => void | Promise<void>;
 }
 
 export function ConversationPanel({
@@ -103,6 +106,7 @@ export function ConversationPanel({
   onRejectOffer,
   onCounterOffer,
   onOpenEscrow,
+  onOfferRead,
 }: ConversationPanelProps) {
   const groupMode =
     messageTarget ===
@@ -323,6 +327,7 @@ export function ConversationPanel({
           onOpenEscrow={
             onOpenEscrow
           }
+          onOfferRead={onOfferRead}
         />
       )}
     </section>

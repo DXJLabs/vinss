@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 
@@ -20,6 +21,12 @@ interface OfferCardProps {
   onOpenEscrow?: (
     entry: ConversationEntry,
   ) => void;
+  onViewProof?: (
+    entry: ConversationEntry,
+  ) => void;
+  onSeen?: (
+    entry: ConversationEntry,
+  ) => void | Promise<void>;
 }
 
 function cardTitle(
@@ -83,6 +90,8 @@ export function OfferCard({
   onReject,
   onCounter,
   onOpenEscrow,
+  onSeen,
+  onViewProof,
 }: OfferCardProps) {
   const action =
     entry.offerAction;
@@ -97,6 +106,52 @@ export function OfferCard({
       walletAddress,
     );
 
+  const offerCardRef =
+    useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (
+      ownAction ||
+      !entry.transactionHash ||
+      !onSeen
+    ) {
+      return;
+    }
+
+    const node = offerCardRef.current;
+    if (!node) return;
+
+    const observer =
+      new IntersectionObserver(
+        (records) => {
+          const visible = records.some(
+            (record) =>
+              record.isIntersecting &&
+              record.intersectionRatio >= 0.6,
+          );
+
+          if (!visible) return;
+
+          void onSeen(entry);
+          observer.disconnect();
+        },
+        {
+          threshold: [0.6],
+        },
+      );
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [
+    ownAction,
+    entry.actionLocator,
+    entry.transactionHash,
+    onSeen,
+  ]);
+
   const accepted =
     action.kind === "accept";
 
@@ -105,6 +160,7 @@ export function OfferCard({
 
   return (
     <div
+      ref={offerCardRef}
       className={
         ownAction
           ? "ml-auto w-[82%] max-w-sm"
@@ -131,21 +187,41 @@ export function OfferCard({
               : "Received"}
           </span>
 
-          <span
-            className={
-              accepted
-                ? "text-[9px] text-signal/70"
-                : rejected
-                  ? "text-[9px] text-danger/70"
-                  : "text-[9px] text-paper/30"
-            }
-          >
-            {stateLabel(
-              action.kind,
-              ownAction,
-              actionable,
-            )}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={
+                accepted
+                  ? "text-[9px] text-signal/70"
+                  : rejected
+                    ? "text-[9px] text-danger/70"
+                    : "text-[9px] text-paper/30"
+              }
+            >
+              {stateLabel(
+                action.kind,
+                ownAction,
+                actionable,
+              )}
+            </span>
+
+            {ownAction &&
+              entry.transactionHash && (
+                <span
+                  className={
+                    entry.readAt
+                      ? "text-[10px] text-signal"
+                      : "text-[10px] text-paper/35"
+                  }
+                  title={
+                    entry.readAt
+                      ? "Read"
+                      : "Sent"
+                  }
+                >
+                  {entry.readAt ? "✓✓" : "✓"}
+                </span>
+              )}
+          </div>
         </div>
 
         <div className="mt-3 flex items-end justify-between gap-3">
@@ -200,6 +276,29 @@ export function OfferCard({
             </p>
           )}
         </div>
+
+        {entry.transactionHash && onViewProof && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-2.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/25 text-[8px] text-signal">
+                ✓
+              </span>
+              <span className="text-[9px] text-paper/35">
+                Recorded on Starknet
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                onViewProof(entry)
+              }
+              className="font-display text-[8px] uppercase tracking-[0.14em] text-signal/65 transition hover:text-signal"
+            >
+              Proof ↗
+            </button>
+          </div>
+        )}
 
         {actionable && (
           <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-wire/60 pt-3">

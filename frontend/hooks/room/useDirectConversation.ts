@@ -30,6 +30,10 @@ import {
 import type { MessagePayload } from "@/types/deal-room";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { humanizeError } from "@/lib/errors/uiError";
+import {
+  loadEncryptedLocalJson,
+  saveEncryptedLocalJson,
+} from "@/lib/privacy/encryptedChatCache";
 
 interface UseDirectConversationOptions {
   roomId: string | null;
@@ -346,11 +350,14 @@ export function useDirectConversation({
           );
         }
 
-        return [...byLocator.values()].sort(
+        const next = [...byLocator.values()].sort(
           (left, right) =>
             new Date(left.sentAt).getTime() -
             new Date(right.sentAt).getTime(),
         );
+
+        void persistHistory(next);
+        return next;
       });
     } catch (err) {
       console.error(
@@ -391,6 +398,34 @@ export function useDirectConversation({
         selectedPeer.address,
       )
     );
+  }
+
+  function historyStorageKey(): string | null {
+    if (!roomId || !session || !selectedPeer) {
+      return null;
+    }
+
+    return (
+      `vinss:direct-history:v1:${roomId}:` +
+      `${canonicalStarknetAddress(session.account.address)}:` +
+      canonicalStarknetAddress(selectedPeer.address)
+    );
+  }
+
+  async function persistHistory(
+    nextEntries: ConversationEntry[],
+  ): Promise<void> {
+    const storageKey = historyStorageKey();
+    if (!storageKey) return;
+
+    const directKey = await resolveDirectKey();
+    if (!directKey) return;
+
+    await saveEncryptedLocalJson(storageKey, directKey, {
+      version: 1,
+      savedAt: Date.now(),
+      entries: nextEntries,
+    });
   }
 
   async function sendDirectMessage():
@@ -471,40 +506,46 @@ export function useDirectConversation({
 
           setMessagePending(true);
 
-          window.localStorage.setItem(
+          void saveEncryptedLocalJson(
             storageKey,
-            JSON.stringify({
-              actionLocator:
-                preparedLocator,
+            directKey,
+            {
+              actionLocator: preparedLocator,
               body,
               sentAt,
-              recipientAddress:
-                selectedPeer.address,
+              recipientAddress: selectedPeer.address,
               createdAt: Date.now(),
-            }),
-          );
-
-          setEntries((previous) => [
-            ...previous.filter(
-              (entry) =>
-                entry.actionLocator !==
-                preparedLocator,
-            ),
-            {
-              id: `direct:${preparedLocator}`,
-              kind: "message",
-              summary: body,
-              transactionHash: "",
-              actionLocator:
-                preparedLocator!,
-              sentAt,
-              scope: "direct",
-              senderAddress:
-                session.account.address,
-              recipientAddress:
-                selectedPeer.address,
             },
-          ]);
+          ).catch((err) => {
+            console.error(
+              "[VINSS DIRECT PENDING CACHE ERROR]",
+              err,
+            );
+          });
+
+          setEntries((previous) => {
+            const next: ConversationEntry[] = [
+              ...previous.filter(
+                (entry) =>
+                  entry.actionLocator !==
+                  preparedLocator,
+              ),
+              {
+                id: `direct:${preparedLocator}`,
+                kind: "message",
+                summary: body,
+                transactionHash: "",
+                actionLocator: preparedLocator!,
+                sentAt,
+                scope: "direct",
+                senderAddress: session.account.address,
+                recipientAddress: selectedPeer.address,
+              },
+            ];
+
+            void persistHistory(next);
+            return next;
+          });
 
           setDraft("");
         },
@@ -687,31 +728,24 @@ export function useDirectConversation({
 
     let stopped = false;
 
-    const checkPending = () => {
+    const checkPending = async () => {
       if (stopped) return;
 
-      const raw =
-        window.localStorage.getItem(
-          storageKey,
-        );
-
-      if (!raw) {
+      if (!window.localStorage.getItem(storageKey)) {
         setMessagePending(false);
         return;
       }
 
-      let pending: {
+      const directKey = await resolveDirectKey();
+      if (!directKey || stopped) return;
+
+      const pending = await loadEncryptedLocalJson<{
         actionLocator: string;
         body?: string;
         createdAt: number;
-      };
+      }>(storageKey, directKey);
 
-      try {
-        pending = JSON.parse(raw);
-      } catch {
-        window.localStorage.removeItem(
-          storageKey,
-        );
+      if (!pending) {
         setMessagePending(false);
         return;
       }
@@ -774,10 +808,12 @@ export function useDirectConversation({
       }
     };
 
-    checkPending();
+    void checkPending();
 
     const timer = window.setInterval(
-      checkPending,
+      () => {
+        void checkPending();
+      },
       2_000,
     );
 
@@ -790,6 +826,54 @@ export function useDirectConversation({
     peerKey,
     session?.account.address,
     entries,
+  ]);
+
+  // Hydrate encrypted local history before network discovery for fast reopen.
+  useEffect(() => {
+    if (
+      !active ||
+      !roomId ||
+      !session ||
+      !selectedPeer ||
+      !messagingIdentity
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrate = async () => {
+      const storageKey = historyStorageKey();
+      if (!storageKey) return;
+
+      const directKey = await resolveDirectKey();
+      if (!directKey || cancelled) return;
+
+      const cached = await loadEncryptedLocalJson<{
+        version: 1;
+        savedAt: number;
+        entries: ConversationEntry[];
+      }>(storageKey, directKey);
+
+      if (cancelled || !cached?.entries?.length) return;
+
+      setEntries((previous) =>
+        previous.length > 0 ? previous : cached.entries,
+      );
+    };
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    roomId,
+    session?.account.address,
+    peerKey,
+    selectedPeer?.publicKey,
+    messagingIdentity?.publicKey,
   ]);
 
   // Sync only the selected direct pair. Group refresh cannot overwrite it.

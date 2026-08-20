@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 import { BACKEND_URL } from "@/lib/starknet/constants";
 import {
@@ -26,6 +26,10 @@ import type {
 } from "@/types/deal-room";
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import { humanizeError } from "@/lib/errors/uiError";
+import {
+  pollPresence,
+  publishPresence,
+} from "@/lib/privacy/presence";
 
 export interface OfferTermsInput {
   dealType?: DealType;
@@ -112,6 +116,9 @@ export function useRoomOffers({
   // Reuse the same per-room non-exportable ECDH identity used by direct chat.
   const [messagingIdentity, setMessagingIdentity] =
     useState<MessagingIdentity | null>(null);
+
+  const sentOfferReadReceiptsRef =
+    useRef<Set<string>>(new Set());
 
   // Stabilize the participant dependency so chat refreshes do not constantly
   // restart the Offer discovery interval with an equivalent participant set.
@@ -201,6 +208,57 @@ export function useRoomOffers({
         routingKey: directKey,
       },
     };
+  }
+
+  // Reflect a prepared action before Ready X takes over the mobile screen.
+  // The locator is the exact on-chain identity used by later discovery.
+  function appendPreparedOffer(
+    actionLocator: bigint,
+    action: OfferActionPayload,
+  ) {
+    const entry: ConversationEntry = {
+      id: `offer:${actionLocator.toString(16)}`,
+      kind: "offer",
+      summary: summarizeOffer(action),
+      transactionHash: "",
+      actionLocator:
+        actionLocator.toString(16),
+      sentAt:
+        action.sentAt ??
+        new Date().toISOString(),
+      scope: "direct",
+      senderAddress:
+        action.senderAddress,
+      recipientAddress:
+        action.recipientAddress,
+      offerAction: action,
+    };
+
+    setOfferEntries((previous) => {
+      const withoutSameLocator =
+        previous.filter(
+          (item) =>
+            stripLocator(
+              item.actionLocator,
+            ) !==
+            stripLocator(
+              entry.actionLocator,
+            ),
+        );
+
+      return [
+        ...withoutSameLocator,
+        entry,
+      ].sort(
+        (left, right) =>
+          new Date(
+            left.sentAt,
+          ).getTime() -
+          new Date(
+            right.sentAt,
+          ).getTime(),
+      );
+    });
   }
 
   // Merge one locally confirmed action immediately while discovery catches up.
@@ -416,6 +474,88 @@ export function useRoomOffers({
     }
   }
 
+  async function markOfferRead(
+    source: ConversationEntry,
+  ): Promise<void> {
+    if (
+      !session ||
+      !source.offerAction ||
+      !source.transactionHash
+    ) {
+      return;
+    }
+
+    const action = source.offerAction;
+
+    if (
+      !sameStarknetAddress(
+        action.recipientAddress,
+        session.account.address,
+      )
+    ) {
+      return;
+    }
+
+    const peerAddress = action.senderAddress;
+    if (!peerAddress) return;
+
+    const locator =
+      stripLocator(source.actionLocator);
+    const receiptId =
+      `offer:${locator}`;
+
+    if (
+      sentOfferReadReceiptsRef.current.has(
+        receiptId,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { peer } =
+        await resolveDirectContext(
+          peerAddress,
+          session.account.address,
+        );
+
+      const directKey =
+        await deriveDirectMessageKey(
+          roomId!,
+          messagingIdentity!.privateKey,
+          peer.publicKey,
+        );
+
+      sentOfferReadReceiptsRef.current.add(
+        receiptId,
+      );
+
+      await publishPresence(
+        BACKEND_URL,
+        directKey,
+        {
+          version: 1,
+          type: "read",
+          senderAddress:
+            session.account.address,
+          sentAt:
+            new Date().toISOString(),
+          messageLocator: receiptId,
+        },
+        24 * 60 * 60 * 1000,
+      );
+    } catch (err) {
+      sentOfferReadReceiptsRef.current.delete(
+        receiptId,
+      );
+
+      console.error(
+        "[VINSS OFFER READ RECEIPT ERROR]",
+        err,
+      );
+    }
+  }
+
   /**
    * Run one wallet-backed Offer action behind a consistent error boundary.
    */
@@ -435,11 +575,46 @@ export function useRoomOffers({
 
       return true;
     } catch (err) {
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      // Ready X may submit successfully and still return late after a mobile
+      // background/remount. A timeout is therefore a pending result until
+      // encrypted discovery reconciles the exact prepared Offer locator.
+      const callbackDelayed =
+        /(?:timeout|timed out)/i.test(
+          raw,
+        );
+
+      if (callbackDelayed) {
+        console.warn(
+          `[VINSS OFFER ${scope} CALLBACK DELAYED]`,
+          err,
+        );
+
+        setError(null);
+
+        // Return to Chat. The prepared card remains visible and normal Offer
+        // polling fills its transaction hash when discovery sees the event.
+        void handleOfferRefresh(true);
+        return true;
+      }
+
       // Raw wallet/RPC detail is intentionally console-only.
-      console.error(`[VINSS OFFER ${scope} ERROR]`, err);
+      console.error(
+        `[VINSS OFFER ${scope} ERROR]`,
+        err,
+      );
 
       // The visible message stays short and safe.
-      setError(humanizeError(err, fallbackMessage));
+      setError(
+        humanizeError(
+          err,
+          fallbackMessage,
+        ),
+      );
 
       return false;
     } finally {
@@ -484,6 +659,15 @@ export function useRoomOffers({
           channelKey,
           action,
           route,
+          (prepared) => {
+            appendPreparedOffer(
+              prepared.actionLocator,
+              {
+                ...action,
+                kind: "create",
+              },
+            );
+          },
         );
 
         // Reflect confirmed wallet output immediately in the direct chat.
@@ -559,6 +743,15 @@ export function useRoomOffers({
           channelKey,
           action,
           route,
+          (prepared) => {
+            appendPreparedOffer(
+              prepared.actionLocator,
+              {
+                ...action,
+                kind: "counter",
+              },
+            );
+          },
         );
 
         appendLocalOffer(result, {
@@ -634,6 +827,15 @@ export function useRoomOffers({
           channelKey,
           action,
           route,
+          (prepared) => {
+            appendPreparedOffer(
+              prepared.actionLocator,
+              {
+                ...action,
+                kind: "accept",
+              },
+            );
+          },
         );
 
         appendLocalOffer(result, {
@@ -707,6 +909,15 @@ export function useRoomOffers({
           channelKey,
           action,
           route,
+          (prepared) => {
+            appendPreparedOffer(
+              prepared.actionLocator,
+              {
+                ...action,
+                kind: "reject",
+              },
+            );
+          },
         );
 
         appendLocalOffer(result, {
@@ -716,6 +927,135 @@ export function useRoomOffers({
       },
     );
   }
+
+  useEffect(() => {
+    if (
+      !active ||
+      !roomId ||
+      !session ||
+      !messagingIdentity ||
+      !participantFingerprint
+    ) {
+      return;
+    }
+
+    let stopped = false;
+    let running = false;
+
+    const pollOfferReads = async () => {
+      if (stopped || running) return;
+
+      running = true;
+
+      try {
+        const readByLocator =
+          new Map<string, string>();
+
+        for (const participant of participants) {
+          const directKey =
+            await deriveDirectMessageKey(
+              roomId,
+              messagingIdentity.privateKey,
+              participant.publicKey,
+            );
+
+          const events =
+            await pollPresence(
+              BACKEND_URL,
+              directKey,
+            );
+
+          for (const event of events) {
+            if (
+              event.type !== "read" ||
+              !event.messageLocator ||
+              !event.messageLocator.startsWith(
+                "offer:",
+              ) ||
+              !sameStarknetAddress(
+                event.senderAddress,
+                participant.address,
+              )
+            ) {
+              continue;
+            }
+
+            readByLocator.set(
+              stripLocator(
+                event.messageLocator.slice(
+                  "offer:".length,
+                ),
+              ),
+              event.sentAt,
+            );
+          }
+        }
+
+        if (
+          stopped ||
+          readByLocator.size === 0
+        ) {
+          return;
+        }
+
+        setOfferEntries((previous) =>
+          previous.map((entry) => {
+            if (
+              entry.scope !== "direct" ||
+              !sameStarknetAddress(
+                entry.senderAddress,
+                session.account.address,
+              )
+            ) {
+              return entry;
+            }
+
+            const readAt =
+              readByLocator.get(
+                stripLocator(
+                  entry.actionLocator,
+                ),
+              );
+
+            return readAt
+              ? {
+                  ...entry,
+                  readAt:
+                    entry.readAt ?? readAt,
+                }
+              : entry;
+          }),
+        );
+      } catch (err) {
+        console.error(
+          "[VINSS OFFER READ POLL ERROR]",
+          err,
+        );
+      } finally {
+        running = false;
+      }
+    };
+
+    void pollOfferReads();
+
+    const timer = window.setInterval(
+      () => {
+        void pollOfferReads();
+      },
+      1500,
+    );
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    active,
+    roomId,
+    session?.account.address,
+    messagingIdentity?.publicKey,
+    participantFingerprint,
+  ]);
 
   useEffect(() => {
     // Poll only while Chat or Offer UI is active and private routing is ready.
@@ -789,6 +1129,7 @@ export function useRoomOffers({
     counterDirectOffer,
     acceptDirectOffer,
     rejectDirectOffer,
+    markOfferRead,
     handleOfferRefresh,
   };
 }
