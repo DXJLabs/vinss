@@ -583,6 +583,35 @@ export function useDirectConversation({
           ? err.message
           : String(err);
 
+      // Ready X may successfully submit the Starknet transaction while the
+      // browser loses or delays the wallet callback during a mobile remount.
+      // A callback timeout is therefore a recoverable pending state, not a
+      // transaction failure. Discovery will reconcile the public locator.
+      const callbackDelayed =
+        raw ===
+        "VINSS_DIRECT_CALLBACK_TIMEOUT";
+
+      if (
+        callbackDelayed &&
+        preparedLocator
+      ) {
+        console.warn(
+          "[VINSS DIRECT CALLBACK DELAYED]",
+          {
+            actionLocator:
+              preparedLocator,
+          },
+        );
+
+        setMessagePending(true);
+        setError(null);
+
+        // Trigger one immediate discovery pass instead of waiting for the
+        // normal polling interval to reconcile the confirmed transaction.
+        void refreshDirect(true);
+        return;
+      }
+
       console.error(
         "[VINSS DIRECT SEND ERROR]",
         err,
