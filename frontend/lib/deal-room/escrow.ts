@@ -23,8 +23,6 @@ import type { WalletAccountV6 } from "starknet";
 import { hash, num } from "starknet";
 import {
   CONTRACTS,
-  STRK_ADDRESS,
-  USDC_ADDRESS,
 } from "../starknet/constants";
 import {
   decryptPayload,
@@ -36,8 +34,6 @@ import {
 } from "@/lib/privacy/envelope";
 import type {
   EscrowActionPayload,
-  EscrowOfferSnapshot,
-  OfferActionPayload,
   SendActionResult,
 } from "@/types/deal-room";
 import {
@@ -106,102 +102,15 @@ async function invokeHelper(
 // ---------------------------------------------------------------------------
 // Accepted Offer -> generic Rekber settlement model
 // ---------------------------------------------------------------------------
-
-export interface SettlementAsset {
-  symbol: "STRK" | "USDC";
-  address: string;
-  decimals: number;
-}
-
-export function resolveSettlementAsset(
-  asset: string,
-): SettlementAsset | null {
-  const symbol = asset.trim().toUpperCase();
-
-  if (symbol === "STRK") {
-    return {
-      symbol: "STRK",
-      address: STRK_ADDRESS,
-      decimals: 18,
-    };
-  }
-
-  if (symbol === "USDC") {
-    return {
-      symbol: "USDC",
-      address: USDC_ADDRESS,
-      decimals: 6,
-    };
-  }
-
-  return null;
-}
-
-export function parseSettlementAmount(
-  amount: string,
-  decimals: number,
-): bigint {
-  const normalized = amount.trim();
-
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) {
-    throw new Error(
-      "Accepted Offer amount must be a positive decimal value.",
-    );
-  }
-
-  const [whole = "0", fraction = ""] =
-    normalized.split(".");
-
-  if (fraction.length > decimals) {
-    throw new Error(
-      `Accepted Offer amount has more than ${decimals} decimal places.`,
-    );
-  }
-
-  const paddedFraction =
-    fraction.padEnd(decimals, "0");
-
-  const base =
-    10n ** BigInt(decimals);
-
-  const result =
-    BigInt(whole) * base +
-    BigInt(paddedFraction || "0");
-
-  if (result <= 0n) {
-    throw new Error(
-      "Accepted Offer amount must be greater than zero.",
-    );
-  }
-
-  return result;
-}
-
-export function buildEscrowOfferSnapshot(
-  acceptedOfferLocator: string,
-  action: OfferActionPayload,
-): EscrowOfferSnapshot {
-  if (action.kind !== "accept") {
-    throw new Error(
-      "Escrow Rekber requires an accepted Offer.",
-    );
-  }
-
-  return {
-    acceptedOfferLocator,
-    termsOfferLocator:
-      action.parentOfferLocator ??
-      acceptedOfferLocator,
-    rootOfferLocator:
-      action.rootOfferLocator,
-    dealType: action.dealType,
-    asset: action.asset,
-    amount: action.amount,
-    paymentTerms: action.paymentTerms,
-    conditions: action.conditions,
-    expiresAt: action.expiresAt,
-  };
-}
+//
+// Re-export the pure production mapping so existing callers keep the same API
+// while scenario tests can exercise the mapping without wallet/browser state.
+export {
+  buildEscrowOfferSnapshot,
+  parseSettlementAmount,
+  resolveSettlementAsset,
+  type SettlementAsset,
+} from "./escrowSettlement";
 
 // ---------------------------------------------------------------------------
 // Private Escrow coordination

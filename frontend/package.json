@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:video": "playwright test --video=on"
+    "test:e2e:video": "playwright test --video=on",
+    "test:escrow-scenarios": "../backend/node_modules/.bin/tsx --test tests/escrow-offer-scenarios.test.ts"
   },
   "dependencies": {
     "@avnu/avnu-sdk": "^4.2.0",
