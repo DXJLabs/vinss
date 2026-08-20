@@ -1,9 +1,12 @@
-import express from "express";
 import cors from "cors";
+import express from "express";
+import swaggerUi from "swagger-ui-express";
+
 import { config } from "./config.js";
-import { discoverRouter } from "./routes/discover.js";
-import { agentRouter } from "./routes/agent.js";
 import { loyaltyRouter } from "./loyalty/routes.js";
+import { openApiDocument } from "./openapi.js";
+import { agentRouter } from "./routes/agent.js";
+import { discoverRouter } from "./routes/discover.js";
 import { presenceRouter } from "./routes/presence.js";
 
 const app = express();
@@ -21,6 +24,18 @@ app.use((req, _res, next) => {
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", network: config.network });
 });
+
+app.get("/openapi.json", (_req, res) => {
+  res.json(openApiDocument);
+});
+
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(openApiDocument, {
+    customSiteTitle: "VINSS Backend API",
+  }),
+);
 
 app.use(discoverRouter);
 app.use(agentRouter);
