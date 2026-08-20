@@ -20,6 +20,7 @@ use snforge_std::{
     declare,
     start_cheat_block_timestamp,
     start_cheat_caller_address,
+    stop_cheat_caller_address,
 };
 use starknet::ContractAddress;
 
@@ -154,6 +155,12 @@ fn consume_fee_allowance(
         ) == 0,
         'fee allowance remains',
     );
+
+    // Important: this cheat targets the mock ERC-20 itself. If it remains
+    // active, the later Rekber -> ERC-20 approve call is also seen as coming
+    // from PRIVACY_POOL, so the mock writes allowance for the wrong owner and
+    // Rekber correctly detects APPROVAL_NOT_EXACT.
+    stop_cheat_caller_address(token_address);
 }
 
 // Happy path: deposit.
