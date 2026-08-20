@@ -1,238 +1,1000 @@
-# STRK20 Privacy Integration Plan — VINSS
+# STRK20 Integration & Privacy Architecture — VINSS
 
-Generated 2026-08-14 by the strk20-privacy-integration skill.
+**Updated:** 2026-08-20
+**Status:** MVP / sprint-stage / pre-production
 
-## 1. Project snapshot
+This document is the technical source of truth for VINSS's STRK20 integration.
 
-- Stack: Next.js 16.3.1, React 19.2.8, TypeScript 5.5, starknet 10.7.0.
-- Wallet packages: @starknet-io/get-starknet-discovery 6.0.4,
-  @starknet-io/get-starknet-wallet-standard 6.0.4,
-  @starknet-io/types-js 0.10.3.
-- Cairo contracts already exist under `contracts/`, including messaging,
-  offers, private escrow, and private escrow settlement.
-- Wallet connection:
-  `frontend/lib/starknet/walletClient.ts`
-- Transaction/SDK integration:
-  `frontend/lib/vinss-sdk/`
-- Messaging:
-  `frontend/lib/vinss-sdk/messaging.ts`
-  `frontend/lib/vinss-sdk/envelope.ts`
-  `frontend/lib/vinss-sdk/channelKey.ts`
-- Existing UI entry points:
-  `frontend/app/page.tsx`
-  `frontend/app/wallet/page.tsx`
-  `frontend/app/room/[roomId]/page.tsx`
-- Current typecheck blockers:
-  `frontend/lib/starknet/walletClient.ts`
-  `frontend/lib/vinss-sdk/envelope.ts`
-- Privacy goal:
-  encrypted on-chain messaging over the existing STRK20 privacy pool,
-  anonymous sender/recipient relationships, persistent encrypted channels,
-  payment memos, private escrow negotiation, plus VINSS agentic application
-  layer across messaging, escrow, deal-room workflows, automation, and future
-  product capabilities.
-- Environment: testnet-first for implementation and wallet verification.
+It explains:
 
-## 2. Chosen route: Existing STRK20 messaging contracts + Wallet API + backend discovery + VINSS agentic application layer
+- the intended architecture currently being implemented;
+- what is already implemented;
+- what has already been proven on-chain on testnet;
+- the privacy boundary;
+- what remains publicly observable;
+- what still requires Escrow Rekber verification;
+- how settlement evidence and NFT certificates fit into the architecture.
 
-VINSS already has the existing VINSS Cairo contracts required for its private messaging
-and escrow flows, so this plan does NOT create or redesign those contracts.
-The integration work is application-side: make the existing contracts usable
-through the STRK20 wallet flow, finish encrypted-message discovery/indexing,
-build the frontend UX, and expose safe capabilities to the VINSS agentic application layer across messaging, escrow,
-deal-room workflows, automation, and future product capabilities.
+Customer research, feature rationale, market validation, and Founder Basecamp methodology belong in the VINSS Product Documentation rather than this file.
 
-The dapp never touches a user's viewing key, notes, proofs, or private keys.
-User-side privacy actions are delegated to the privacy-enabled wallet through
-starknet.js / WalletAccount.
+---
 
-## 3. What this delivers — hidden vs visible
+# 1. Technical thesis
 
-| Private | Public |
+STRK20 is not the VINSS product.
+
+STRK20 provides the privacy/execution substrate that makes a different application architecture possible.
+
+VINSS adds:
+
+```text
+Encrypted Message
+        ↓
+Structured Offer
+        ↓
+Escrow Rekber
+        ↓
+Settlement Evidence
+        ↓
+NFT Settlement Certificate
+```
+
+The technical goal is to connect private application state with verifiable economic settlement while keeping sensitive deal context away from plaintext public state and trusted backend decryption.
+
+---
+
+# 2. Technical innovation
+
+VINSS's integration is not just “private transfer + UI.”
+
+The application layer introduces several connected primitives.
+
+## 2.1 Application-specific encrypted coordination
+
+VINSS helper contracts receive application-specific encrypted envelopes through privacy-enabled execution.
+
+The Privacy Pool does not need to understand whether ciphertext represents:
+
+- a Message;
+- an Offer;
+- an Escrow Rekber coordination action.
+
+That semantic layer stays in VINSS.
+
+---
+
+## 2.2 Opaque per-action routing
+
+Instead of storing reusable plaintext sender/recipient address fields in helper records, VINSS derives opaque routing tags tied to application context and fresh action locators.
+
+This reduces direct public application-level identity exposure.
+
+It does **not** claim complete resistance to metadata or traffic correlation.
+
+---
+
+## 2.3 Structured encrypted Offer state
+
+VINSS moves beyond encrypted free-form chat.
+
+The application can represent:
+
+```text
+create
+counter
+accept
+reject
+cancel
+expire
+prepare_escrow
+```
+
+while keeping sensitive terms inside ciphertext.
+
+This creates an encrypted state machine for a deal rather than only an encrypted message stream.
+
+**Status:** ✅ testnet on-chain verified.
+
+---
+
+## 2.4 Agreement-linked settlement
+
+Escrow Rekber is designed to follow an accepted Offer rather than exist as an unrelated payment feature.
+
+Target relationship:
+
+```text
+Accepted Offer
+→ dealOfferLocator
+→ Escrow Rekber
+→ Settlement
+```
+
+This preserves a technical link between agreement state and settlement state.
+
+---
+
+## 2.5 Settlement as verifiable evidence
+
+The final layer is not simply “transaction succeeded.”
+
+VINSS is designed to derive Settlement Evidence from the completed economic action and issue one NFT Settlement Certificate to each party.
+
+The certificate is an evidence artifact, not a reward mechanism.
+
+---
+
+# 3. Target architecture
+
+```text
+Invite
+  ↓
+Private Chat
+  ↓
+Structured Offer
+  ↓
+Counter / Accept / Reject
+  ↓
+Escrow Rekber
+  ↓
+Settlement Evidence
+  ↓
+NFT Settlement Certificate
+  ├─ Party A
+  └─ Party B
+```
+
+Current verification state:
+
+```text
+Message       ✅ testnet on-chain verified
+Offer         ✅ testnet on-chain verified
+Escrow Rekber 🟡 E2E on-chain verification pending
+Evidence      🟡 pending settlement proof
+Certificate   🟡 pending
+Mainnet       🟡 pending
+```
+
+---
+
+# 4. Role of STRK20
+
+VINSS does not replace or modify the STRK20 Privacy Pool.
+
+Architecture:
+
+```text
+VINSS Product Workflow
+        ↓
+VINSS Client Privacy Layer
+        ↓
+Privacy-enabled Wallet
+        ↓
+STRK20 Wallet API
+        ↓
+STRK20 Privacy Pool
+        ↓
+VINSS privacy_invoke Helpers
+```
+
+STRK20 provides the privacy/execution substrate.
+
+VINSS adds:
+
+- Message semantics;
+- Offer semantics;
+- Escrow Rekber semantics;
+- local encryption/decryption;
+- routing;
+- commitments;
+- discovery;
+- evidence;
+- certificate issuance logic;
+- Agent-assisted workflow.
+
+---
+
+# 5. Inspiration: STRK20 RFP-01
+
+VINSS was inspired by **STRK20 RFP-01 — Encrypted on-chain messaging**.
+
+That direction showed that privacy-pool execution can support application-specific encrypted coordination.
+
+VINSS extends it:
+
+```text
+Encrypted Message
+        ↓
+Private Negotiation
+        ↓
+Structured Offer
+        ↓
+Escrow Rekber
+        ↓
+Settlement Evidence
+```
+
+VINSS does not claim that its current key agreement and all implementation details are identical to the RFP.
+
+The code is the source of truth.
+
+---
+
+# 6. Meaning of privacy / anonymity
+
+In VINSS, privacy and anonymity are primarily about **public-observer privacy**.
+
+The objective is to avoid exposing to a public blockchain observer:
+
+- plaintext Message contents;
+- plaintext Offer terms;
+- plaintext Escrow Rekber coordination details;
+- reusable plaintext participant identity fields in application helper state;
+- client-side encryption keys.
+
+This is not a claim that:
+
+- legal obligations disappear;
+- lawful disclosure is impossible;
+- compliance does not apply;
+- all metadata disappears;
+- perfect unlinkability is guaranteed.
+
+```text
+Public-observer privacy
+≠
+authorized / lawful disclosure
+```
+
+Selective disclosure and compliance paths can coexist with public privacy.
+
+---
+
+# 7. Current stack
+
+Current frontend package state:
+
+```text
+Next.js: ^16.3.1
+React: ^19.2.8
+TypeScript: ^5.5.0
+starknet: 10.4.0
+@starknet-io/get-starknet-discovery: ^6.0.4
+@starknet-io/get-starknet-wallet-standard: ^6.0.4
+@starknet-io/types-js: ^0.10.3
+@avnu/avnu-sdk: ^4.2.0
+```
+
+Older documentation that says the frontend currently runs `starknet@10.7.0` is stale.
+
+---
+
+# 8. Application-level direct key agreement
+
+Current direct messaging uses browser-side application key agreement:
+
+```text
+P-256 ECDH
+→ shared secret
+→ HKDF-SHA-256
+→ room-scoped pairwise VINSS key
+```
+
+The private ECDH key is:
+
+- generated in the browser;
+- re-imported as a non-exportable `CryptoKey`;
+- persisted in IndexedDB;
+- never sent to the VINSS backend;
+- never written as plaintext on-chain.
+
+## Explicit non-claim
+
+VINSS does not claim that its current P-256 application ECDH is the same key agreement mechanism used internally by STRK20 note encryption.
+
+It is an application-layer mechanism.
+
+---
+
+# 9. Message architecture
+
+Current module:
+
+```text
+frontend/lib/deal-room/messaging.ts
+```
+
+Flow:
+
+```text
+MessagePayload
+    ↓
+client encryption
+    ↓
+fresh action locator
+    ↓
+opaque senderTag / recipientTag
+    ↓
+payload commitment
+    ↓
+ciphertext envelope
+    ↓
+strk20InvokeTransaction(...)
+    ↓
+STRK20 Privacy Pool
+    ↓
+VinssMessageHelper.privacy_invoke(...)
+```
+
+The helper receives encrypted application data rather than plaintext Message content.
+
+**Verification status:** ✅ **testnet on-chain verified.**
+
+---
+
+# 10. Opaque routing
+
+VINSS uses per-action opaque routing tags.
+
+Purpose:
+
+- avoid reusable plaintext sender/recipient fields in helper state;
+- avoid trivially exposing participant relationships at the application-record level;
+- allow authorized clients to identify relevant encrypted actions.
+
+Non-claim:
+
+> Opaque routing does not mean zero metadata.
+
+Public observers can still see:
+
+- transaction timing;
+- block metadata;
+- pool interaction;
+- helper interaction;
+- ciphertext;
+- commitments;
+- public token legs;
+- other activity patterns.
+
+---
+
+# 11. Offer architecture
+
+Current module:
+
+```text
+frontend/lib/deal-room/offers.ts
+```
+
+Current deal types:
+
+```text
+otc
+freelance
+goods
+digital_goods
+bounty
+nft
+other
+```
+
+Current Offer lifecycle:
+
+```text
+create
+counter
+accept
+reject
+cancel
+expire
+prepare_escrow
+```
+
+Offer payload can include encrypted:
+
+- participant fields;
+- deal type;
+- root/parent Offer relation;
+- asset;
+- amount;
+- payment terms;
+- conditions;
+- expiration;
+- reason.
+
+Flow:
+
+```text
+Offer payload
+    ↓
+client encryption
+    ↓
+fresh locator
+    ↓
+opaque routing tags
+    ↓
+payload commitment
+    ↓
+STRK20 invoke
+    ↓
+VinssOfferHelper
+```
+
+**Verification status:** ✅ **testnet on-chain verified.**
+
+The product rationale for each deal type belongs in Product Documentation.
+
+---
+
+# 12. Offer → Escrow Rekber transition
+
+`prepare_escrow` is the transition from agreement state into settlement state.
+
+Target:
+
+```text
+Accepted Offer
+    ↓
+dealOfferLocator
+    ↓
+Escrow Rekber
+```
+
+This prevents the settlement layer from becoming disconnected from the agreement it is supposed to execute.
+
+---
+
+# 13. Escrow Rekber architecture
+
+VINSS uses one product name:
+
+> **Escrow Rekber**
+
+Internally, the flow has two technical concerns:
+
+```text
+A. encrypted coordination
+B. custody / settlement
+```
+
+They are two layers of one product feature, not two separate product features.
+
+---
+
+# 14. Escrow Rekber coordination
+
+Current module:
+
+```text
+frontend/lib/deal-room/escrow.ts
+```
+
+Current coordination action model:
+
+```text
+create
+fund_intent
+accept
+fund_confirm
+cancel
+refund
+dispute
+resolve
+```
+
+Encrypted EscrowActionPayload may include:
+
+```text
+dealOfferLocator
+custodyCommitment
+refundAfter
+reason
+```
+
+The coordination layer keeps detailed state inside encrypted application payloads where possible.
+
+**Verification status:** 🟡 implemented/integration stage.
+
+---
+
+# 15. Escrow Rekber custody / settlement
+
+Current settlement design uses client-generated:
+
+```text
+custodyCommitment
+releaseSecret
+refundSecret
+releaseCommitment
+refundCommitment
+```
+
+Conceptual actions:
+
+### Deposit
+
+```text
+[
+  deposit,
+  custody_commitment,
+  release_commitment,
+  refund_commitment,
+  refund_after,
+  token,
+  amount
+]
+```
+
+### Release
+
+```text
+[
+  release,
+  custody_commitment,
+  release_secret,
+  output_note_id
+]
+```
+
+### Refund
+
+```text
+[
+  refund,
+  custody_commitment,
+  refund_secret,
+  output_note_id
+]
+```
+
+Sensitive secrets remain client-side.
+
+They must never be:
+
+- sent to discovery;
+- logged;
+- included in analytics;
+- persisted server-side as plaintext.
+
+**Verification status:** 🟡 E2E on-chain verification pending.
+
+---
+
+# 16. Escrow Rekber privacy boundary
+
+Current settlement design must not be marketed as fully private settlement.
+
+| Element | Current boundary |
 |---|---|
-| Sender identity for private messaging | Pool transaction exists |
-| Recipient identity | Timing of the pool interaction |
-| Message plaintext | Block/transaction metadata |
-| Encrypted message payload | Public contract interaction exists |
-| Channel-key-derived ciphertext | Any deliberately public application metadata |
-| Private transfer relationship | Public ERC-20 legs for shield/unshield |
-| Escrow negotiation contents | Public timing/fact of on-chain settlement |
+| Negotiation context | Encrypted |
+| Offer terms | Encrypted |
+| Escrow coordination detail | Encrypted |
+| Custody commitment | Public |
+| Token | Public on current settlement path |
+| Amount | Public on current settlement path |
+| Tx timing | Public |
+| Release/refund result | Verifiable |
+| Release/refund secrets | Client-side sensitive |
 
-VINSS must not describe this as "no metadata" in an absolute sense:
-on-chain activity and timing remain observable. Privacy comes from keeping
-identities and message contents out of the public transaction state.
+Public-observer privacy protects the private deal context; it does not erase every settlement artifact.
 
-## 4. Prerequisites & versions
+---
 
-- `starknet@10.7.0` — already satisfies the STRK20 WalletAccount requirement.
-- `@starknet-io/get-starknet-discovery@6.0.4`
-- `@starknet-io/get-starknet-wallet-standard@6.0.4`
-- `@starknet-io/types-js@0.10.3`
-- STRK20 Wallet API stable spec: v0.10.3.
-- Test wallet: Ready extension.
-- AVNU private swap SDK: 4.2.0 if private swap functionality is later added.
+# 17. Escrow Rekber verification gate
 
-Freshness drift recorded:
-- get-starknet packages moved from 6.0.3 to 6.0.4.
-- `packages/sub_account_anonymizer` is no longer present in the privacy
-  monorepo.
-- `packages/shadow_account_anonymizer` is now present and must be inspected
-  before planning sub-account functionality.
+Current rule:
 
-## 1. Phase 1 — unblock and establish the wallet/privacy foundation
+```text
+implemented
+≠
+E2E verified
+```
 
-1. Resolve the current `@starknet-io/get-starknet` import mismatch in
-   `frontend/lib/starknet/walletClient.ts` using the current WalletAccount
-   + get-starknet v6 integration.
-2. Resolve the TypeScript `BufferSource` incompatibility in
-   `frontend/lib/vinss-sdk/envelope.ts` without weakening encryption
-   correctness.
-3. Run `npm run typecheck`, then build.
-4. Confirm wallet capability through the Wallet API capability mechanism;
-   do not use shielded-balance reads merely for feature detection.
-5. Add graceful degradation for wallets without STRK20 privacy support.
-6. Verify connection and the first privacy-enabled action against Ready and
-   the wallet test dapp.
+Minimum proof:
 
-Reference:
-https://strk20-by-example.org/starknet-wallet-api/starknet-js
+```text
+Accepted Offer
+→ linked Escrow Rekber
+→ funding
+→ custody state
+→ release OR refund
+→ expected recipient outcome
+→ transaction hashes
+→ hidden-vs-visible review
+```
 
-## 6. Phase 2 — VINSS private messaging UX
+Only then should status change to:
 
-Implement the existing messaging primitives through the frontend:
+```text
+Testnet On-chain Verified
+```
 
-- Persistent private channel creation/opening.
-- Recipient selection without exposing the recipient relationship on-chain.
-- Encrypted message compose/send.
-- Local decryption only.
-- Message history backed by discovery/indexing.
-- Delivery/status UX that does not falsely claim on-chain delivery semantics.
-- Payment memo flow: private payment plus encrypted message where supported
-  by the existing contract architecture.
-- Escrow negotiation UI inside the private channel.
-- Clear distinction between encrypted/private content and public on-chain
-  activity.
+Mainnet is a separate evidence level.
 
-Relevant modules:
-- `frontend/lib/vinss-sdk/messaging.ts`
-- `frontend/lib/vinss-sdk/envelope.ts`
-- `frontend/lib/vinss-sdk/channelKey.ts`
-- `frontend/app/room/[roomId]/page.tsx`
+---
 
-Channel/message concepts:
-https://strk20-by-example.org/channels-and-subchannels
+# 18. Settlement Evidence
 
-## 7. Phase 3 — Backend/indexer/discovery
+Settlement Evidence should be derived from an actual successful settlement.
 
-Build the discovery layer required to locate encrypted channel/message
-payloads without turning the backend into a trusted plaintext server.
+Target link:
 
-Requirements:
+```text
+deal / Offer reference
+→ Escrow Rekber reference
+→ settlement action
+→ on-chain evidence
+```
 
-- Index only the public event/contract data required for discovery.
-- Return encrypted payloads and metadata needed for local decryption.
-- Never persist user viewing keys or private keys.
-- Never decrypt user messages server-side.
-- Define deterministic channel/message ordering.
-- Handle reorg/retry/idempotency.
-- Expose a narrow API used by the frontend SDK.
-- Add tests for duplicate events, missed blocks, replay, and pagination.
+The evidence layer must not require private deal contents to become public.
 
-The backend is a discovery transport, not a trusted messaging authority.
+**Verification status:** 🟡 pending Escrow Rekber proof.
 
-## 8. Phase 4 — VINSS agentic application layer
+---
 
-Add agentic capabilities only through explicit, least-privilege application
-actions across messaging, escrow, deal-room workflows, automation, and future product capabilities.
+# 19. NFT Settlement Certificate
 
-VINSS should be able to:
+After a valid settlement, VINSS is designed to issue an NFT Settlement Certificate to each party.
 
-- understand private conversation context available to the user;
-- draft messages and payment memos;
-- prepare escrow negotiation actions;
-- summarize private conversations locally/with user-authorized context;
-- prepare transactions for explicit user approval;
-- track application state without accessing viewing keys or raw wallet secrets.
+```text
+Successful Settlement
+        ↓
+Settlement Evidence
+        ↓
+NFT Certificate → Party A
+NFT Certificate → Party B
+```
 
-VINSS must NOT:
+The NFT is an evidence artifact.
 
-- receive or persist viewing keys/private keys;
-- silently execute irreversible transfers;
-- infer private balances by probing wallet APIs;
-- expose private conversation content to an unauthorized backend;
-- treat the relayer/transaction sender as the user.
+It is not:
 
-Every financial action should have an explicit authorization boundary.
+- a reward;
+- a loyalty point;
+- a speculative token;
+- a collectible feature added for Web3 optics.
 
-## 9. Future considerations
+## Privacy requirement
 
-Revenue/monetization is not a current integration scope. If it arises later
-as a product/business capability, it must sit above the privacy protocol
-rather than monetize private content. Any revenue mechanism must not require
-VINSS to inspect private message contents, viewing keys, or private balances.
-Revenue experiments, if ever pursued, should be feature-gated and measurable
-using public application events/aggregates only.
+The certificate must not re-publish:
 
-## 10. Testing
+- private Message history;
+- private Offer terms;
+- channel keys;
+- release/refund secrets;
+- any sensitive application data that is not required for verification.
 
-Testnet-first.
+The final metadata schema should be locked only after Escrow Rekber settlement is proven and the evidence model is reviewed.
 
-- `npm run typecheck`
-- `npm run build`
-- Existing Playwright E2E suite.
-- Wallet connection tests.
-- Encrypted message round-trip:
-  sender encrypts → chain stores ciphertext → discovery returns it →
-  recipient decrypts locally.
-- Wrong recipient/key cannot decrypt.
-- Duplicate/replayed discovery events are idempotent.
-- Escrow negotiation does not leak plaintext.
-- Payment memo content remains encrypted.
-- Wallet without STRK20 capability degrades gracefully.
-- Verify with Ready extension and wallet test dapp.
+**Verification status:** 🟡 pending.
 
-For private activity analytics, never identify users by transaction sender;
-private pool activity must be attributed from the protocol's documented
-events where applicable.
+---
 
-## 11. Compliance & security notes
+# 20. Ciphertext-only discovery
 
-- Deposit screening is enforced onchain by the STRK20 protocol.
-- Selective disclosure can support legitimate regulatory requests; this is
-  not automatic compliance or regulatory endorsement.
-- VINSS owns application-level legal/compliance decisions.
-- No viewing keys, private keys, proofs, or plaintext private messages belong
-  in logs, telemetry, analytics, or server persistence.
-- The existing Cairo contracts are treated as complete; this plan does not
-  modify them.
+Current endpoint:
 
-## 12. Open items to re-verify at build time
+```text
+POST /discover
+```
 
-- Current WalletAccount/get-starknet API details.
-- Ready extension behavior and supported Wallet API capabilities.
-- Wallet API v0.10.3 vs newer release candidate.
-- Current starknet.js dist-tags.
-- Current privacy monorepo capabilities.
-- `shadow_account_anonymizer` capabilities before any sub-account work.
-- Fee/paymaster UX.
-- Backend indexing/event schema against the deployed VINSS contracts.
-- Exact revenue mechanism after product validation.
+Current implementation:
 
-## 13. Links
+```text
+backend/src/routes/discover.ts
+```
 
-- STRK20 overview:
-  https://strk20-by-example.org/what-is-strk20
-- Channels/subchannels:
-  https://strk20-by-example.org/channels-and-subchannels
-- Viewing keys:
-  https://strk20-by-example.org/viewing-keys
-- Wallet API overview:
-  https://strk20-by-example.org/starknet-wallet-api/overview
-- starknet.js WalletAccount:
-  https://strk20-by-example.org/starknet-wallet-api/starknet-js
-- Private DeFi:
-  https://strk20-by-example.org/starknet-wallet-api/private-defi
-- Official Privacy SDK:
-  https://github.com/starkware-libs/starknet-privacy
-- Wallet test dapp:
-  https://starknet-wallet-account.vercel.app/
+Backend may return:
+
+- actionLocator;
+- payloadCommitment;
+- senderTag;
+- recipientTag;
+- ciphertextChunks;
+- blockNumber;
+- transactionHash.
+
+Backend must not receive:
+
+- channelKeyHex;
+- pairwise private key;
+- wallet private key;
+- viewing key.
+
+The current route explicitly rejects `channelKeyHex`.
+
+Decryption stays on the authorized client.
+
+---
+
+# 21. Hidden vs visible matrix
+
+| Element | Hidden / protected | Public / observable |
+|---|---|---|
+| Message plaintext | Yes | Ciphertext |
+| Offer terms | Yes | Ciphertext + commitment |
+| Escrow Rekber coordination detail | Yes | Ciphertext + commitment |
+| Plaintext participant fields in helper state | Not exposed directly | Opaque tags |
+| Pairwise app key | Client-only | No |
+| Client private ECDH key | Client-only | No |
+| Backend channel-key access | None | — |
+| Pool interaction | No | Yes |
+| Helper interaction | No | Yes |
+| Transaction timing | No | Yes |
+| Block / tx metadata | No | Yes |
+| Action locator | No | Yes |
+| Payload commitment | No | Yes |
+| Ciphertext | Content protected | Yes |
+| Rekber token | No | Yes |
+| Rekber amount | No | Yes |
+| Settlement result | — | Verifiable |
+| NFT certificate | Evidence artifact | Public fields depend on final schema |
+
+---
+
+# 22. Payment Memo boundary
+
+Private Payment Memo remains a product direction:
+
+```text
+payment + private context
+```
+
+But the integration documentation must not claim an atomic payment+memo flow is verified until there is transaction evidence for that exact path.
+
+---
+
+# 23. Agent authorization boundary
+
+Current Agent pattern:
+
+```text
+Observe permitted context
+→ Reason
+→ Propose
+→ Ask approval
+→ User signs / executes
+```
+
+The Agent can assist with:
+
+- Messages;
+- Offers;
+- Counter Offers;
+- Escrow Rekber preparation;
+- Rekber review.
+
+It must not receive:
+
+- wallet private keys;
+- ECDH private keys;
+- channel keys;
+- settlement secrets.
+
+Financial execution remains behind explicit wallet authorization.
+
+---
+
+# 24. Verification levels
+
+VINSS uses these evidence levels:
+
+### Designed
+Architecture or product behavior has been defined.
+
+### Implemented
+Code exists and can be inspected.
+
+### Tested
+Relevant tests pass.
+
+### Testnet On-chain Verified
+A real testnet transaction succeeded.
+
+### Mainnet Verified
+Real mainnet evidence exists.
+
+### Customer Validated
+Real user behavior supports the product hypothesis.
+
+Current state:
+
+```text
+Message → Testnet On-chain Verified
+Offer → Testnet On-chain Verified
+Escrow Rekber → Implemented / E2E verification pending
+Settlement Evidence → Pending
+NFT Settlement Certificate → Pending
+```
+
+---
+
+# 25. Next E2E target
+
+Because Message and Offer are already proven, the next core technical test is:
+
+```text
+Private Deal Room
+→ verified Message
+→ verified Offer
+→ Accepted Offer
+→ Escrow Rekber funding
+→ Release OR Refund
+→ Settlement Evidence
+→ NFT Certificate Party A
+→ NFT Certificate Party B
+```
+
+For each step, record:
+
+- tx hash;
+- contract address;
+- wallet behavior;
+- public data;
+- encrypted/protected data;
+- failure mode;
+- retry behavior;
+- final recipient outcome.
+
+---
+
+# 26. Negative tests
+
+Minimum Escrow Rekber / evidence tests:
+
+- wrong release secret fails;
+- wrong refund secret fails;
+- invalid timing fails as expected;
+- wrong Offer cannot silently bind to Escrow Rekber;
+- duplicate funding does not create duplicate custody state;
+- retry does not duplicate settlement;
+- failed signing does not create false success;
+- secrets do not appear in logs;
+- certificate cannot be issued from an invalid settlement;
+- certificate metadata does not leak private deal payload.
+
+---
+
+# 27. Mainnet qualification
+
+README prose is not mainnet evidence.
+
+Private Sprint evidence belongs in:
+
+```text
+strk20.json
+```
+
+Mainnet completion requires real successful transactions and the required demo artifacts.
+
+Testnet proof for Message and Offer must remain labeled testnet until equivalent mainnet evidence exists.
+
+---
+
+# 28. Documentation claim rules
+
+1. Message may be described as **testnet on-chain verified**.
+2. Offer may be described as **testnet on-chain verified**.
+3. Escrow Rekber must not be described as E2E verified yet.
+4. NFT Settlement Certificate must not be described as live until issuance is real.
+5. Privacy/anonymity means primarily privacy from public observers.
+6. Do not claim privacy removes compliance or lawful disclosure.
+7. Do not claim `no metadata`.
+8. Do not claim the backend decrypts.
+9. Do not equate current P-256 app ECDH with STRK20 note encryption.
+10. Do not describe current Rekber amount as private.
+11. Do not equate technical proof with customer validation.
+12. Do not let hackathon scoring redefine the product roadmap.
+
+---
+
+# 29. Current priorities
+
+## P0 — Escrow Rekber correctness
+
+- bind accepted Offer to Escrow Rekber;
+- verify coordination state;
+- protect settlement secrets;
+- review calldata against Cairo;
+- confirm hidden-vs-visible boundary.
+
+## P1 — Escrow Rekber testnet proof
+
+- funding;
+- custody confirmation;
+- release;
+- refund;
+- repeatable recipient outcome;
+- transaction evidence.
+
+## P2 — Settlement Evidence
+
+- canonical settlement reference;
+- evidence derived from actual settlement;
+- privacy-safe evidence model.
+
+## P3 — NFT Settlement Certificate
+
+- issuance rule;
+- one certificate for each party;
+- privacy-safe metadata;
+- verifiable settlement linkage;
+- negative tests.
+
+## P4 — Mainnet
+
+- minimum required deployments;
+- successful STRK20 mainnet actions;
+- valid `strk20.json`;
+- public demo;
+- demo video.
+
+---
+
+# 30. Repository map
+
+```text
+frontend/types/deal-room.ts
+
+frontend/lib/deal-room/messaging.ts
+frontend/lib/deal-room/offers.ts
+frontend/lib/deal-room/escrow.ts
+frontend/lib/deal-room/invitation.ts
+
+frontend/lib/privacy/participantKeys.ts
+frontend/lib/privacy/messageRouting.ts
+frontend/lib/privacy/envelope.ts
+
+frontend/lib/agent.ts
+
+backend/src/routes/discover.ts
+backend/src/indexer/
+
+contracts/
+docs/
+```
+
+---
+
+# 31. Definition of technical completion
+
+The core integration is not technically complete until:
+
+```text
+Message ✅
++
+Offer ✅
++
+Escrow Rekber verified
++
+Settlement Evidence verified
++
+NFT Certificate issuance verified
+```
+
+and the privacy boundary is documented for every stage.
+
+---
+
+# 32. Definition of product success
+
+Technical completion is still not product success.
+
+Product success requires:
+
+```text
+real user
++
+real repeated problem
++
+real deal
++
+successful settlement
++
+useful evidence
++
+repeat usage / willingness to pay
+```
+
+VINSS must prove both the technical system and the customer value without confusing one for the other.
