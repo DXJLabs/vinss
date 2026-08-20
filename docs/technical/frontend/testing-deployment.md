@@ -1,6 +1,12 @@
 # Testing & Deployment
 
-## Validation
+## Objective
+
+Frontend verification should prove both software correctness and privacy/execution behavior.
+
+A successful build alone is not equivalent to an on-chain verification.
+
+## Static/build checks
 
 ```bash
 cd ~/vinss/frontend
@@ -8,7 +14,7 @@ npm run typecheck
 npm run build
 ```
 
-Package scripts use Next.js with webpack explicitly.
+Package scripts currently use Next.js with webpack explicitly.
 
 ## E2E commands
 
@@ -17,33 +23,68 @@ npm run test:e2e
 npm run test:e2e:video
 ```
 
-Wallet/browser E2E availability depends on the execution environment.
+Wallet/browser automation availability depends on the execution environment.
 
-## Manual two-user verification
+## Manual technical verification
 
-For the current MVP:
+For two-user private Chat:
 
 ```text
-connect wallet A
-connect wallet B
-join same private room
-discover peer identity
-send A → B private message
-send B → A private message
-reload and recover private history
-create private Offer
-receive/decrypt Offer on peer
-perform Offer lifecycle action
-verify backend discovery remains ciphertext-only
+wallet A + wallet B
+→ same Deal Room
+→ participant identity discovery
+→ pairwise key derivation
+→ A sends Message
+→ B discovers ciphertext
+→ B decrypts locally
+→ reload / remount
+→ history recovers
+→ backend never receives key
 ```
+
+For private Offer:
+
+```text
+create
+→ peer decrypts
+→ counter / accept / reject
+→ immutable locator relationship remains correct
+→ delayed callback can reconcile through discovery
+```
+
+For Escrow Rekber:
+
+```text
+accepted Offer
+→ prepare/link escrow
+→ funding
+→ custody
+→ release OR refund
+→ expected recipient outcome
+```
+
+Escrow Rekber must remain labeled pending until this is proven end-to-end on-chain.
 
 ## Release checks
 
 ```bash
+cd ~/vinss/frontend
 npm run typecheck
 npm run build
+
 cd ~/vinss
 git diff --check
 ```
 
-Frontend network/backend/contract configuration must refer to the same deployment environment.
+## Evidence rule
+
+Use distinct labels:
+
+```text
+Implemented
+Tested
+Testnet On-chain Verified
+Mainnet Verified
+```
+
+Do not collapse them into one generic "working" status.

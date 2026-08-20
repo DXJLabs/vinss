@@ -1,91 +1,121 @@
 # Frontend Architecture
 
-## Role
+## Objective
 
-The VINSS frontend owns privacy-sensitive client responsibilities:
+The frontend turns private Deal Room actions into encrypted, wallet-authorized, discoverable application state without moving the plaintext trust boundary to the VINSS backend.
 
-- wallet connection and STRK20 capability detection;
-- local key generation and derivation;
-- message and Offer encryption before wallet submission;
-- private routing-tag derivation;
-- ciphertext discovery requests;
-- client-side matching and decryption;
-- encrypted local chat caching;
-- Deal Room state and UX;
-- privacy-safe Agent request construction.
+## Layer responsibilities
 
-## Layers
+```text
+Room orchestration
+    ↓
+Deal Room integration layer
+    ↓
+Client privacy primitives
+    ↓
+Wallet / Starknet access
+```
+
+### Room orchestration
+
+Coordinates:
+
+- room state;
+- participant discovery;
+- direct conversation;
+- Offer lifecycle;
+- invitation flow;
+- Agent interaction.
+
+### Deal Room integration layer
+
+Primary modules:
+
+```text
+lib/deal-room/messaging.ts
+lib/deal-room/offers.ts
+lib/deal-room/invitation.ts
+lib/deal-room/escrow.ts
+```
+
+This layer converts application actions into encrypted envelopes and wallet submissions.
+
+### Client privacy layer
+
+Primary modules:
+
+```text
+lib/privacy/envelope.ts
+lib/privacy/participantKeys.ts
+lib/privacy/messageRouting.ts
+lib/privacy/presence.ts
+lib/privacy/encryptedChatCache.ts
+lib/privacy/channelKey.ts
+```
+
+This layer owns local cryptography, key derivation, routing, local encryption, and encrypted presence/cache behavior.
+
+### Starknet access layer
+
+Primary modules:
+
+```text
+lib/starknet/walletClient.ts
+lib/starknet/constants.ts
+```
+
+This layer owns wallet connection, STRK20 capability detection, RPC configuration, and normalized contract addresses.
+
+## System flow
 
 ```mermaid
 flowchart TB
-    PAGE["app/room/[roomId]/page.tsx"]
+    USER["Authorized user"]
+    FRONTEND["VINSS frontend"]
+    PRIV["Client privacy layer"]
+    WALLET["Privacy-enabled wallet"]
+    POOL["STRK20 Privacy Pool"]
+    HELPERS["VINSS helpers"]
+    CHAIN["Public chain data"]
+    BACKEND["Ciphertext discovery backend"]
 
-    subgraph UI["UI"]
-      COMP["components/room/*"]
-      AGENTUI["components/agent/*"]
-    end
-
-    subgraph ORCH["Room orchestration"]
-      ROOM["useRoom"]
-      CONV["useRoomConversation"]
-      DIRECT["useDirectConversation"]
-      OFFERS["useRoomOffers"]
-      PARTICIPANTS["useRoomParticipants"]
-      INVITE["useRoomInvitation"]
-      AGENTHOOK["useRoomAgent"]
-    end
-
-    subgraph APP["Deal Room integration layer"]
-      MSG["lib/deal-room/messaging.ts"]
-      OFFERMOD["lib/deal-room/offers.ts"]
-      INVITEMOD["lib/deal-room/invitation.ts"]
-      ESCROWMOD["lib/deal-room/escrow.ts"]
-    end
-
-    subgraph PRIV["Client privacy"]
-      ENVELOPE["lib/privacy/envelope.ts"]
-      KEYS["lib/privacy/participantKeys.ts"]
-      ROUTING["lib/privacy/messageRouting.ts"]
-      PRESENCE["lib/privacy/presence.ts"]
-      CACHE["lib/privacy/encryptedChatCache.ts"]
-    end
-
-    subgraph CHAIN["Starknet access"]
-      WALLET["lib/starknet/walletClient.ts"]
-      CONFIG["lib/starknet/constants.ts"]
-    end
-
-    PAGE --> UI
-    PAGE --> ORCH
-    ORCH --> APP
-    APP --> PRIV
-    APP --> CHAIN
-    ORCH --> PRIV
-    ORCH --> CHAIN
+    USER --> FRONTEND
+    FRONTEND --> PRIV
+    PRIV --> WALLET
+    WALLET --> POOL
+    POOL --> HELPERS
+    HELPERS --> CHAIN
+    CHAIN --> BACKEND
+    BACKEND --> FRONTEND
+    FRONTEND --> PRIV
 ```
 
-## Main page
+## Boundary with the backend
 
-The primary Deal Room route is:
+The frontend sends discovery selectors such as:
 
-```text
-app/room/[roomId]/page.tsx
-```
-
-It composes domain hooks instead of implementing all protocol operations directly.
-
-## Backend relationship
-
-The frontend sends public discovery parameters such as:
-
-```json
-{ "kind": "message" }
+```ts
+body: JSON.stringify({ kind: "message" })
 ```
 
 or:
 
-```json
-{ "kind": "offer" }
+```ts
+body: JSON.stringify({ kind: "offer" })
 ```
 
-The backend returns candidate ciphertext records. Matching and decryption happen in the browser.
+The backend returns candidate public metadata and ciphertext.
+
+Matching and decryption remain in the browser.
+
+## Important invariant
+
+The frontend architecture separates:
+
+```text
+discovery
+from
+decryption
+```
+
+The backend can help locate encrypted records without receiving the key required to read them.

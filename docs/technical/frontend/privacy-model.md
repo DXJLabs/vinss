@@ -1,73 +1,151 @@
 # Frontend Privacy Model
 
-## Direct identity
+## Objective
 
-Direct messaging creates a per-room, per-wallet WebCrypto ECDH P-256 identity in:
+The frontend protects private deal context from public observers and from unnecessary backend access.
 
-```text
-lib/privacy/participantKeys.ts
+It does not claim that all blockchain metadata disappears.
+
+## 1. Per-room, per-wallet messaging identity
+
+Direct communication uses browser-generated P-256 ECDH identity material.
+
+Important implementation:
+
+```ts
+const generated = await crypto.subtle.generateKey(
+  { name: "ECDH", namedCurve: "P-256" },
+  true,
+  ["deriveBits"],
+);
 ```
 
-The private key is re-imported as a **non-exportable `CryptoKey`** and stored in IndexedDB.
+The private key is then re-imported as non-exportable before persistence:
 
-## Pairwise direct key
+```ts
+const privateKey = await crypto.subtle.importKey(
+  "jwk",
+  privateJwk,
+  { name: "ECDH", namedCurve: "P-256" },
+  false,
+  ["deriveBits"],
+);
+```
+
+The non-exportable private key is stored in IndexedDB.
+
+## 2. Pairwise direct key
 
 Alice and Bob derive the same room-scoped pairwise key:
 
 ```text
-ECDH shared secret
-      ↓
-HKDF-SHA-256
-      ↓
-VINSS_DIRECT_MESSAGE_KEY_V1
+P-256 ECDH
+→ shared secret
+→ HKDF-SHA-256
+→ VINSS_DIRECT_MESSAGE_KEY_V1
+```
+
+Relevant derivation:
+
+```ts
+const derived = await crypto.subtle.deriveBits(
+  {
+    name: "HKDF",
+    hash: "SHA-256",
+    salt,
+    info: new TextEncoder().encode(
+      "VINSS_DIRECT_MESSAGE_KEY_V1",
+    ),
+  },
+  hkdfMaterial,
+  256,
+);
 ```
 
 The room ID is included in the HKDF salt.
 
-This pairwise key is used by current direct Chat and direct Offer flows.
+## 3. Opaque per-action routing
 
-## Room-level key
+Routing tags are HMAC-derived and change with every action locator:
 
-Current room-level key derivation:
+```ts
+const input = new TextEncoder().encode(
+  `VINSS_MSG_ROUTE_V2:${role}:${canonicalIdentity}:${actionLocator.toString(16)}`,
+);
 
-```text
-SHA-256("VINSS_ROOM_KEY_V1:" + roomSecret)
+const digest = await crypto.subtle.sign(
+  "HMAC",
+  key,
+  input,
+);
 ```
 
-This is application keying. It must not be described as the STRK20 Privacy Pool viewing-key ECDH.
+This avoids reusable plaintext sender/recipient fields in helper records.
 
-`lib/privacy/channelKey.ts` also contains a separate Stark-curve ECDH scaffold, but it is not the active UI path.
+It does not guarantee zero metadata or perfect unlinkability.
 
-## Payload encryption
+## 4. Payload encryption
 
-VINSS uses WebCrypto AES-GCM:
+Application payloads are encrypted locally with AES-GCM using a fresh IV.
+
+Conceptually:
 
 ```text
 JSON payload
-    ↓
-AES-GCM with fresh 96-bit IV
-    ↓
-IV + ciphertext
-    ↓
-Starknet-safe felt chunks
+→ AES-GCM
+→ IV + ciphertext
+→ Starknet-safe felt chunks
 ```
 
-## Discovery
+## 5. Room-level key
 
-The backend receives candidate encrypted records, not the pairwise key. Routing-tag matching and decryption happen locally.
+The currently active room-level key path derives from the shared room secret:
 
-## Presence
+```ts
+SHA-256("VINSS_ROOM_KEY_V1:" + roomSecret)
+```
 
-Typing/read/participant events are encrypted before `/presence/publish`. The relay receives only opaque channel ID, event ID, IV, ciphertext, and TTL.
+This is VINSS application keying.
 
-## Agent
+It must not be described as identical to STRK20 internal note-encryption ECDH.
 
-Automatic timeline context is reduced to generic labels such as:
+A separate Stark-curve ECDH path exists as scaffolded code but is not the active UI path.
+
+## 6. Presence
+
+Typing, read, and participant announcements are encrypted before relay.
+
+The relay receives:
 
 ```text
-Encrypted private message
-Encrypted Offer action
-Encrypted private activity
+opaque channel id
+event id
+IV
+ciphertext
+TTL
 ```
 
-The backend sanitizes again. Text explicitly typed by the user into the Agent is still remote-provider input.
+not plaintext presence payloads.
+
+## 7. Public-observer boundary
+
+Private application data includes:
+
+- Message body;
+- Offer terms;
+- participant metadata inside encrypted payloads;
+- local keys;
+- Escrow Rekber secrets.
+
+Public or observable data can still include:
+
+- transaction timing;
+- pool interaction;
+- helper interaction;
+- action locator;
+- routing tags;
+- commitments;
+- ciphertext;
+- current Rekber token/amount path.
+
+Privacy is therefore a boundary, not a claim that all metadata disappears.

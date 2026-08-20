@@ -1,35 +1,63 @@
-# Current Scope
+# Current Frontend Scope
 
-This page prevents repository foundations from being mistaken for completed MVP features.
+This page prevents implemented foundations, tested behavior, and verified on-chain behavior from being conflated.
 
-## Current tested MVP
+## Verification status
 
-### Two-party private Chat
+| Capability | Status |
+|---|---|
+| Two-party direct Message | Testnet on-chain verified |
+| Direct pairwise encryption | Implemented |
+| Opaque Message routing | Implemented |
+| Ciphertext-only Message discovery | Implemented |
+| Encrypted presence/read state | Implemented |
+| Encrypted local chat cache | Implemented |
+| Structured private Offer | Testnet on-chain verified |
+| Offer lifecycle relationships | Implemented |
+| Ciphertext-only Offer discovery | Implemented |
+| Invite V3 encryption/commitment | Implemented |
+| Escrow Rekber coordination | Implemented / integration stage |
+| Escrow Rekber deposit/release/refund frontend path | Implemented / E2E verification pending |
+| Settlement Evidence | Pending |
+| NFT Settlement Certificate | Pending |
+| Mainnet STRK20 proof | Pending |
 
-- two user/wallet contexts;
-- direct pairwise client encryption;
-- ciphertext-only backend discovery;
-- local decryption;
-- encrypted presence/read behavior;
-- **0.5 STRK** application revenue per submitted private message.
+## Current privacy boundary
 
-### Private Offer
+### Hidden/protected by current frontend design
 
-- encrypted Offer payloads;
-- direct pairwise routing;
-- immutable Offer actions;
-- local discovery/decryption;
-- user-controlled wallet submission;
-- **1 STRK** application revenue per submitted Offer action.
+- Message plaintext;
+- Offer plaintext;
+- direct participant metadata inside encrypted payloads;
+- pairwise keys;
+- messaging private ECDH key;
+- encrypted presence payloads;
+- Escrow Rekber release/refund secrets.
 
-### Privacy Pool integration
+### Still public/observable
 
-VINSS currently integrates directly with the STRK20 Privacy Pool / Wallet API and VINSS helper contracts.
+- transaction timing;
+- helper/pool interaction;
+- action locators;
+- routing tags;
+- commitments;
+- ciphertext;
+- current Escrow Rekber token/amount path.
 
-The current integration layer is application-internal and is not packaged as a reusable library.
+## Not claimed
 
-## Outside completed MVP claims
+The frontend documentation does not claim:
 
-This documentation does not present Group, Loyalty, or complete Escrow lifecycle functionality as finished MVP behavior.
+```text
+zero metadata
+perfect anonymity
+fully private Rekber settlement
+mainnet verification
+production security maturity
+```
 
-No future implementation plan is documented here.
+## Integration layer status
+
+`frontend/lib/deal-room/` is application-internal.
+
+It is not currently presented as a stable external SDK.

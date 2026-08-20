@@ -1,42 +1,78 @@
 # Wallet & STRK20 Integration
 
-## Wallet layer
+## Objective
 
-Key file:
+The wallet layer keeps transaction signing and user authorization outside the VINSS backend and Agent.
 
-```text
-lib/starknet/walletClient.ts
-```
+## Wallet session
 
-VINSS connects through Wallet Standard and creates a Starknet `WalletAccountV6`.
+VINSS connects with Wallet Standard and constructs a Starknet `WalletAccountV6`.
 
-STRK20 capability is detected from supported Wallet API versions. The current minimum treated as capable is:
+## STRK20 capability detection
+
+Current minimum treated as STRK20-capable:
 
 ```text
 0.10.3
 ```
 
-## Submission
+Implementation:
 
-Private Chat and Offer actions use:
+```ts
+const versions = await walletV6.supportedWalletApi(wallet);
 
-```text
+return versions.some(
+  (version) =>
+    compareVersion(version, MIN_STRK20_WALLET_API) >= 0,
+);
+```
+
+Capability is detected through supported API versions rather than by attempting a data-moving action.
+
+## Execution primitive
+
+Private Message, Offer, Invite, and Escrow-related paths use:
+
+```ts
 account.strk20InvokeTransaction(...)
 ```
 
-The frontend Deal Room integration layer builds the action bundle expected by the current wallet/privacy flow and VINSS helper contract.
-
-## Current application revenue
-
-```text
-Private message  0.5 STRK
-Offer action     1 STRK
-```
+with action bundles appropriate to each helper.
 
 ## Address normalization
 
-Contract addresses are normalized with `num.toHex()` before wallet use so zero-padded felt strings do not violate strict Wallet API formatting.
+The STRK20 Wallet API validates felt-like fields strictly.
 
-## Authority
+VINSS normalizes contract/token addresses with:
 
-Transaction approval and wallet private keys remain in the wallet. The VINSS backend and Agent do not sign transactions.
+```ts
+function normalizeAddress(address: string): string {
+  return address ? num.toHex(address) : address;
+}
+```
+
+This avoids invalid zero-padded felt formatting at wallet boundaries.
+
+## Authority boundary
+
+```text
+VINSS frontend
+    prepares action
+        ↓
+wallet
+    shows / authorizes action
+        ↓
+STRK20 Wallet API
+        ↓
+Privacy Pool / helper
+```
+
+The frontend never receives the wallet private key.
+
+The backend and Agent do not sign transactions.
+
+## Network boundary
+
+Contract addresses are environment-driven because Sepolia and mainnet deployments differ.
+
+Frontend network, RPC, backend, and contract configuration must all refer to the same environment.

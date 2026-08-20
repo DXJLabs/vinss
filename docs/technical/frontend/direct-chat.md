@@ -2,7 +2,11 @@
 
 ## Status
 
-Two-party private Chat is part of the current tested MVP.
+**Testnet on-chain verified.**
+
+## Objective
+
+Direct Chat provides encrypted two-party communication while keeping plaintext Message content and reusable participant identities out of helper contract state.
 
 ## Key files
 
@@ -16,48 +20,78 @@ lib/privacy/presence.ts
 lib/privacy/encryptedChatCache.ts
 ```
 
-## Sending
-
-`sendMessage()` performs:
+## Send path
 
 ```text
-pairwise encryption/routing context
-        ↓
-one-time action locator
-        ↓
-sender + recipient routing tags
-        ↓
-encrypt MessagePayload
-        ↓
-commit encrypted envelope
-        ↓
-submit STRK20 action bundle
+pairwise direct key
+→ fresh action locator
+→ opaque sender/recipient tags
+→ encrypt MessagePayload
+→ compute payload commitment
+→ STRK20 action bundle
+→ Message Helper
 ```
 
-Current application revenue:
+Important submission excerpt:
 
-```text
-0.5 STRK per submitted private message
+```ts
+const debugActions = [
+  {
+    type: "withdraw",
+    token: CONTRACTS.messageHelperOpenNoteToken,
+    amount: "0x6f05b59d3b20000",
+    recipient: CONTRACTS.messageHelper,
+  },
+  {
+    type: "transfer",
+    token: CONTRACTS.messageHelperOpenNoteToken,
+    amount: "OPEN",
+    recipient: treasuryAddress,
+  },
+  {
+    type: "invoke",
+    contract: CONTRACTS.messageHelper,
+    calldata: [
+      toFelt(calldata.length + 1),
+      ...calldata,
+      "${openNoteIds[0]}",
+    ],
+  },
+];
+
+await account.strk20InvokeTransaction(debugActions);
 ```
 
-## Discovery
+The current code routes **0.5 STRK** application revenue per submitted private Message action.
 
-The browser calls:
+## Discovery path
 
-```http
-POST /discover
-```
-
-with:
+The browser requests:
 
 ```json
 { "kind": "message" }
 ```
 
-The frontend derives expected private routing tags, ignores unrelated records, decrypts matching ciphertext locally, verifies sender-tag binding, and renders messages for the selected pair.
+The backend returns candidate encrypted records.
+
+The frontend first checks the opaque recipient routing tag, then decrypts locally.
+
+After decryption it also binds the encrypted sender identity back to the public opaque sender tag.
+
+## Participant discovery
+
+Participant wallet address + messaging public key are exchanged through encrypted presence and/or encrypted room-level message metadata.
+
+Direct Chat consumes that private participant state to derive the pairwise key.
 
 ## Local encrypted history
 
-Direct history may be cached locally with AES-GCM through `lib/privacy/encryptedChatCache.ts`.
+Direct history can be cached locally using AES-GCM.
 
-The cache is a UX optimization. External history discovery remains ciphertext-based.
+The cache is a UX/recovery optimization, not an authoritative network history source.
+
+## Mobile wallet recovery
+
+Before wallet handoff, the frontend persists the prepared locator and pending local entry.
+
+If the Ready callback is delayed, VINSS treats the action as pending and attempts discovery reconciliation instead of immediately declaring failure.

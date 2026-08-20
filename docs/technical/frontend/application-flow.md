@@ -1,89 +1,84 @@
 # Application Flow
 
-## Reviewer path
-
-For the tested two-party MVP:
+## End-to-end client path
 
 ```text
 Connect wallet
     ↓
-Open/join Deal Room
+Open / join Deal Room
+    ↓
+Establish room-level context
     ↓
 Discover participant identity
     ↓
-Select private peer
+Derive pairwise key
     ↓
-Derive pairwise encryption key
+Create private action
     ↓
-Private Chat / Offer
+Encrypt locally
     ↓
-Ready + STRK20
+Derive opaque routing tags
     ↓
-VINSS helper contract
+Commit encrypted envelope
+    ↓
+STRK20 wallet submission
+    ↓
+VINSS helper event
     ↓
 Backend ciphertext discovery
     ↓
-Local match + decrypt
+Local route match
+    ↓
+Local decrypt
+    ↓
+UI state reconciliation
 ```
 
-## Private message
+## Message and Offer share the same privacy shape
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as VINSS Frontend
-    participant W as Ready / STRK20
-    participant H as Message Helper
-    participant B as VINSS Backend
-    participant P as Peer Frontend
-
-    U->>F: Send private message
-    F->>F: Derive pairwise key
-    F->>F: Encrypt payload + derive opaque routing tags
-    F->>W: STRK20 action bundle
-    W->>H: privacy_invoke
-    H-->>H: Commit ciphertext record
-    P->>B: POST /discover {kind: message}
-    B-->>P: Candidate ciphertext
-    P->>P: Match + decrypt locally
-```
-
-## Private Offer
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as VINSS Frontend
-    participant W as Ready / STRK20
-    participant H as Offer Helper
-    participant B as VINSS Backend
-    participant P as Peer Frontend
-
-    U->>F: Create Offer action
-    F->>F: Reuse direct pairwise context
-    F->>F: Encrypt Offer terms
-    F->>W: STRK20 action bundle
-    W->>H: privacy_invoke
-    H-->>H: Commit immutable Offer action
-    P->>B: POST /discover {kind: offer}
-    B-->>P: Candidate Offer ciphertext
-    P->>P: Match + decrypt locally
-```
-
-## Agent
-
-The Agent is separate from transaction execution:
+Both direct Message and direct Offer paths use:
 
 ```text
-User instruction
-    ↓
-Frontend minimizes automatic context
-    ↓
-POST /agent with explicit skill
-    ↓
-Backend sanitizes again
-    ↓
-Agent returns draft/analysis/proposal
-    ↓
-User decides whether to use it
+pairwise key
++
+fresh action locator
++
+opaque sender/recipient tags
++
+ciphertext
++
+payload commitment
+```
+
+The semantics differ, but the privacy and discovery pattern is intentionally consistent.
+
+## Recovery is part of the flow
+
+Mobile wallet interaction can background or remount the dapp before a callback returns.
+
+VINSS therefore persists prepared action metadata before wallet handoff and later reconciles using discovery.
+
+Conceptually:
+
+```text
+prepare locator
+→ persist pending state
+→ open wallet
+→ callback may return late
+→ discovery confirms action
+→ local state reconciles
+```
+
+This prevents a delayed wallet callback from being treated automatically as a failed on-chain action.
+
+## Financial actions
+
+Agent suggestions and local UI state do not execute financial actions independently.
+
+The execution boundary remains:
+
+```text
+user decision
+→ wallet authorization
+→ STRK20 action
 ```

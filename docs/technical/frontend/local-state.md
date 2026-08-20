@@ -1,6 +1,10 @@
 # Local State
 
-## Rooms
+## Objective
+
+Local state provides privacy-preserving persistence and mobile recovery without treating browser storage as an authoritative network database.
+
+## Room records
 
 Current room records use:
 
@@ -8,7 +12,7 @@ Current room records use:
 vinss:local-rooms
 ```
 
-and include:
+and can contain:
 
 ```text
 id
@@ -17,26 +21,45 @@ roomSecret
 createdAt
 ```
 
-The room secret is currently stored in browser `localStorage` and used locally to derive the room-level key.
+The room secret is currently stored in browser `localStorage`.
 
-## Messaging private key
+This is a deliberate current implementation boundary and a browser-origin security risk.
 
-Direct messaging identity is stored in IndexedDB:
+## Messaging identity
+
+Per-room/per-wallet direct messaging identity is stored in IndexedDB:
 
 ```text
 database: vinss-messaging-keys
 store: identities
 ```
 
-The persisted private ECDH key is a non-exportable WebCrypto `CryptoKey`.
+The persisted ECDH private key is a non-exportable WebCrypto `CryptoKey`.
 
 ## Participant cache
 
-Known peer address/public-key metadata is cached locally for UX continuity. It is not an authoritative on-chain participant registry.
+Peer address/public-key metadata can be cached in localStorage.
 
-## Encrypted chat cache
+This cache improves continuity after mobile wallet/browser remounts.
 
-Chat history can be stored in `localStorage` as:
+It is not an authoritative participant registry.
+
+## Encrypted chat history
+
+History is encrypted before localStorage persistence:
+
+```ts
+const encrypted = await crypto.subtle.encrypt(
+  {
+    name: "AES-GCM",
+    iv,
+  },
+  key,
+  plaintext,
+);
+```
+
+Stored record shape:
 
 ```text
 version
@@ -44,12 +67,22 @@ iv
 ciphertext
 ```
 
-encrypted with AES-GCM.
+## Pending transaction recovery
 
-## Invitations
+Prepared Message/Offer metadata can be persisted locally before wallet handoff.
 
-Prepared invitation links can be persisted locally for mobile-wallet recovery. Invite encryption keys use the URL fragment (`#k=...`), which is not part of the normal HTTP request URL.
+This allows the frontend to reconcile a transaction whose wallet callback was delayed.
 
 ## Security boundary
 
-Because room secrets and some application metadata are browser-local, XSS, compromised dependencies, origin compromise, and unsafe browser extensions are privacy-critical client risks.
+Browser-local privacy depends on the integrity of the frontend origin.
+
+Critical risks include:
+
+- XSS;
+- compromised dependencies;
+- malicious browser extensions;
+- origin compromise;
+- device compromise.
+
+A non-exportable `CryptoKey` reduces accidental key export but does not make a compromised browser environment safe.

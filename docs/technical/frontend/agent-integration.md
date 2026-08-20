@@ -1,16 +1,10 @@
 # Agent Integration
 
-VINSS Agent is optional Deal Room assistance.
+## Objective
 
-## Frontend boundary
+VINSS Agent assists with reasoning and preparation without becoming a signing authority or receiving the full private Deal Room timeline automatically.
 
-Key file:
-
-```text
-lib/agent.ts
-```
-
-The request requires an explicit skill:
+## Supported skills
 
 ```text
 chat
@@ -18,20 +12,62 @@ offer
 escrow
 ```
 
-Automatic timeline summaries are reduced to generic privacy-safe labels before network transmission. `latestOffer` is reduced to its action locator.
+## Frontend context minimization
 
-## Flow
+Automatic timeline context is reduced before transmission.
 
-```mermaid
-flowchart LR
-    U[User instruction] --> UI[Agent UI]
-    UI --> SAFE[Frontend context reduction]
-    SAFE --> API[POST /agent]
-    API --> SERVER[Backend sanitizer]
-    SERVER --> MODEL[Configured provider]
-    MODEL --> RESULT[Draft / analysis / proposal]
+Important implementation:
+
+```ts
+summary:
+  item.kind === "offer"
+    ? "Encrypted Offer action"
+    : item.kind === "message"
+      ? "Encrypted private message"
+      : "Encrypted private activity"
 ```
 
-The user's explicitly typed Agent instruction is transmitted to the backend/provider.
+The latest Offer is reduced to its action locator rather than sending the entire decrypted Offer object automatically.
 
-Agent output is advisory/local UI input. It has no independent transaction-signing authority.
+## Explicit user text
+
+Text typed directly into the Agent input is intentionally transmitted to the backend/provider.
+
+This is different from automatic timeline context.
+
+## Proposal boundary
+
+Agent proposals include:
+
+```text
+draft_message
+draft_offer
+draft_counter_offer
+prepare_escrow
+review_rekber
+```
+
+Each proposal type requires approval:
+
+```ts
+requiresApproval: true
+```
+
+## Authority boundary
+
+```text
+Agent
+→ draft / analysis / proposal
+→ user reviews
+→ user chooses whether to act
+→ wallet authorizes transaction
+```
+
+The Agent has no independent transaction-signing authority.
+
+It must not receive:
+
+- wallet private keys;
+- pairwise private keys;
+- channel keys;
+- release/refund secrets.
