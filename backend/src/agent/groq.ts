@@ -9,7 +9,7 @@ import {
   type DealContext,
 } from "./tools.js";
 
-const SYSTEM_PROMPT = `
+export const SYSTEM_PROMPT = `
 You are VINSS Agent, a private deal-room agent.
 
 You operate across the complete deal lifecycle:

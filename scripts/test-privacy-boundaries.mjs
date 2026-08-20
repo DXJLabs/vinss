@@ -14,8 +14,8 @@ console.log('privacy boundary checks: PASS');
 const discoverRoute = await readFile(new URL('../backend/src/routes/discover.ts', import.meta.url), 'utf8');
 const discoverTypes = await readFile(new URL('../backend/src/types.ts', import.meta.url), 'utf8');
 const discoverIndex = await readFile(new URL('../backend/src/indexer/poolEvents.ts', import.meta.url), 'utf8');
-const messaging = await readFile(new URL('../frontend/lib/vinss-sdk/messaging.ts', import.meta.url), 'utf8');
-const offer = await readFile(new URL('../frontend/lib/vinss-sdk/offer.ts', import.meta.url), 'utf8');
+const messaging = await readFile(new URL('../frontend/lib/deal-room/messaging.ts', import.meta.url), 'utf8');
+const offer = await readFile(new URL('../frontend/lib/deal-room/offers.ts', import.meta.url), 'utf8');
 
 assert.equal(discoverRoute.includes('decryptMatching'), false, 'backend discovery must not decrypt');
 assert.equal(discoverRoute.includes('body.channelKeyHex'), false, 'backend discovery must not read channelKeyHex');
