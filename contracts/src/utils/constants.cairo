@@ -22,7 +22,7 @@ pub const MAX_PAYLOAD_CHUNKS: u64 = 64;
 ///
 /// - a new envelope version;
 /// - a new commitment domain;
-/// - synchronized SDK, prover-service, indexer, and contract updates.
+/// - synchronized frontend integration, indexer, and contract updates.
 pub const VINSS_MESSAGE_ENVELOPE_VERSION: u8 = 2;
 
 /// Number of fixed felt fields before encrypted-message ciphertext chunks.
@@ -52,7 +52,7 @@ pub const MESSAGE_ENVELOPE_HEADER_FELTS: usize = 6;
 ///     ...ciphertext_chunks
 /// )
 ///
-/// The SDK and contract must use this exact value and input order.
+/// The frontend integration layer and contract must use this exact value and input order.
 pub const VINSS_MESSAGE_COMMITMENT_DOMAIN: felt252 =
     'VINSS_MSG_COMMIT_V2';
 
@@ -82,9 +82,11 @@ pub const VINSS_OFFER_ENVELOPE_VERSION: u8 = 2;
 ///
 /// 0. envelope_version
 /// 1. offer_action_locator
-/// 2. claimed_payload_commitment
-/// 3. payload_chunk_count
-/// 4... ciphertext_chunks
+/// 2. sender_tag
+/// 3. recipient_tag
+/// 4. claimed_payload_commitment
+/// 5. payload_chunk_count
+/// 6... ciphertext_chunks
 pub const OFFER_ENVELOPE_HEADER_FELTS: usize = 6;
 
 /// Domain separator for encrypted VINSS Offer action commitments.
@@ -95,6 +97,8 @@ pub const OFFER_ENVELOPE_HEADER_FELTS: usize = 6;
 ///     VINSS_OFFER_COMMITMENT_DOMAIN,
 ///     envelope_version,
 ///     offer_action_locator,
+///     sender_tag,
+///     recipient_tag,
 ///     payload_chunk_count,
 ///     ...ciphertext_chunks
 /// )

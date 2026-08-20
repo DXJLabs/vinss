@@ -144,7 +144,7 @@ pub mod VinssOfferHelper {
                 offer_calldata,
             );
 
-            // Flat VINSS Offer revenue = 0.5 STRK.
+            // Flat VINSS Offer revenue = 1 STRK.
             let revenue_amount: u128 =
                 1000000000000000000_u128;
 
@@ -245,9 +245,11 @@ pub mod VinssOfferHelper {
         ///
         /// 0. envelope_version
         /// 1. offer_action_locator
-        /// 2. claimed_payload_commitment
-        /// 3. payload_chunk_count
-        /// 4... ciphertext_chunks
+        /// 2. sender_tag
+        /// 3. recipient_tag
+        /// 4. claimed_payload_commitment
+        /// 5. payload_chunk_count
+        /// 6... ciphertext_chunks
         fn store_offer_action(
             ref self: ContractState,
             calldata: Span<felt252>,

@@ -28,10 +28,10 @@ pub mod VinssMessageHelper {
         /// Only this Privacy Pool may invoke the encrypted messaging path.
         privacy_pool: ContractAddress,
 
-        /// Token reported on the zero-amount `OpenNoteDeposit` this helper
-        /// returns as VINSS private messaging revenue through an OPEN note.
-        /// Messaging charges a configured STRK revenue amount; the paired
-        /// `transfer: "OPEN"` action creates the private treasury note.
+        /// Revenue token used by the helper OpenNoteDeposit.
+        /// Current private messaging revenue is 0.5 STRK per submitted action;
+        /// the paired frontend `transfer: "OPEN"` action routes the resulting
+        /// private treasury note.
         open_note_token: ContractAddress,
 
         /// Public structural record indexed by a one-time message locator.

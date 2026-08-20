@@ -1,82 +1,74 @@
 # VINSS Smart Contracts
 
-VINSS contracts are the Cairo-owned application layer for encrypted onchain communication, negotiation, and private escrow workflows on Starknet.
+VINSS smart contracts are the Cairo application layer used by the current private Chat and Offer flows on Starknet.
 
-VINSS does not replace or modify the Starknet Canonical Privacy Pool. Privacy Pool remains responsible for privacy primitives, note handling, nullifiers, proof verification, and private execution. VINSS owns product-level contracts and state transitions.
+VINSS does **not** replace or modify the STRK20 Privacy Pool. The Privacy Pool remains the privacy/execution substrate. VINSS helper contracts receive application-specific encrypted calldata through the configured Privacy Pool.
 
-## Contract Modules
+## Current documented scope
 
-- `contracts/messaging/` - `VINSSChannelHelper`, encrypted timeline storage, and `privacy_invoke` compatibility.
-- `contracts/offers/` - `VINSSOffer`, offer lifecycle, counter-offers, acceptance, cancellation, and escrow binding.
-- `contracts/private_escrow/` - private escrow action commitments.
-- `contracts/escrow_rekber/` - private custody rekber through the Privacy Pool.
-- `contracts/interfaces/` - shared Cairo interfaces and Privacy Pool-compatible return types.
-- `contracts/events/` - shared event definitions.
-- `contracts/utils/` - shared constants, hashing, validation, and time helpers.
+This README and `docs/technical/smart-contracts/` currently document:
 
-## Starknet Sepolia Testnet Deployment
+- `VinssMessageHelper`
+- `VinssOfferHelper`
 
-Last updated: 2026-08-15.
+Other contract modules may exist in the repository but are outside this documentation scope and are not presented here as completed MVP functionality.
 
-| Contract | Address | Class hash | Deploy transaction |
-| --- | --- | --- | --- |
-| `VinssMessageHelper` | `0x0536349c3587e9c8d103082a9e60ce1fb0fb4f6d010586a79d92b0dee3eaab21` | `0x070e8f3a92176e691fadd96329fb13542b3d0b2f39487563da3b9d8a9558d744` | `0x028239c55570771c3e487d697f052d9fa198dc32bcfa0fa9ed82c491c913998a` |
-| `VinssOfferHelper` | `0x0184a7c69e83f9b2ef9e6a0e0cf7f8680308e4701b715b8281037b91b3732bb9` | `0x05d6fec1f155f10666c97be54130cd55b4b808ad1fccc8c8d13d5fc65e7543d6` | `0x04d7de9b5dc7e38b3516daea9a5a3632adf2893306ff0fe1510d814ce0cf6030` |
-| `VinssPrivateEscrowHelper` | `0x01038379f1b0f876f719116eddc9c41d97e9e968f5dbec3ba603a9eb2211664a` | `0x033402e23b912c0b88528b223653c73472cef9ca597adaa2afafde2c5aa4a004` | `0x024cd65ac31f67aa6368885d732e15148b5410d16a6e512eeab4a959e91d077f` |
-| `VinssEscrowRekber` | `0x06973364950e28379b8784ac36fed200770aac9bd16502392a16e88e023ae6c7` | `0x04c84494c21f92d19979df307f1a4170983c1fa276a72c71e98d8760ced9e2de` | `0x025fe8dc77e247a3b5c26e715bab6564ca1e5c7b390628f8b0445c9a8636fb1d` |
+## Source structure
 
-### Privacy Pool
+```text
+src/
+├── messaging/
+│   ├── messaging_events.cairo
+│   ├── messaging_interfaces.cairo
+│   ├── messaging_types.cairo
+│   ├── messaging_validation.cairo
+│   ├── timeline_payload_hash.cairo
+│   └── vinss_message_helper.cairo
+│
+├── offers/
+│   ├── offer_commitments.cairo
+│   ├── offer_events.cairo
+│   ├── offer_interfaces.cairo
+│   ├── offer_types.cairo
+│   ├── offer_validation.cairo
+│   └── vinss_offer.cairo
+│
+├── interfaces/
+├── utils/
+└── tests/
+```
 
-`0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91`
+## Core boundary
 
-All VINSS application contracts above were successfully deployed on Starknet Sepolia using the configured Privacy Pool address.
+Both current helpers:
 
-These addresses are **Sepolia testnet deployments only** and must not be used as Starknet Mainnet addresses.
+- accept writes only from the Privacy Pool address pinned at deployment;
+- store public encrypted-envelope structure and ciphertext;
+- do not receive plaintext message or Offer terms;
+- do not receive public wallet addresses as sender/recipient fields;
+- use one-time opaque routing tags;
+- validate a domain-separated Poseidon commitment;
+- reject locator reuse;
+- expose read methods used by ciphertext discovery.
 
+## Current revenue behavior
 
-## Detailed Docs
+```text
+VinssMessageHelper   0.5 STRK per submitted private message
+VinssOfferHelper     1 STRK per submitted Offer action
+```
 
-- [Messaging helper](../docs/contracts/messaging.md)
-- [Offers](../docs/contracts/offers.md)
-- [Privacy and security boundaries](../docs/contracts/privacy-and-security.md)
+The frontend constructs the corresponding STRK20 action bundle. The helper returns an `OpenNoteDeposit` for the configured revenue token and amount.
 
-## Architecture Boundary
-
-- `contracts/` is VINSS-owned Cairo code.
-- `reference/contract/` and `reference/contracts/` are protocol references and must remain read-only unless explicitly updating the local reference.
-- VINSS private escrow contracts are VINSS-owned. They are not Privacy Pool primitives.
-- Shielded paths use Privacy Pool `InvokeExternal` into VINSS contracts where compatible.
-- Direct helper paths must not be labeled as shielded.
-
-## Validation Before Push
-
-Run:
+## Build and test
 
 ```bash
-npm run build
-npm run test:sdk
-scarb --release build
+cd ~/vinss/contracts
+
+scarb build
 snforge test
 ```
 
-Do not push if build or tests fail.
+## Technical documentation
 
-
-## Messaging V2 — Sepolia
-
-Recipient-bound VINSS Messaging V2.
-
-- Envelope version: `2`
-- Commitment domain: `VINSS_MSG_COMMIT_V2`
-- Sender routing: ephemeral `sender_tag`
-- Recipient routing: ephemeral `recipient_tag`
-- Messaging revenue: `0.5 STRK`
-- Contract tests: `30 passed, 0 failed`
-
-### VinssMessageHelper V2
-
-- Class hash: `0x24d79a702988adaba91e92f23f176ab25c1c242e65bb98417172169e535fbdb`
-- Contract: `0x00ae9bf8a22166fc766bd010a4e3bf763b0ab927b26b3d03fb09a8a01b47b6ce`
-- Deploy transaction: `0x006d1c41960e65f0707731361046e6a0f4a82a294082d29f2973004617757a2b`
-
-V1 remains preserved separately as the known-working pre-V2 E2E backup.
+Start at [`../docs/technical/smart-contracts/README.md`](../docs/technical/smart-contracts/README.md).

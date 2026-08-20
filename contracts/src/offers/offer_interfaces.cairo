@@ -40,9 +40,12 @@ pub trait IVinssOfferHelper<TContractState> {
     /// ```text
     /// [0] envelope_version
     /// [1] offer_action_locator
-    /// [2] claimed_payload_commitment
-    /// [3] payload_chunk_count
-    /// [4...] ciphertext_chunks
+    /// [2] sender_tag
+    /// [3] recipient_tag
+    /// [4] claimed_payload_commitment
+    /// [5] payload_chunk_count
+    /// [6...] ciphertext_chunks
+    /// [last] open_note_id
     /// ```
     ///
     /// Public information:
@@ -50,6 +53,8 @@ pub trait IVinssOfferHelper<TContractState> {
     /// - helper contract address;
     /// - envelope version;
     /// - one-time action locator;
+    /// - opaque sender routing tag;
+    /// - opaque recipient routing tag;
     /// - payload commitment;
     /// - ciphertext length;
     /// - ciphertext chunks;
@@ -69,8 +74,8 @@ pub trait IVinssOfferHelper<TContractState> {
     /// - accept or reject reason;
     /// - deal commitment.
     ///
-    /// The helper returns an empty deposit span because storing an encrypted
-    /// Offer action does not itself credit an output token to an open note.
+    /// Successful invocation returns one OpenNoteDeposit carrying the current
+    /// 1 STRK VINSS Offer application revenue for the paired OPEN transfer.
     fn privacy_invoke(
         ref self: TContractState,
         calldata: Span<felt252>,

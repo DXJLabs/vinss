@@ -7,13 +7,12 @@
 /// Ciphertext chunks are stored separately under:
 /// `(message_locator, chunk_index)`.
 ///
-/// `message_locator` must be unique for every message. The VINSS SDK derives
-/// and tracks it from private channel state; the helper only enforces that the
-/// same locator cannot be stored twice.
+/// `message_locator` must be unique for every message. The VINSS client
+/// integration layer derives and tracks it from private application state; the
+/// helper only enforces that the same locator cannot be stored twice.
 ///
-/// The zero-value encrypted note used as the Privacy Pool replay anchor is
-/// created in the same proved action batch and is not referenced publicly by
-/// this helper.
+/// Privacy Pool replay/nullifier requirements are enforced by the containing
+/// Privacy Pool transaction and are separate from this helper-level locator guard.
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct VinssMessageRecord {
     /// Version of the encrypted-message envelope and commitment format.
