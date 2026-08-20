@@ -1,11 +1,8 @@
-import type {
-  AgentSkill,
-} from "./types.js";
+import type { AgentSkill } from "./types.js";
 
 export const chatSkill: AgentSkill = {
   id: "chat",
-  description:
-    "Private messaging and conversation assistance.",
+  description: "Private messaging and conversation assistance.",
   instructions: `
 Chat skill:
 - Help with private-message workflow only.
@@ -13,8 +10,5 @@ Chat skill:
 - Do not create/counter offers or prepare escrow.
 - If private plaintext was not explicitly submitted in the user's instruction, do not pretend to know it.
 `,
-  allowedTools: [
-    "inspect_deal_state",
-    "draft_message",
-  ],
+  allowedTools: ["inspect_deal_state", "draft_message"],
 };

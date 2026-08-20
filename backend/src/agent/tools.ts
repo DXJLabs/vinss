@@ -93,9 +93,7 @@ export function calculateFee(amount: string, feeBps = 25) {
 export function inferDealStage(context: DealContext): DealStage {
   const timeline = context.timeline ?? [];
 
-  const text = timeline
-    .map((item) => item.summary.toLowerCase())
-    .join("\n");
+  const text = timeline.map((item) => item.summary.toLowerCase()).join("\n");
 
   if (
     text.includes("complete deal") ||
@@ -105,10 +103,7 @@ export function inferDealStage(context: DealContext): DealStage {
     return "completed";
   }
 
-  if (
-    text.includes("rekber") ||
-    text.includes("release escrow")
-  ) {
+  if (text.includes("rekber") || text.includes("release escrow")) {
     return "rekber_pending";
   }
 
@@ -120,17 +115,11 @@ export function inferDealStage(context: DealContext): DealStage {
     return "funded";
   }
 
-  if (
-    text.includes("escrow ready") ||
-    text.includes("prepare_escrow")
-  ) {
+  if (text.includes("escrow ready") || text.includes("prepare_escrow")) {
     return "escrow_pending";
   }
 
-  if (
-    text.includes("accept offer") ||
-    text.includes("accept —")
-  ) {
+  if (text.includes("accept offer") || text.includes("accept —")) {
     return "agreed";
   }
 
@@ -158,31 +147,17 @@ export function analyzeOffer(context: DealContext) {
   const findings: string[] = [];
 
   if (!offer.paymentTerms?.trim()) {
-    findings.push(
-      "Payment timing is not available in the shared context.",
-    );
+    findings.push("Payment timing is not available in the shared context.");
   }
 
   if (!offer.conditions?.trim()) {
-    findings.push(
-      "Conditions are not available in the shared context.",
-    );
+    findings.push("Conditions are not available in the shared context.");
   }
 
-  const numericAmount = Number(
-    offer.amount,
-  );
+  const numericAmount = Number(offer.amount);
 
-  if (
-    !offer.amount ||
-    !Number.isFinite(
-      numericAmount,
-    ) ||
-    numericAmount <= 0
-  ) {
-    findings.push(
-      "Offer amount is not available or invalid.",
-    );
+  if (!offer.amount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+    findings.push("Offer amount is not available or invalid.");
   }
 
   return {
@@ -248,22 +223,14 @@ export function draftCounterOffer(
     throw new Error("An offer is required to draft a counter-offer.");
   }
 
-  if (
-    !offer.asset ||
-    !offer.amount ||
-    !offer.paymentTerms
-  ) {
+  if (!offer.asset || !offer.amount || !offer.paymentTerms) {
     throw new Error(
       "Private Offer terms are not available to the remote Agent. Supply the intended counter terms explicitly.",
     );
   }
 
-  const nextAmount =
-    amount?.trim() ||
-    offer.amount;
-  const nextTerms =
-    terms?.trim() ||
-    offer.paymentTerms;
+  const nextAmount = amount?.trim() || offer.amount;
+  const nextTerms = terms?.trim() || offer.paymentTerms;
 
   return {
     type: "draft_counter_offer",
@@ -274,9 +241,7 @@ export function draftCounterOffer(
       asset: offer.asset,
       amount: nextAmount,
       paymentTerms: nextTerms,
-      conditions:
-        offer.conditions ||
-        "Confirm rekber deadline before signing.",
+      conditions: offer.conditions || "Confirm rekber deadline before signing.",
     },
   };
 }
@@ -291,8 +256,7 @@ export function prepareEscrow(
   },
 ): AgentProposal {
   const locator =
-    params.dealOfferLocator?.trim() ||
-    context.latestOffer?.actionLocator;
+    params.dealOfferLocator?.trim() || context.latestOffer?.actionLocator;
 
   return {
     type: "prepare_escrow",
@@ -313,13 +277,10 @@ export function reviewRekber(reason: string): AgentProposal {
   return {
     type: "review_rekber",
     title: "Review rekber",
-    description:
-      "Review whether the current deal is ready for rekber.",
+    description: "Review whether the current deal is ready for rekber.",
     requiresApproval: true,
     payload: {
-      reason:
-        reason.trim() ||
-        "Review the current deal state before rekber.",
+      reason: reason.trim() || "Review the current deal state before rekber.",
     },
   };
 }
@@ -340,8 +301,7 @@ export function getToolDefinitions() {
       type: "function" as const,
       function: {
         name: "inspect_deal_state",
-        description:
-          "Inspect the current lifecycle stage of the private deal.",
+        description: "Inspect the current lifecycle stage of the private deal.",
         parameters: {
           type: "object",
           properties: {},
@@ -405,8 +365,7 @@ export function getToolDefinitions() {
       type: "function" as const,
       function: {
         name: "draft_counter_offer",
-        description:
-          "Prepare a counter-offer from the currently shared offer.",
+        description: "Prepare a counter-offer from the currently shared offer.",
         parameters: {
           type: "object",
           properties: {
@@ -441,8 +400,7 @@ export function getToolDefinitions() {
       type: "function" as const,
       function: {
         name: "review_rekber",
-        description:
-          "Prepare a rekber review. Never releases funds.",
+        description: "Prepare a rekber review. Never releases funds.",
         parameters: {
           type: "object",
           properties: {
@@ -457,8 +415,7 @@ export function getToolDefinitions() {
       type: "function" as const,
       function: {
         name: "calculate_fee",
-        description:
-          "Calculate an illustrative VINSS service fee.",
+        description: "Calculate an illustrative VINSS service fee.",
         parameters: {
           type: "object",
           properties: {
@@ -495,9 +452,7 @@ export function executeTool(
         String(args.asset ?? ""),
         String(args.amount ?? ""),
         String(args.paymentTerms ?? ""),
-        args.conditions == null
-          ? undefined
-          : String(args.conditions),
+        args.conditions == null ? undefined : String(args.conditions),
       );
 
     case "draft_counter_offer":
@@ -513,24 +468,17 @@ export function executeTool(
           args.dealOfferLocator == null
             ? undefined
             : String(args.dealOfferLocator),
-        amount:
-          args.amount == null ? undefined : String(args.amount),
-        token:
-          args.token == null ? undefined : String(args.token),
+        amount: args.amount == null ? undefined : String(args.amount),
+        token: args.token == null ? undefined : String(args.token),
         refundHours:
-          args.refundHours == null
-            ? undefined
-            : String(args.refundHours),
+          args.refundHours == null ? undefined : String(args.refundHours),
       });
 
     case "review_rekber":
       return reviewRekber(String(args.reason ?? ""));
 
     case "calculate_fee":
-      return calculateFee(
-        String(args.amount ?? ""),
-        feeBps,
-      );
+      return calculateFee(String(args.amount ?? ""), feeBps);
 
     default:
       throw new Error(`Tool not allowed: ${name}`);

@@ -1,7 +1,4 @@
-export type AgentSkillId =
-  | "chat"
-  | "offer"
-  | "escrow";
+export type AgentSkillId = "chat" | "offer" | "escrow";
 
 export interface AgentSkill {
   id: AgentSkillId;

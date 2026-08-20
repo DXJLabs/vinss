@@ -1,11 +1,8 @@
-import type {
-  AgentSkill,
-} from "./types.js";
+import type { AgentSkill } from "./types.js";
 
 export const offerSkill: AgentSkill = {
   id: "offer",
-  description:
-    "Offer creation, review and counter-offer assistance.",
+  description: "Offer creation, review and counter-offer assistance.",
   instructions: `
 Offer skill:
 - Work only on Offer workflow.

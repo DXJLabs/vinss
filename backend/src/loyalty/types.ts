@@ -1,10 +1,5 @@
 export type LoyaltyLevel =
-  | "STARTER"
-  | "BRONZE"
-  | "SILVER"
-  | "GOLD"
-  | "PLATINUM"
-  | "DIAMOND";
+  "STARTER" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
 
 export type LoyaltyAction =
   | "message_sent"

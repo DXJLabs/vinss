@@ -4,13 +4,9 @@ import {
   inferDealStage,
   type DealContext,
 } from "./tools.js";
-import type {
-  AgentSkill,
-} from "./skills/types.js";
+import type { AgentSkill } from "./skills/types.js";
 
-export function systemPromptForSkill(
-  skill: AgentSkill,
-): string {
+export function systemPromptForSkill(skill: AgentSkill): string {
   return [
     "VINSS scoped agent.",
     skill.instructions.trim(),
@@ -19,20 +15,13 @@ export function systemPromptForSkill(
   ].join("\n\n");
 }
 
-export function toolDefinitionsForSkill(
-  skill: AgentSkill,
-) {
-  const allowed =
-    new Set(skill.allowedTools);
+export function toolDefinitionsForSkill(skill: AgentSkill) {
+  const allowed = new Set(skill.allowedTools);
 
-  return getToolDefinitions().filter(
-    (tool) =>
-      allowed.has(
-        tool.function.name,
-      ),
-  );
+  return getToolDefinitions().filter((tool) => allowed.has(tool.function.name));
 }
 
+// Security boundary: tool scope is enforced in code, not only in the prompt.
 export function executeSkillTool(
   skill: AgentSkill,
   name: string,
@@ -40,33 +29,17 @@ export function executeSkillTool(
   context: DealContext,
   feeBps: number,
 ) {
-  if (
-    !skill.allowedTools.includes(
-      name,
-    )
-  ) {
-    throw new Error(
-      `Tool not allowed for ${skill.id} skill: ${name}`,
-    );
+  if (!skill.allowedTools.includes(name)) {
+    throw new Error(`Tool not allowed for ${skill.id} skill: ${name}`);
   }
 
-  return executeTool(
-    name,
-    args,
-    context,
-    feeBps,
-  );
+  return executeTool(name, args, context, feeBps);
 }
 
-export function buildAgentInput(
-  message: string,
-  context: DealContext,
-) {
+export function buildAgentInput(message: string, context: DealContext) {
   return {
     request: message,
-    currentDealStage:
-      inferDealStage(context),
-    privacySafeContext:
-      context,
+    currentDealStage: inferDealStage(context),
+    privacySafeContext: context,
   };
 }

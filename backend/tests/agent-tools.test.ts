@@ -1,13 +1,12 @@
 import test from "node:test";
+import { sanitizeAgentContext } from "../src/agent/context.ts";
 import assert from "node:assert/strict";
 
 import {
   executeSkillTool,
   toolDefinitionsForSkill,
 } from "../src/agent/runtime.ts";
-import {
-  getAgentSkill,
-} from "../src/agent/skills/registry.ts";
+import { getAgentSkill } from "../src/agent/skills/registry.ts";
 
 import {
   analyzeOffer,
@@ -64,10 +63,7 @@ test("private message remains a draft", () => {
 
   assert.equal(result.type, "draft_message");
   assert.equal(result.requiresApproval, true);
-  assert.equal(
-    result.payload.body,
-    "Barang sudah diterima.",
-  );
+  assert.equal(result.payload.body, "Barang sudah diterima.");
 });
 
 test("deal lifecycle stage can be inferred", () => {
@@ -85,9 +81,7 @@ test("deal lifecycle stage can be inferred", () => {
 });
 
 test("agent tool allowlist has no execution tools", () => {
-  const names = getToolDefinitions().map(
-    (tool) => tool.function.name,
-  );
+  const names = getToolDefinitions().map((tool) => tool.function.name);
 
   for (const forbidden of [
     "send_transaction",
@@ -99,100 +93,93 @@ test("agent tool allowlist has no execution tools", () => {
   }
 
   assert.throws(
-    () =>
-      executeTool(
-        "send_transaction",
-        {},
-        {},
-        25,
-      ),
+    () => executeTool("send_transaction", {}, {}, 25),
     /Tool not allowed/,
   );
 });
 
-
 test("skills expose only domain tools", () => {
-  const chatNames =
-    toolDefinitionsForSkill(
-      getAgentSkill("chat"),
-    ).map(
-      (tool) =>
-        tool.function.name,
-    );
+  const chatNames = toolDefinitionsForSkill(getAgentSkill("chat")).map(
+    (tool) => tool.function.name,
+  );
 
   assert.deepEqual(
     chatNames.sort(),
-    [
-      "draft_message",
-      "inspect_deal_state",
-    ].sort(),
+    ["draft_message", "inspect_deal_state"].sort(),
   );
 
-  const offerNames =
-    toolDefinitionsForSkill(
-      getAgentSkill("offer"),
-    ).map(
-      (tool) =>
-        tool.function.name,
-    );
-
-  assert.equal(
-    offerNames.includes(
-      "prepare_escrow",
-    ),
-    false,
+  const offerNames = toolDefinitionsForSkill(getAgentSkill("offer")).map(
+    (tool) => tool.function.name,
   );
 
-  const escrowNames =
-    toolDefinitionsForSkill(
-      getAgentSkill("escrow"),
-    ).map(
-      (tool) =>
-        tool.function.name,
-    );
+  assert.equal(offerNames.includes("prepare_escrow"), false);
 
-  assert.equal(
-    escrowNames.includes(
-      "draft_message",
-    ),
-    false,
+  const escrowNames = toolDefinitionsForSkill(getAgentSkill("escrow")).map(
+    (tool) => tool.function.name,
   );
+
+  assert.equal(escrowNames.includes("draft_message"), false);
 });
 
 test("skill boundary blocks cross-domain tool execution", () => {
   assert.throws(
-    () =>
-      executeSkillTool(
-        getAgentSkill("chat"),
-        "draft_offer",
-        {},
-        {},
-        25,
-      ),
+    () => executeSkillTool(getAgentSkill("chat"), "draft_offer", {}, {}, 25),
     /Tool not allowed for chat skill/,
   );
 
   assert.throws(
     () =>
-      executeSkillTool(
-        getAgentSkill("offer"),
-        "prepare_escrow",
-        {},
-        {},
-        25,
-      ),
+      executeSkillTool(getAgentSkill("offer"), "prepare_escrow", {}, {}, 25),
     /Tool not allowed for offer skill/,
   );
 
   assert.throws(
     () =>
-      executeSkillTool(
-        getAgentSkill("escrow"),
-        "draft_message",
-        {},
-        {},
-        25,
-      ),
+      executeSkillTool(getAgentSkill("escrow"), "draft_message", {}, {}, 25),
     /Tool not allowed for escrow skill/,
   );
+});
+
+test("agent context sanitizer strips private plaintext", () => {
+  const context = sanitizeAgentContext({
+    roomLabel: "Secret Room",
+    latestOffer: {
+      asset: "USDC",
+      amount: "50000",
+      paymentTerms: "Net 7",
+      conditions: "Private condition",
+      actionLocator: "0xabc",
+    },
+    timeline: [
+      {
+        kind: "message",
+        summary: "private message body",
+        actionLocator: "0x123",
+        walletAddress: "0xsecret",
+      },
+    ],
+    roomSecret: "do-not-forward",
+    channelKeyHex: "do-not-forward",
+  });
+
+  assert.deepEqual(context.latestOffer, {
+    actionLocator: "0xabc",
+  });
+
+  assert.equal(context.timeline?.[0]?.summary, "Encrypted private message");
+
+  const serialized = JSON.stringify(context);
+
+  for (const secret of [
+    "Secret Room",
+    "USDC",
+    "50000",
+    "Net 7",
+    "Private condition",
+    "private message body",
+    "0xsecret",
+    "do-not-forward",
+  ]) {
+    assert.equal(serialized.includes(secret), false);
+  }
 });

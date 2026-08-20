@@ -1,11 +1,8 @@
-import type {
-  AgentSkill,
-} from "./types.js";
+import type { AgentSkill } from "./types.js";
 
 export const escrowSkill: AgentSkill = {
   id: "escrow",
-  description:
-    "Escrow readiness and settlement assistance.",
+  description: "Escrow readiness and settlement assistance.",
   instructions: `
 Escrow skill:
 - Work only on escrow/rekber workflow.

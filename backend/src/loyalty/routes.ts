@@ -1,9 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import {
-  awardAction,
-  getLoyalty,
-  getLoyaltyRules,
-} from "./service.js";
+import { awardAction, getLoyalty, getLoyaltyRules } from "./service.js";
 import type { LoyaltyAction } from "./types.js";
 
 export const loyaltyRouter = Router();
@@ -47,9 +43,7 @@ loyaltyRouter.post("/loyalty/events", (req: Request, res: Response) => {
   }
 
   try {
-    return res.json(
-      awardAction(subject, action as LoyaltyAction, eventId),
-    );
+    return res.json(awardAction(subject, action as LoyaltyAction, eventId));
   } catch (error) {
     return res.status(400).json({
       error: error instanceof Error ? error.message : "Invalid loyalty event",

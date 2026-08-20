@@ -1,21 +1,9 @@
-import type {
-  AgentProposal,
-  DealContext,
-  DealStage,
-} from "../tools.js";
-import type {
-  AgentSkill,
-} from "../skills/types.js";
+import type { AgentProposal, DealContext, DealStage } from "../tools.js";
+import type { AgentSkill } from "../skills/types.js";
 
-export type VinssLlmProvider =
-  | "groq"
-  | "openai"
-  | "anthropic"
-  | "qwen";
+export type VinssLlmProvider = "groq" | "openai" | "anthropic" | "qwen";
 
-export type VinssLlmSelection =
-  | VinssLlmProvider
-  | "auto";
+export type VinssLlmSelection = VinssLlmProvider | "auto";
 
 export interface AgentProviderInput {
   message: string;
@@ -35,7 +23,5 @@ export interface AgentProviderResult {
 export interface AgentProvider {
   id: VinssLlmProvider;
   isConfigured(): boolean;
-  run(
-    input: AgentProviderInput,
-  ): Promise<AgentProviderResult>;
+  run(input: AgentProviderInput): Promise<AgentProviderResult>;
 }

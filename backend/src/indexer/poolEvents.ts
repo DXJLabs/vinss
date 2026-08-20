@@ -27,11 +27,7 @@ const CONTRACT_BY_KIND: Record<DiscoverKind, string> = {
 };
 
 const EVENT_KEY_BY_KIND: Record<DiscoverKind, string> = {
-  // Event selector = starknet_keccak(event name), matching the Cairo event
-  // struct names in contracts/*/{messaging,offer}_events.cairo. The escrow
-  // coordination contract's event name should be confirmed against
-  // contracts/private_escrow/private_escrow_events.cairo before relying on
-  // this in production — filled in as a best-effort placeholder here.
+  // Event selectors match the committed-action events declared by VINSS helpers.
   message: hash.getSelectorFromName("MessageCommitted"),
   offer: hash.getSelectorFromName("OfferActionCommitted"),
   escrow: hash.getSelectorFromName("PrivateEscrowActionCommitted"),

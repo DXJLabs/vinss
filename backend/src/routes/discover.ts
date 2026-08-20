@@ -30,11 +30,7 @@ discoverRouter.post("/discover", async (req: Request, res: Response) => {
     const fromBlock = body.fromBlock ?? 0;
     const toBlock = body.toBlock ?? "latest";
 
-    const committed = await scanCommittedActions(
-      body.kind,
-      fromBlock,
-      toBlock,
-    );
+    const committed = await scanCommittedActions(body.kind, fromBlock, toBlock);
 
     // The backend only indexes public blockchain data and returns the
     // encrypted payload. It never receives a channel key and never decrypts.
@@ -63,6 +59,8 @@ discoverRouter.post("/discover", async (req: Request, res: Response) => {
       "[discover] error:",
       err instanceof Error ? err.message : err,
     );
-    return res.status(500).json({ error: "Discovery failed. See server logs." });
+    return res
+      .status(500)
+      .json({ error: "Discovery failed. See server logs." });
   }
 });
