@@ -82,20 +82,20 @@ Health:       http://localhost:4000/health
 
 Start here:
 
-- [`docs/README.md`](docs/README.md) — backend documentation index
-- [`docs/architecture.md`](docs/architecture.md) — system architecture
-- [`docs/backend-interaction-flow.md`](docs/backend-interaction-flow.md) — how user actions interact with the backend
-- [`docs/privacy-security.md`](docs/privacy-security.md) — trust and data boundaries
-- [`docs/discovery-indexer.md`](docs/discovery-indexer.md) — ciphertext discovery
-- [`docs/agent-system.md`](docs/agent-system.md) — skills, tools, providers
-- [`docs/api-reference.md`](docs/api-reference.md) — HTTP API
-- [`docs/configuration.md`](docs/configuration.md) — environment configuration
-- [`docs/testing.md`](docs/testing.md) — validation and privacy tests
-- [`docs/deployment.md`](docs/deployment.md) — deployment
-- [`docs/observability.md`](docs/observability.md) — logging and monitoring
-- [`docs/incident-runbook.md`](docs/incident-runbook.md) — operational response
-- [`docs/mainnet-readiness.md`](docs/mainnet-readiness.md) — mainnet checklist
-- [`docs/known-limitations.md`](docs/known-limitations.md) — current limitations
+- [`docs/README.md`](../docs/technical/backend/README.md) — backend documentation index
+- [`docs/architecture.md`](../docs/technical/backend/architecture.md) — system architecture
+- [`docs/backend-interaction-flow.md`](../docs/technical/backend/backend-interaction-flow.md) — how user actions interact with the backend
+- [`docs/privacy-security.md`](../docs/technical/backend/privacy-security.md) — trust and data boundaries
+- [`docs/discovery-indexer.md`](../docs/technical/backend/discovery-indexer.md) — ciphertext discovery
+- [`docs/agent-system.md`](../docs/technical/backend/agent-system.md) — skills, tools, providers
+- [`docs/api-reference.md`](../docs/technical/backend/api-reference.md) — HTTP API
+- [`docs/configuration.md`](../docs/technical/backend/configuration.md) — environment configuration
+- [`docs/testing.md`](../docs/technical/backend/testing.md) — validation and privacy tests
+- [`docs/deployment.md`](../docs/technical/backend/deployment.md) — deployment
+- [`docs/observability.md`](../docs/technical/backend/observability.md) — logging and monitoring
+- [`docs/incident-runbook.md`](../docs/technical/backend/incident-runbook.md) — operational response
+- [`docs/mainnet-readiness.md`](../docs/technical/backend/mainnet-readiness.md) — mainnet checklist
+- [`docs/known-limitations.md`](../docs/technical/backend/known-limitations.md) — current limitations
 
 ## Current product scope
 
