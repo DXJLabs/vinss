@@ -1,59 +1,162 @@
 # Smart Contract Architecture
 
-## Role
+## Objective
 
-VINSS Message and Offer helpers are application-specific contracts invoked through the STRK20 Privacy Pool.
+VINSS contracts provide application-specific state transitions around the STRK20 Privacy Pool while keeping private deal semantics out of plaintext helper state wherever the current flow does not require public settlement data.
+
+## Module map
+
+```text
+contracts/src/
+├── invite/
+│   └── VinssInvite
+├── messaging/
+│   └── VinssMessageHelper
+├── offers/
+│   └── VinssOfferHelper
+├── private_escrow/
+│   └── VinssPrivateEscrowHelper
+└── escrow_rekber/
+    └── VinssEscrowRekber
+```
+
+All are exported by `contracts/src/lib.cairo`.
+
+## Execution path
 
 ```mermaid
 flowchart LR
-    C[VINSS Frontend]
-    W[Ready / STRK20 Wallet API]
-    P[STRK20 Privacy Pool]
-    M[VinssMessageHelper]
-    O[VinssOfferHelper]
-    E[Events + ciphertext storage]
-    B[VINSS Backend discovery]
+    F["VINSS Frontend"]
+    W["Privacy-enabled Wallet"]
+    P["STRK20 Privacy Pool"]
 
-    C -->|encrypted action bundle| W
-    W --> P
-    P -->|privacy_invoke| M
-    P -->|privacy_invoke| O
-    M --> E
-    O --> E
-    E --> B
+    I["VinssInvite"]
+    M["VinssMessageHelper"]
+    O["VinssOfferHelper"]
+    C["VinssPrivateEscrowHelper"]
+    R["VinssEscrowRekber"]
+
+    F --> W --> P
+    P --> I
+    P --> M
+    P --> O
+    P --> C
+    P --> R
 ```
 
-## Helper responsibility
+Each current `privacy_invoke` implementation checks that:
 
-The helpers verify and persist encrypted application envelopes.
+```cairo
+get_caller_address() == configured_privacy_pool
+```
 
-They do not decrypt payloads and do not interpret private message or Offer semantics.
+Arbitrary wallets/contracts cannot write through the intended private action entrypoint directly.
 
-## Authorized caller
+## Encrypted coordination architecture
 
-At deployment each helper stores one `privacy_pool` address.
-
-`privacy_invoke` requires:
+Message, Offer, and Private Escrow coordination use the same public structural pattern:
 
 ```text
-get_caller_address() == configured privacy_pool
+one-time action locator
+opaque sender tag
+opaque recipient tag
+payload commitment
+ciphertext chunk count
+ciphertext chunks
 ```
 
-Direct arbitrary contract/wallet writes are rejected.
+The contracts validate and persist encrypted envelopes but do not interpret the encrypted application action.
 
-## Storage pattern
-
-Both helpers use:
+### Storage pattern
 
 ```text
-one-time locator → public structural record
-(locator, chunk_index) → ciphertext chunk
-payload commitment → reuse marker
-locator → existence marker
+locator
+  → structural record
+
+(locator, chunk_index)
+  → ciphertext chunk
+
+commitment
+  → reuse marker
+
+locator
+  → existence marker
 ```
 
-## Discovery
+The locator identifies one action only.
 
-Events expose the one-time locator, commitment, and opaque routing tags.
+It is not a stable Deal Room, conversation, participant, or escrow identifier.
 
-The backend reads these public records and ciphertext chunks. Decryption remains a client operation.
+## Invite architecture
+
+Invite uses a different pattern:
+
+```text
+secret
+  ↓ Poseidon(domain, secret)
+commitment
+  ↓
+on-chain InviteEntry
+  ├── expires_at
+  ├── consumed
+  └── exists
+```
+
+The encrypted Invite payload itself remains a frontend/off-chain concern.
+
+## Escrow Rekber architecture
+
+Escrow Rekber is the custody layer:
+
+```text
+DEPOSIT
+  → custody commitment
+  → release commitment
+  → refund commitment
+  → token + principal + refund boundary
+  → reserve principal
+  → return fee OpenNoteDeposit
+
+RELEASE before refund boundary
+  → verify release preimage
+  → consume custody
+  → return principal OpenNoteDeposit
+
+REFUND at/after boundary
+  → verify refund preimage
+  → consume custody
+  → return principal OpenNoteDeposit
+```
+
+This contract uses an OpenZeppelin reentrancy guard and tracks reserved principal by token.
+
+## Separation of responsibilities
+
+```text
+Private Escrow Helper
+  = encrypted coordination / discovery
+
+Escrow Rekber
+  = actual ERC-20 custody / settlement
+```
+
+They are technical layers of one Escrow Rekber product flow, not separate product features.
+
+## Replay / duplicate boundaries
+
+Encrypted helpers reject:
+
+- reused action locator;
+- reused encrypted payload commitment.
+
+Invite rejects:
+
+- duplicate commitment creation;
+- repeated consumption.
+
+Escrow Rekber rejects:
+
+- duplicate custody commitment;
+- settlement after custody has already been consumed.
+
+These application-level rules do not replace STRK20/Privacy Pool protocol replay protection.

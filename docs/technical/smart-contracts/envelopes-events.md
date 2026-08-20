@@ -1,55 +1,173 @@
-# Envelope, Commitment & Events
+# Envelopes, Commitments & Events
 
-## Message V2 commitment
+## Encrypted coordination envelope family
+
+Message, Offer, and Private Escrow coordination use V2 envelopes with six fixed felts:
+
+```text
+version
+one-time locator
+sender tag
+recipient tag
+claimed commitment
+chunk count
+ciphertext...
+```
+
+Each module has an independent domain separator.
+
+## Message V2
 
 ```text
 Poseidon(
   VINSS_MSG_COMMIT_V2,
-  envelope_version,
+  version,
   message_locator,
   sender_tag,
   recipient_tag,
-  payload_chunk_count,
-  ...ciphertext_chunks
+  chunk_count,
+  ...ciphertext
 )
 ```
 
-## Offer V2 commitment
+Event:
+
+```text
+MessageCommitted
+  key: message_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
+```
+
+## Offer V2
 
 ```text
 Poseidon(
   VINSS_OFFER_COMMIT_V2,
-  envelope_version,
+  version,
   offer_action_locator,
   sender_tag,
   recipient_tag,
-  payload_chunk_count,
-  ...ciphertext_chunks
+  chunk_count,
+  ...ciphertext
 )
 ```
 
-The claimed commitment itself is not included as an input to its own hash.
+Event:
 
-## One-time locator
+```text
+OfferActionCommitted
+  key: offer_action_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
+```
 
-A locator identifies exactly one encrypted action. It is not a stable conversation, room, participant, wallet, or deal identifier.
+## Private Escrow coordination V2
+
+Executable commitment:
+
+```text
+Poseidon(
+  VINSS_PRIVATE_ESCROW_COMMIT_V2,
+  version,
+  private_escrow_action_locator,
+  sender_tag,
+  recipient_tag,
+  chunk_count,
+  ...ciphertext
+)
+```
+
+Event:
+
+```text
+PrivateEscrowActionCommitted
+  key: private_escrow_action_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
+```
 
 ## Payload limits
 
 ```text
-MAX_PAYLOAD_CHUNKS        = 64
-MAX_OFFER_PAYLOAD_CHUNKS  = 64
+Message                 64 chunks
+Offer                   64 chunks
+Private Escrow          64 chunks
 ```
 
-## Event design
+These are implementation limits, not yet final production benchmark conclusions.
 
-Message and Offer events expose only data required for public ciphertext discovery:
+## Locator rule
+
+A locator identifies one encrypted action only.
+
+Do not reuse it as:
 
 ```text
-one-time locator
-commitment
-opaque sender tag
-opaque recipient tag
+room id
+conversation id
+wallet id
+participant id
+deal id
+escrow id
 ```
 
-Ciphertext chunks are read from contract storage using the locator.
+## Invite commitment/event family
+
+Invite commitment:
+
+```text
+Poseidon(
+  VINSS_INVITE_V1,
+  secret
+)
+```
+
+Events:
+
+```text
+InviteCreated
+  key: commitment
+  data: expires_at
+
+InviteConsumed
+  key: commitment
+```
+
+## Escrow Rekber commitment/event family
+
+Release:
+
+```text
+Poseidon(
+  VINSS_ESCROW_RELEASE_V1,
+  custody_commitment,
+  release_secret
+)
+```
+
+Refund:
+
+```text
+Poseidon(
+  VINSS_ESCROW_REFUND_V1,
+  custody_commitment,
+  refund_secret
+)
+```
+
+Events:
+
+```text
+EscrowRekberCustodyFunded
+EscrowRekberCustodyReleased
+EscrowRekberCustodyRefunded
+```
+
+These settlement events are not ciphertext-only events; they intentionally expose the public custody fields required by the current design.

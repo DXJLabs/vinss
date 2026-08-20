@@ -16,15 +16,21 @@ messaging_events.cairo
 timeline_payload_hash.cairo
 ```
 
+## Status
+
+**Testnet on-chain verified as part of the current Private Chat flow.**
+
+## Objective
+
+Persist one encrypted VINSS Message action without accepting plaintext Message semantics or reusable participant identity fields.
+
 ## Envelope version
 
 ```text
 2
 ```
 
-## Message calldata
-
-Before the Wallet API appends the open-note identifier:
+## `privacy_invoke` calldata
 
 ```text
 [0] envelope_version
@@ -34,34 +40,44 @@ Before the Wallet API appends the open-note identifier:
 [4] claimed_payload_commitment
 [5] payload_chunk_count
 [6...] ciphertext_chunks
+[last] open_note_id
 ```
 
-`privacy_invoke` receives the same envelope followed by:
+The final `open_note_id` belongs to the STRK20 invoke-helper output path and is not part of the Message commitment.
+
+## Commitment
 
 ```text
-[last] open_note_id
+Poseidon(
+  VINSS_MSG_COMMIT_V2,
+  envelope_version,
+  message_locator,
+  sender_tag,
+  recipient_tag,
+  payload_chunk_count,
+  ...ciphertext_chunks
+)
 ```
 
 ## Validation
 
-The helper validates:
+The contract enforces:
 
-- caller is the configured Privacy Pool;
+- configured Privacy Pool caller;
 - supported envelope version;
-- non-zero message locator;
-- non-zero sender tag;
-- non-zero recipient tag;
-- non-zero payload commitment;
+- non-zero locator;
+- non-zero routing tags;
+- non-zero claimed commitment;
 - non-empty payload;
-- payload chunk count within limit;
+- maximum 64 ciphertext chunks;
 - exact calldata length;
-- claimed commitment equals recomputed commitment;
-- locator has not already been stored;
-- commitment has not already been stored.
+- exact recomputed commitment match;
+- locator uniqueness;
+- payload commitment uniqueness.
 
-## Stored record
+## Storage
 
-`VinssMessageRecord` contains:
+`VinssMessageRecord`:
 
 ```text
 envelope_version
@@ -72,7 +88,14 @@ payload_commitment
 payload_chunk_count
 ```
 
-Ciphertext is stored separately by `(message_locator, chunk_index)`.
+Ciphertext chunks:
+
+```text
+(message_locator, chunk_index)
+→ felt252
+```
+
+Guarded getters reject unknown locator/out-of-range chunk access.
 
 ## Event
 
@@ -80,7 +103,7 @@ Ciphertext is stored separately by `(message_locator, chunk_index)`.
 MessageCommitted
 ```
 
-Event data contains:
+Event shape:
 
 ```text
 message_locator          key
@@ -89,17 +112,24 @@ sender_tag
 recipient_tag
 ```
 
-No plaintext message or explicit wallet participant address is emitted.
+No plaintext Message or explicit wallet participant address is emitted by this helper.
 
-## Revenue
+## Application revenue
 
-Successful private message invocation returns one `OpenNoteDeposit`:
+Successful `privacy_invoke` approves the configured Privacy Pool and returns:
 
 ```text
-amount = 500000000000000000
-      = 0.5 STRK
+OpenNoteDeposit
+  amount = 500000000000000000
+         = 0.5 STRK
 ```
 
 against the configured `open_note_token`.
 
-The frontend action bundle routes this application revenue through the STRK20 open-note flow.
+This is paired with the current frontend STRK20 action bundle.
+
+## Security boundary
+
+The helper validates encrypted structure and commitment.
+
+It does not authenticate the semantic Message sender by decrypting payloads, and it does not interpret Message type/content.

@@ -1,28 +1,37 @@
 # Privacy & Trust Boundary
 
-## What the contracts do not receive as plaintext
+## Objective
 
-The current Message and Offer helpers do not accept explicit fields for:
+This page states exactly what current VINSS contracts hide, what they expose, and what becomes public during settlement.
+
+## Configured Privacy Pool authority
+
+All current VINSS `privacy_invoke` paths are restricted to the Privacy Pool address fixed at deployment.
+
+This proves only the invocation path.
+
+It does **not** mean the helper contract understands the encrypted user's identity or every application-level authorization rule.
+
+## Message / Offer / Private Escrow coordination
+
+These encrypted helpers do not accept plaintext fields for:
 
 ```text
 wallet sender address
 wallet recipient address
-stable conversation id
 room id
-plaintext message
+stable conversation id
+plaintext Message
 Offer terms
-Offer lifecycle relationship
-asset / amount / payment terms
+Offer lifecycle kind
+private Escrow coordination kind
+deal terms
 ```
 
-Private application semantics are encrypted by the client before helper invocation.
-
-## Public on-chain information
-
-Observers can see that the helper was invoked and can observe:
+Public state includes:
 
 ```text
-helper contract address
+helper address
 transaction/block timing
 envelope version
 one-time locator
@@ -33,27 +42,130 @@ ciphertext chunk count
 ciphertext
 ```
 
-Therefore VINSS should be described as reducing plaintext and direct relationship metadata, not eliminating all metadata.
+The routing tags are opaque values. Contracts validate non-zero structure but do not map them to wallet addresses.
 
-## Routing tags
+## Invite privacy boundary
 
-`sender_tag` and `recipient_tag` are opaque application-derived values.
+Before consumption, on-chain Invite state exposes:
 
-The contracts validate that they are non-zero but do not map them to wallet addresses.
+```text
+commitment
+expiry
+exists / consumed state
+InviteCreated / InviteConsumed events
+```
 
-## Contract authorization
+The full Invite payload is not stored by `VinssInvite`.
 
-The helper authorization boundary is the configured Privacy Pool.
+The commitment is:
 
-This prevents direct writes that bypass the intended Privacy Pool invocation path.
+```text
+Poseidon(
+  VINSS_INVITE_V1,
+  secret
+)
+```
 
-It does not by itself prove that the encrypted application sender is authorized to perform every private business action. Private application semantics and user decisions remain client/application concerns.
+### Important: consume reveals the secret
 
-## Replay / duplicate protection
+Invite consumption calldata is:
 
-The helpers independently reject:
+```text
+[1, secret]
+```
 
-- a reused one-time locator;
-- a reused encrypted payload commitment.
+InvokeExternal calldata is public on-chain.
 
-This helper-level protection is separate from replay/nullifier rules enforced by the Privacy Pool transaction.
+Therefore the Invite secret is a **one-time preimage**, not a forever-private on-chain secret.
+
+The contract marks the Invite consumed in the same transaction so the revealed preimage cannot be used for another successful consumption of that Invite.
+
+## Escrow Rekber privacy boundary
+
+The public custody record contains:
+
+```text
+custody_commitment
+release_commitment
+refund_commitment
+token
+amount
+refund_after
+consumed
+refunded
+created_at
+settled_at
+```
+
+Public events also expose:
+
+```text
+funded:
+  custody commitment
+  token
+  amount
+  refund boundary
+  timestamp
+
+released/refunded:
+  custody commitment
+  output note id
+  timestamp
+```
+
+The contract intentionally does **not** store:
+
+```text
+buyer address
+seller address
+Deal Room id
+conversation id
+plaintext Offer / Escrow terms
+public participant relationship
+```
+
+## Settlement preimage behavior
+
+Before settlement:
+
+```text
+release_secret / refund_secret
+  = client-held authorization preimages
+```
+
+At settlement, the selected preimage is passed in public `privacy_invoke` calldata:
+
+```text
+release:
+[2, custody_commitment, release_secret, output_note_id]
+
+refund:
+[3, custody_commitment, refund_secret, output_note_id]
+```
+
+So the selected secret becomes observable after use.
+
+Security depends on:
+
+- domain-separated commitment validation;
+- custody being unconsumed before settlement;
+- the valid time window;
+- atomic custody consumption.
+
+The unused alternate secret should still be treated as sensitive client material.
+
+## Metadata claim
+
+Correct claim:
+
+> VINSS keeps private deal semantics and direct participant identities out of plaintext helper state while exposing the minimum public structure required by the current execution/custody design.
+
+Incorrect claims:
+
+```text
+no metadata
+everything is hidden
+Escrow Rekber amount is private
+release/refund secret stays private forever
+perfect anonymity
+```

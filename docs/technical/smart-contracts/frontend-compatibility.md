@@ -1,15 +1,17 @@
 # Frontend Compatibility
 
-The contract envelope must remain bit-for-bit compatible with the frontend Deal Room integration layer.
+Contract and frontend encoding must match exactly.
 
-## Message
+A successful Cairo build does not prove that the browser constructs the same commitment/calldata.
+
+## Message — compatible
 
 Contract:
 
 ```text
-VINSS_MESSAGE_ENVELOPE_VERSION = 2
-VINSS_MESSAGE_COMMITMENT_DOMAIN = VINSS_MSG_COMMIT_V2
-MESSAGE_ENVELOPE_HEADER_FELTS = 6
+version = 2
+domain  = VINSS_MSG_COMMIT_V2
+header  = 6 felts
 ```
 
 Frontend:
@@ -19,25 +21,33 @@ frontend/lib/privacy/messageRouting.ts
 frontend/lib/deal-room/messaging.ts
 ```
 
-The frontend and Cairo commitment order match:
+Both commit:
 
 ```text
+domain
 version
 locator
 sender_tag
 recipient_tag
 chunk_count
-ciphertext chunks
+ciphertext
 ```
 
-## Offer
+Current application revenue also matches:
+
+```text
+contract  0.5 STRK
+frontend  0.5 STRK
+```
+
+## Offer — compatible
 
 Contract:
 
 ```text
-VINSS_OFFER_ENVELOPE_VERSION = 2
-VINSS_OFFER_COMMITMENT_DOMAIN = VINSS_OFFER_COMMIT_V2
-OFFER_ENVELOPE_HEADER_FELTS = 6
+version = 2
+domain  = VINSS_OFFER_COMMIT_V2
+header  = 6 felts
 ```
 
 Frontend:
@@ -46,14 +56,169 @@ Frontend:
 frontend/lib/deal-room/offers.ts
 ```
 
-## Revenue compatibility
+Current commitment order and 1 STRK revenue path match the helper.
+
+## Private Escrow coordination — executable code compatible
+
+Contract executable V2 layout:
 
 ```text
-Message contract  0.5 STRK
-Message frontend  0.5 STRK
-
-Offer contract    1 STRK
-Offer frontend    1 STRK
+version
+locator
+sender_tag
+recipient_tag
+commitment
+chunk_count
+ciphertext
 ```
 
-The token configured as `open_note_token` must match the token used by the frontend action bundle for the corresponding helper deployment.
+Frontend:
+
+```text
+frontend/lib/deal-room/escrow.ts
+```
+
+Frontend and executable Cairo commitment code both include:
+
+```text
+VINSS_PRIVATE_ESCROW_COMMIT_V2
+version
+locator
+sender_tag
+recipient_tag
+chunk_count
+ciphertext
+```
+
+### Stale source-comment warning
+
+Some Cairo comments and the leading comment in `frontend/lib/deal-room/escrow.ts` still show an older header without sender/recipient tags.
+
+The executable code and current tests use the V2 six-field shape above.
+
+## Invite — compatible at contract-call level
+
+Create:
+
+```text
+frontend [0, commitment, expires_at]
+contract [0, commitment, expires_at]
+```
+
+Consume:
+
+```text
+frontend [1, secret]
+contract [1, secret]
+```
+
+Both derive commitment from:
+
+```text
+VINSS_INVITE_V1 + secret
+```
+
+The contract itself returns no OpenNoteDeposit.
+
+## Escrow Rekber deposit — shape and fee compatible
+
+Frontend deposit constructs:
+
+```text
+1
+custody commitment
+release commitment
+refund commitment
+refund-after
+token
+principal
+```
+
+and appends the revenue OpenNote ID through the Wallet API open-note placeholder.
+
+The contract receives eight felts including that final note ID.
+
+Both frontend and contract currently use:
+
+```text
+fee = principal / 100
+```
+
+## Escrow Rekber release/refund — BLOCKER
+
+### Contract
+
+Release commitment:
+
+```text
+Poseidon(
+  VINSS_ESCROW_RELEASE_V1,
+  custody_commitment,
+  release_secret
+)
+```
+
+Refund commitment:
+
+```text
+Poseidon(
+  VINSS_ESCROW_REFUND_V1,
+  custody_commitment,
+  refund_secret
+)
+```
+
+### Current frontend
+
+Current frontend computes:
+
+```text
+Poseidon(
+  custody_commitment,
+  release_secret
+)
+```
+
+and:
+
+```text
+Poseidon(
+  custody_commitment,
+  refund_secret
+)
+```
+
+without the domain felt.
+
+## Consequence
+
+Deposit can still store the non-zero frontend-provided commitments because deposit does not recompute them.
+
+Later release/refund recomputation in Cairo **will not match** those commitments.
+
+Therefore:
+
+```text
+Escrow Rekber release/refund E2E
+= NOT compatible yet
+```
+
+This mismatch must be fixed before Escrow Rekber can be marked end-to-end on-chain verified.
+
+## Compatibility verification rule
+
+For every envelope/commitment change, verify:
+
+```text
+domain
+version
+field order
+felt encoding
+chunk count
+open-note placeholder position
+fee/output amount
+frontend hash
+Cairo hash
+```
+
+with a cross-layer test vector where practical.

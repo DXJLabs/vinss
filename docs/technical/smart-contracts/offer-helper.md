@@ -16,15 +16,21 @@ offer_events.cairo
 offer_commitments.cairo
 ```
 
+## Status
+
+**Testnet on-chain verified as part of the current Structured Offer flow.**
+
+## Objective
+
+Persist immutable encrypted Offer actions while keeping Offer lifecycle semantics and deal terms inside ciphertext.
+
 ## Envelope version
 
 ```text
 2
 ```
 
-## Offer calldata
-
-Before the Wallet API appends the open-note identifier:
+## `privacy_invoke` calldata
 
 ```text
 [0] envelope_version
@@ -34,55 +40,80 @@ Before the Wallet API appends the open-note identifier:
 [4] claimed_payload_commitment
 [5] payload_chunk_count
 [6...] ciphertext_chunks
+[last] open_note_id
 ```
 
-`privacy_invoke` receives:
+## Commitment
 
 ```text
-envelope
-+
-[last] open_note_id
+Poseidon(
+  VINSS_OFFER_COMMIT_V2,
+  envelope_version,
+  offer_action_locator,
+  sender_tag,
+  recipient_tag,
+  payload_chunk_count,
+  ...ciphertext_chunks
+)
 ```
 
 ## Contract semantics
 
-The contract does not parse the private Offer lifecycle action.
+The helper does not parse whether an encrypted action is:
 
-For the helper, create/counter/accept/reject are encrypted payloads with the same public envelope structure.
+```text
+create
+counter
+accept
+reject
+cancel
+expire
+prepare_escrow
+```
 
-The frontend performs the private lifecycle interpretation after local decryption.
+Nor does it parse:
+
+```text
+deal type
+asset
+amount
+payment terms
+conditions
+expiry
+root/parent Offer relationship
+participant addresses
+```
+
+Those are encrypted application semantics interpreted by the authorized client.
 
 ## Validation
 
-The helper validates:
+The contract enforces:
 
-- caller is the configured Privacy Pool;
-- envelope version;
+- configured Privacy Pool caller;
+- V2 envelope;
 - non-zero locator;
-- non-zero sender tag;
-- non-zero recipient tag;
+- non-zero routing tags;
 - non-zero commitment;
-- non-empty payload;
-- maximum payload chunks;
+- 1–64 ciphertext chunks;
 - exact calldata size;
-- recomputed commitment;
+- commitment recomputation;
 - locator uniqueness;
 - commitment uniqueness.
 
-## Stored record
-
-`EncryptedOfferActionRecord` contains:
+## Storage
 
 ```text
-envelope_version
-offer_action_locator
-sender_tag
-recipient_tag
-payload_commitment
-payload_chunk_count
+EncryptedOfferActionRecord
+  envelope_version
+  offer_action_locator
+  sender_tag
+  recipient_tag
+  payload_commitment
+  payload_chunk_count
 ```
 
-Ciphertext chunks are stored separately.
+Ciphertext remains separately addressable by locator + chunk index.
 
 ## Event
 
@@ -90,7 +121,7 @@ Ciphertext chunks are stored separately.
 OfferActionCommitted
 ```
 
-Event fields:
+Event:
 
 ```text
 offer_action_locator     key
@@ -99,15 +130,20 @@ sender_tag
 recipient_tag
 ```
 
-## Revenue
+## Application revenue
 
-Successful Offer invocation returns one `OpenNoteDeposit`:
+Successful external invocation returns one:
 
 ```text
-amount = 1000000000000000000
-      = 1 STRK
+OpenNoteDeposit
+  amount = 1000000000000000000
+         = 1 STRK
 ```
 
 against the configured `open_note_token`.
 
-This matches the current frontend Offer action bundle.
+## Security boundary
+
+The helper proves only encrypted envelope integrity/uniqueness and Privacy-Pool invocation.
+
+It does not independently enforce semantic Offer authorization such as who is allowed to accept/cancel a particular encrypted deal.
