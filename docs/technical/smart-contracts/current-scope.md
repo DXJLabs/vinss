@@ -78,7 +78,7 @@ Current verification limitation:
 ```text
 deposit-side Cairo test exists
 release/refund dedicated tests incomplete
-frontend release/refund commitment formula currently incompatible
+frontend/Cairo release-refund commitment formula aligned; E2E pending
 E2E settlement evidence pending
 ```
 

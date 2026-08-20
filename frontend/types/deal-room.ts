@@ -97,9 +97,43 @@ export type EscrowActionKind =
   | "dispute"
   | "resolve";
 
+/**
+ * Immutable private snapshot of the accepted Offer used to prepare Rekber.
+ *
+ * All fields stay inside encrypted Private Escrow coordination ciphertext.
+ * The public Rekber custody contract does not need to know the deal type or
+ * plaintext business terms.
+ */
+export interface EscrowOfferSnapshot {
+  acceptedOfferLocator: string;
+  termsOfferLocator: string;
+  rootOfferLocator?: string;
+  dealType?: DealType;
+  asset: string;
+  amount: string;
+  paymentTerms: string;
+  conditions?: string;
+  expiresAt?: string;
+}
+
 export interface EscrowActionPayload {
   kind: EscrowActionKind;
+
+  // Exact create/counter action whose terms became the accepted agreement.
   dealOfferLocator: string;
+
+  // Direct Escrow coordination follows the same encrypted participant model
+  // as Direct Chat and Offer. These values are never public helper fields.
+  senderAddress?: string;
+  recipientAddress?: string;
+  sentAt?: string;
+
+  // Immutable accepted Offer snapshot. This lets every Offer template flow
+  // into one generic Rekber mechanism without exposing template semantics.
+  offerSnapshot?: EscrowOfferSnapshot;
+
+  rootEscrowLocator?: string;
+  parentEscrowLocator?: string;
   custodyCommitment?: string;
   releaseSecretHint?: string;
   refundAfter?: string;

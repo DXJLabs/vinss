@@ -68,3 +68,10 @@ export const MIN_WALLET_API_VERSION = "0.10.3";
 export const STRK_ADDRESS = normalizeAddress(
   process.env.NEXT_PUBLIC_STRK_ADDRESS ?? "",
 );
+
+// Offer templates currently expose STRK and USDC as settlement assets.
+// Keep both addresses environment-driven so Sepolia/mainnet deployments
+// cannot silently reuse the wrong token address.
+export const USDC_ADDRESS = normalizeAddress(
+  process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "",
+);

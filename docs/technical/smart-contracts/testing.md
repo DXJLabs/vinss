@@ -115,9 +115,9 @@ Before Escrow Rekber E2E verification, add/verify:
 
 ## Current known cross-layer failure
 
-A cross-layer vector should currently fail for release/refund because frontend and Cairo commitment formulas differ by the domain separator.
+A cross-layer regression guard now requires the frontend and Cairo release/refund commitment domains to remain aligned.
 
-That mismatch is a real integration issue, not a documentation-only concern.
+This alignment removes the previous integration blocker but does not replace deployed E2E evidence.
 
 ## Test boundary
 

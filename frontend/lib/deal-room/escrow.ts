@@ -1,52 +1,67 @@
 /**
- * Escrow domain module — two contracts, two calldata shapes.
+ * Escrow Rekber domain module.
  *
- * 1) Coordination (contracts/private_escrow/private_escrow_interfaces.cairo):
- *    same 4-felt-header + ciphertext shape as messaging/offer:
- *      [envelope_version, private_escrow_action_locator,
- *       claimed_payload_commitment, payload_chunk_count, ...chunks]
- *    Used for: create, funding intent, accept, funding confirmation, cancel,
- *    refund, dispute/resolution — all encrypted, action kind stays hidden.
+ * One product feature has two technical layers:
  *
- * 2) Rekber (contracts/escrow_rekber/
- *    escrow_rekber_interfaces.cairo): a *different*, public,
- *    commitment-based calldata shape, because this contract actually moves
- *    ERC-20 custody:
- *      deposit  [1, custody_commitment, release_commitment, refund_commitment,
- *                refund_after, token, amount]
- *      release  [2, custody_commitment, release_secret, output_note_id]
- *      refund   [3, custody_commitment, refund_secret, output_note_id]
+ * 1) Private Escrow coordination
+ *    - same encrypted V2 envelope shape as Direct Offer:
+ *      [version, locator, sender_tag, recipient_tag,
+ *       commitment, chunk_count, ...ciphertext]
+ *    - deal type, accepted Offer terms and participant identities stay inside
+ *      ciphertext.
  *
- *    custody/release/refund secrets are generated client-side and must be
- *    treated like the message channel key — never logged, never sent to the
- *    backend. Deposit/withdrawal amounts on this contract are public (the
- *    ERC-20 legs), matching STRK20_INTEGRATION_PLAN.md §3.
- *
- *    Both contracts' only external entrypoint is privacy_invoke(calldata:
- *    Span<felt252>) — confirmed against
- *    contracts/escrow_rekber/escrow_rekber_interfaces.cairo
- *    — so the selector below applies to both call sites in this file.
+ * 2) Rekber custody / settlement
+ *    - public commitment-based calldata because this contract actually
+ *      receives and returns ERC-20 custody.
+ *    - all Offer templates use the same generic settlement primitive:
+ *      the accepted Offer decides the payment asset, amount and private terms;
+ *      the Rekber contract only needs token/base-unit amount, commitments and
+ *      the refund boundary.
  */
 
 import type { WalletAccountV6 } from "starknet";
 import { hash, num } from "starknet";
-import { CONTRACTS } from "../starknet/constants";
 import {
+  CONTRACTS,
+  STRK_ADDRESS,
+  USDC_ADDRESS,
+} from "../starknet/constants";
+import {
+  decryptPayload,
   encryptPayload,
   generateActionLocator,
   shortStringToFelt,
   toFelt,
   type ChannelKey,
 } from "@/lib/privacy/envelope";
-import type { EscrowActionPayload, SendActionResult } from "@/types/deal-room";
+import type {
+  EscrowActionPayload,
+  EscrowOfferSnapshot,
+  OfferActionPayload,
+  SendActionResult,
+} from "@/types/deal-room";
 import {
   GROUP_RECIPIENT_IDENTITY,
   deriveMessageRoutingTag,
+  type MessageRoute,
 } from "@/lib/privacy/messageRouting";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
 
 const PRIVATE_ESCROW_ENVELOPE_VERSION = 2;
 const ESCROW_COMMITMENT_DOMAIN =
   "VINSS_PRIVATE_ESCROW_COMMIT_V2";
+
+const RELEASE_COMMITMENT_DOMAIN =
+  "VINSS_ESCROW_RELEASE_V1";
+const REFUND_COMMITMENT_DOMAIN =
+  "VINSS_ESCROW_REFUND_V1";
+
+export interface PreparedEscrowSend {
+  actionLocator: bigint;
+  payloadCommitment: bigint;
+}
 
 function commitPrivateEscrowPayloadV2(
   actionLocator: bigint,
@@ -65,7 +80,9 @@ function commitPrivateEscrowPayloadV2(
   ];
 
   return BigInt(
-    hash.computePoseidonHashOnElements(inputs.map(String)),
+    hash.computePoseidonHashOnElements(
+      inputs.map(String),
+    ),
   );
 }
 
@@ -78,9 +95,6 @@ async function invokeHelper(
     {
       type: "invoke",
       contract: contractAddress,
-      // privacy_invoke(calldata: Span<felt252>)
-      // requires Cairo Span length serialization.
-      // STRK20 itself selects privacy_invoke — no selector here.
       calldata: [
         toFelt(calldata.length),
         ...calldata,
@@ -89,12 +103,118 @@ async function invokeHelper(
   ]);
 }
 
-// --- Coordination (encrypted, negotiation-style) ---------------------------
+// ---------------------------------------------------------------------------
+// Accepted Offer -> generic Rekber settlement model
+// ---------------------------------------------------------------------------
+
+export interface SettlementAsset {
+  symbol: "STRK" | "USDC";
+  address: string;
+  decimals: number;
+}
+
+export function resolveSettlementAsset(
+  asset: string,
+): SettlementAsset | null {
+  const symbol = asset.trim().toUpperCase();
+
+  if (symbol === "STRK") {
+    return {
+      symbol: "STRK",
+      address: STRK_ADDRESS,
+      decimals: 18,
+    };
+  }
+
+  if (symbol === "USDC") {
+    return {
+      symbol: "USDC",
+      address: USDC_ADDRESS,
+      decimals: 6,
+    };
+  }
+
+  return null;
+}
+
+export function parseSettlementAmount(
+  amount: string,
+  decimals: number,
+): bigint {
+  const normalized = amount.trim();
+
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) {
+    throw new Error(
+      "Accepted Offer amount must be a positive decimal value.",
+    );
+  }
+
+  const [whole = "0", fraction = ""] =
+    normalized.split(".");
+
+  if (fraction.length > decimals) {
+    throw new Error(
+      `Accepted Offer amount has more than ${decimals} decimal places.`,
+    );
+  }
+
+  const paddedFraction =
+    fraction.padEnd(decimals, "0");
+
+  const base =
+    10n ** BigInt(decimals);
+
+  const result =
+    BigInt(whole) * base +
+    BigInt(paddedFraction || "0");
+
+  if (result <= 0n) {
+    throw new Error(
+      "Accepted Offer amount must be greater than zero.",
+    );
+  }
+
+  return result;
+}
+
+export function buildEscrowOfferSnapshot(
+  acceptedOfferLocator: string,
+  action: OfferActionPayload,
+): EscrowOfferSnapshot {
+  if (action.kind !== "accept") {
+    throw new Error(
+      "Escrow Rekber requires an accepted Offer.",
+    );
+  }
+
+  return {
+    acceptedOfferLocator,
+    termsOfferLocator:
+      action.parentOfferLocator ??
+      acceptedOfferLocator,
+    rootOfferLocator:
+      action.rootOfferLocator,
+    dealType: action.dealType,
+    asset: action.asset,
+    amount: action.amount,
+    paymentTerms: action.paymentTerms,
+    conditions: action.conditions,
+    expiresAt: action.expiresAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Private Escrow coordination
+// ---------------------------------------------------------------------------
 
 export async function sendEscrowCoordinationAction(
   account: WalletAccountV6,
   channelKey: ChannelKey,
   payload: EscrowActionPayload,
+  route?: MessageRoute,
+  onPrepared?: (
+    prepared: PreparedEscrowSend,
+  ) => void | Promise<void>,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.privateEscrowHelper) {
     throw new Error(
@@ -102,31 +222,53 @@ export async function sendEscrowCoordinationAction(
     );
   }
 
-  const actionLocator = generateActionLocator(channelKey);
+  const encryptionKey =
+    route?.encryptionKey ?? channelKey;
+  const routingKey =
+    route?.routingKey ?? encryptionKey;
+  const recipientIdentity =
+    route?.recipientIdentity ??
+    GROUP_RECIPIENT_IDENTITY;
 
-  const [senderTag, recipientTag] = await Promise.all([
-    deriveMessageRoutingTag(
-      channelKey,
-      "sender",
-      account.address,
+  const actionLocator =
+    generateActionLocator(encryptionKey);
+
+  const [senderTag, recipientTag] =
+    await Promise.all([
+      deriveMessageRoutingTag(
+        routingKey,
+        "sender",
+        account.address,
+        actionLocator,
+      ),
+      deriveMessageRoutingTag(
+        routingKey,
+        "recipient",
+        recipientIdentity,
+        actionLocator,
+      ),
+    ]);
+
+  const ciphertextChunks =
+    await encryptPayload(
+      encryptionKey,
+      payload,
+    );
+
+  const payloadCommitment =
+    commitPrivateEscrowPayloadV2(
       actionLocator,
-    ),
-    deriveMessageRoutingTag(
-      channelKey,
-      "recipient",
-      GROUP_RECIPIENT_IDENTITY,
+      senderTag,
+      recipientTag,
+      ciphertextChunks,
+    );
+
+  if (onPrepared) {
+    await onPrepared({
       actionLocator,
-    ),
-  ]);
-
-  const ciphertextChunks = await encryptPayload(channelKey, payload);
-
-  const payloadCommitment = commitPrivateEscrowPayloadV2(
-    actionLocator,
-    senderTag,
-    recipientTag,
-    ciphertextChunks,
-  );
+      payloadCommitment,
+    });
+  }
 
   const calldata = [
     PRIVATE_ESCROW_ENVELOPE_VERSION,
@@ -145,13 +287,182 @@ export async function sendEscrowCoordinationAction(
   );
 
   return {
-    transactionHash: response.transaction_hash,
+    transactionHash:
+      response.transaction_hash,
     actionLocator,
     payloadCommitment,
   };
 }
 
-// --- Rekber (public commitments, moves real ERC-20 custody) ------------
+export async function discoverEscrowActions(
+  backendUrl: string,
+  channelKey: ChannelKey,
+  route?: MessageRoute | MessageRoute[],
+): Promise<
+  Array<{
+    actionLocator: string;
+    payloadCommitment: string;
+    senderTag: string;
+    recipientTag: string;
+    action: EscrowActionPayload;
+    blockNumber: number;
+    transactionHash: string;
+  }>
+> {
+  const res = await fetch(
+    `${backendUrl}/discover`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        kind: "escrow",
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `Escrow discovery failed: ${res.status} ${await res.text()}`,
+    );
+  }
+
+  const records =
+    (await res.json()) as Array<{
+      actionLocator: string;
+      payloadCommitment: string;
+      senderTag?: string;
+      recipientTag?: string;
+      ciphertextChunks: string[];
+      blockNumber: number;
+      transactionHash: string;
+    }>;
+
+  const candidateRoutes: MessageRoute[] =
+    route == null
+      ? [
+          {
+            recipientIdentity:
+              GROUP_RECIPIENT_IDENTITY,
+            encryptionKey: channelKey,
+            routingKey: channelKey,
+          },
+        ]
+      : Array.isArray(route)
+        ? route
+        : [route];
+
+  const decrypted: Array<{
+    actionLocator: string;
+    payloadCommitment: string;
+    senderTag: string;
+    recipientTag: string;
+    action: EscrowActionPayload;
+    blockNumber: number;
+    transactionHash: string;
+  }> = [];
+
+  for (const record of records) {
+    if (
+      !record.senderTag ||
+      !record.recipientTag
+    ) {
+      continue;
+    }
+
+    const actionLocator =
+      BigInt(record.actionLocator);
+
+    for (const candidate of candidateRoutes) {
+      try {
+        const encryptionKey =
+          candidate.encryptionKey ??
+          channelKey;
+        const routingKey =
+          candidate.routingKey ??
+          encryptionKey;
+
+        const expectedRecipientTag =
+          await deriveMessageRoutingTag(
+            routingKey,
+            "recipient",
+            candidate.recipientIdentity,
+            actionLocator,
+          );
+
+        if (
+          BigInt(record.recipientTag) !==
+          expectedRecipientTag
+        ) {
+          continue;
+        }
+
+        const action =
+          (await decryptPayload(
+            encryptionKey,
+            record.ciphertextChunks.map(
+              BigInt,
+            ),
+          )) as EscrowActionPayload;
+
+        if (action.senderAddress) {
+          const expectedSenderTag =
+            await deriveMessageRoutingTag(
+              routingKey,
+              "sender",
+              action.senderAddress,
+              actionLocator,
+            );
+
+          if (
+            BigInt(record.senderTag) !==
+            expectedSenderTag
+          ) {
+            continue;
+          }
+        }
+
+        if (
+          action.recipientAddress &&
+          !sameStarknetAddress(
+            action.recipientAddress,
+            candidate.recipientIdentity,
+          )
+        ) {
+          continue;
+        }
+
+        decrypted.push({
+          actionLocator:
+            record.actionLocator,
+          payloadCommitment:
+            record.payloadCommitment,
+          senderTag:
+            record.senderTag,
+          recipientTag:
+            record.recipientTag,
+          action,
+          blockNumber:
+            record.blockNumber,
+          transactionHash:
+            record.transactionHash,
+        });
+
+        break;
+      } catch {
+        // Unrelated ciphertext/key mismatch is expected during local discovery.
+      }
+    }
+  }
+
+  return decrypted;
+}
+
+// ---------------------------------------------------------------------------
+// Rekber custody / settlement
+// ---------------------------------------------------------------------------
 
 export interface EscrowSecrets {
   releaseSecret: bigint;
@@ -161,48 +472,59 @@ export interface EscrowSecrets {
 function randomFelt(): bigint {
   return BigInt(
     "0x" +
-      Array.from(crypto.getRandomValues(new Uint8Array(31)))
-        .map((b) => b.toString(16).padStart(2, "0"))
+      Array.from(
+        crypto.getRandomValues(
+          new Uint8Array(31),
+        ),
+      )
+        .map((b) =>
+          b
+            .toString(16)
+            .padStart(2, "0"),
+        )
         .join(""),
   );
 }
 
 export function generateEscrowSecrets(): EscrowSecrets {
-  return { releaseSecret: randomFelt(), refundSecret: randomFelt() };
+  return {
+    releaseSecret: randomFelt(),
+    refundSecret: randomFelt(),
+  };
 }
 
-/**
- * custody_commitment is generated FIRST, independently — it is this
- * escrow's identifier, not derived from the release/refund commitments.
- * release_commitment and refund_commitment are then computed FROM it (see
- * escrow_rekber_interfaces.cairo: `compute_release_commitment(
- * custody_commitment, release_secret)`). Generating it any other order
- * breaks the contract's expected input composition.
- */
 export function generateCustodyCommitment(): bigint {
   return randomFelt();
 }
 
-/** Mirrors VinssEscrowRekber.compute_release_commitment. */
 export function computeReleaseCommitment(
   custodyCommitment: bigint,
   releaseSecret: bigint,
 ): bigint {
   return BigInt(
     hash.computePoseidonHashOnElements([
+      String(
+        shortStringToFelt(
+          RELEASE_COMMITMENT_DOMAIN,
+        ),
+      ),
       String(custodyCommitment),
       String(releaseSecret),
     ]),
   );
 }
 
-/** Mirrors VinssEscrowRekber.compute_refund_commitment. */
 export function computeRefundCommitment(
   custodyCommitment: bigint,
   refundSecret: bigint,
 ): bigint {
   return BigInt(
     hash.computePoseidonHashOnElements([
+      String(
+        shortStringToFelt(
+          REFUND_COMMITMENT_DOMAIN,
+        ),
+      ),
       String(custodyCommitment),
       String(refundSecret),
     ]),
@@ -219,7 +541,9 @@ export async function depositEscrow(
     token: string;
     amount: bigint;
   },
-): Promise<{ transactionHash: string }> {
+): Promise<{
+  transactionHash: string;
+}> {
   if (!CONTRACTS.escrowRekber) {
     throw new Error(
       "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set.",
@@ -227,7 +551,8 @@ export async function depositEscrow(
   }
 
   const treasury =
-    process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+    process.env
+      .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
 
   if (!treasury) {
     throw new Error(
@@ -235,8 +560,10 @@ export async function depositEscrow(
     );
   }
 
-  const principal = params.amount;
-  const fee = principal / 100n;
+  const principal =
+    params.amount;
+  const fee =
+    principal / 100n;
 
   if (fee <= 0n) {
     throw new Error(
@@ -244,14 +571,22 @@ export async function depositEscrow(
     );
   }
 
-  const total = principal + fee;
-  const token = num.toHex(params.token);
+  const total =
+    principal + fee;
+  const token =
+    num.toHex(params.token);
 
   const calldata = [
     toFelt(1),
-    toFelt(params.custodyCommitment),
-    toFelt(params.releaseCommitment),
-    toFelt(params.refundCommitment),
+    toFelt(
+      params.custodyCommitment,
+    ),
+    toFelt(
+      params.releaseCommitment,
+    ),
+    toFelt(
+      params.refundCommitment,
+    ),
     toFelt(params.refundAfter),
     token,
     toFelt(principal),
@@ -263,7 +598,8 @@ export async function depositEscrow(
         type: "withdraw",
         token,
         amount: toFelt(total),
-        recipient: CONTRACTS.escrowRekber,
+        recipient:
+          CONTRACTS.escrowRekber,
       },
       {
         type: "transfer",
@@ -273,9 +609,12 @@ export async function depositEscrow(
       },
       {
         type: "invoke",
-        contract: CONTRACTS.escrowRekber,
+        contract:
+          CONTRACTS.escrowRekber,
         calldata: [
-          toFelt(calldata.length + 1),
+          toFelt(
+            calldata.length + 1,
+          ),
           ...calldata,
           "${openNoteIds[0]}",
         ],
@@ -283,52 +622,87 @@ export async function depositEscrow(
     ]);
 
   return {
-    transactionHash: response.transaction_hash,
+    transactionHash:
+      response.transaction_hash,
   };
 }
 
 export async function releaseEscrow(
   account: WalletAccountV6,
-  params: { custodyCommitment: bigint; releaseSecret: bigint; outputNoteId: bigint },
-): Promise<{ transactionHash: string }> {
+  params: {
+    custodyCommitment: bigint;
+    releaseSecret: bigint;
+    outputNoteId: bigint;
+  },
+): Promise<{
+  transactionHash: string;
+}> {
   if (!CONTRACTS.escrowRekber) {
     throw new Error(
       "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set — see .env.local.example.",
     );
   }
+
   const calldata = [
     toFelt(2),
-    toFelt(params.custodyCommitment),
-    toFelt(params.releaseSecret),
+    toFelt(
+      params.custodyCommitment,
+    ),
+    toFelt(
+      params.releaseSecret,
+    ),
     toFelt(params.outputNoteId),
   ];
-  const response = await invokeHelper(
-    account,
-    CONTRACTS.escrowRekber,
-    calldata,
-  );
-  return { transactionHash: response.transaction_hash };
+
+  const response =
+    await invokeHelper(
+      account,
+      CONTRACTS.escrowRekber,
+      calldata,
+    );
+
+  return {
+    transactionHash:
+      response.transaction_hash,
+  };
 }
 
 export async function refundEscrow(
   account: WalletAccountV6,
-  params: { custodyCommitment: bigint; refundSecret: bigint; outputNoteId: bigint },
-): Promise<{ transactionHash: string }> {
+  params: {
+    custodyCommitment: bigint;
+    refundSecret: bigint;
+    outputNoteId: bigint;
+  },
+): Promise<{
+  transactionHash: string;
+}> {
   if (!CONTRACTS.escrowRekber) {
     throw new Error(
       "NEXT_PUBLIC_ESCROW_REKBER_ADDRESS is not set — see .env.local.example.",
     );
   }
+
   const calldata = [
     toFelt(3),
-    toFelt(params.custodyCommitment),
-    toFelt(params.refundSecret),
+    toFelt(
+      params.custodyCommitment,
+    ),
+    toFelt(
+      params.refundSecret,
+    ),
     toFelt(params.outputNoteId),
   ];
-  const response = await invokeHelper(
-    account,
-    CONTRACTS.escrowRekber,
-    calldata,
-  );
-  return { transactionHash: response.transaction_hash };
+
+  const response =
+    await invokeHelper(
+      account,
+      CONTRACTS.escrowRekber,
+      calldata,
+    );
+
+  return {
+    transactionHash:
+      response.transaction_hash,
+  };
 }

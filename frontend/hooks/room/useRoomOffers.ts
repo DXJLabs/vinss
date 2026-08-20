@@ -8,6 +8,7 @@ import {
   counterOffer,
   createOffer,
   discoverOfferActions,
+  prepareEscrowFromOffer,
   rejectOffer,
 } from "@/lib/deal-room/offers";
 import {
@@ -928,6 +929,127 @@ export function useRoomOffers({
     );
   }
 
+
+  /**
+   * Move one immutable accepted Offer into the explicit prepare_escrow state.
+   * Either party to the accepted direct Offer may prepare it.
+   */
+  async function prepareEscrowDirectOffer(
+    source: ConversationEntry,
+  ): Promise<boolean> {
+    if (
+      !session ||
+      !channelKey ||
+      !source.offerAction ||
+      source.offerAction.kind !== "accept"
+    ) {
+      setError(
+        "Escrow can only be prepared from an accepted offer.",
+      );
+      return false;
+    }
+
+    const sourceAction =
+      source.offerAction;
+
+    const self =
+      session.account.address;
+
+    const peerAddress =
+      sameStarknetAddress(
+        sourceAction.senderAddress,
+        self,
+      )
+        ? sourceAction.recipientAddress
+        : sameStarknetAddress(
+              sourceAction.recipientAddress,
+              self,
+            )
+          ? sourceAction.senderAddress
+          : undefined;
+
+    if (!peerAddress) {
+      setError(
+        "The accepted offer counterparty could not be resolved.",
+      );
+      return false;
+    }
+
+    return runOfferAction(
+      "PREPARE_ESCROW",
+      "We couldn't prepare this accepted offer for escrow. Please try again.",
+      async () => {
+        const { peer, route } =
+          await resolveDirectContext(
+            peerAddress,
+            peerAddress,
+          );
+
+        const action:
+          Omit<
+            OfferActionPayload,
+            "kind"
+          > = {
+          dealType:
+            sourceAction.dealType,
+          rootOfferLocator:
+            sourceAction.rootOfferLocator ??
+            sourceAction.parentOfferLocator ??
+            canonicalLocator(
+              source.actionLocator,
+            ),
+          parentOfferLocator:
+            canonicalLocator(
+              source.actionLocator,
+            ),
+          asset:
+            sourceAction.asset,
+          amount:
+            sourceAction.amount,
+          paymentTerms:
+            sourceAction.paymentTerms,
+          conditions:
+            sourceAction.conditions,
+          expiresAt:
+            sourceAction.expiresAt,
+          senderAddress:
+            self,
+          recipientAddress:
+            peer.address,
+          sentAt:
+            new Date().toISOString(),
+        };
+
+        const result =
+          await prepareEscrowFromOffer(
+            session.account,
+            channelKey,
+            action,
+            route,
+            (prepared) => {
+              appendPreparedOffer(
+                prepared.actionLocator,
+                {
+                  ...action,
+                  kind:
+                    "prepare_escrow",
+                },
+              );
+            },
+          );
+
+        appendLocalOffer(
+          result,
+          {
+            ...action,
+            kind:
+              "prepare_escrow",
+          },
+        );
+      },
+    );
+  }
+
   useEffect(() => {
     if (
       !active ||
@@ -1129,6 +1251,7 @@ export function useRoomOffers({
     counterDirectOffer,
     acceptDirectOffer,
     rejectDirectOffer,
+    prepareEscrowDirectOffer,
     markOfferRead,
     handleOfferRefresh,
   };

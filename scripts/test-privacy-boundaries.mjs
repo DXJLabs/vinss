@@ -32,3 +32,40 @@ assert.equal(offer.includes('body: JSON.stringify({ channelKeyHex'), false, 'off
 assert.match(messaging, /decryptPayload/, 'message discovery must decrypt locally');
 assert.match(offer, /decryptPayload/, 'offer discovery must decrypt locally');
 console.log('ciphertext-only discovery boundary checks: PASS');
+
+
+const escrowFrontend = await readFile(
+  new URL('../frontend/lib/deal-room/escrow.ts', import.meta.url),
+  'utf8',
+);
+const escrowCommitments = await readFile(
+  new URL(
+    '../contracts/src/escrow_rekber/escrow_rekber_commitments.cairo',
+    import.meta.url,
+  ),
+  'utf8',
+);
+
+for (const domain of [
+  'VINSS_ESCROW_RELEASE_V1',
+  'VINSS_ESCROW_REFUND_V1',
+]) {
+  assert.equal(
+    escrowFrontend.includes(domain),
+    true,
+    `frontend Rekber commitment must include ${domain}`,
+  );
+  assert.equal(
+    escrowCommitments.includes(domain),
+    true,
+    `Cairo Rekber commitment must include ${domain}`,
+  );
+}
+
+assert.match(
+  escrowFrontend,
+  /parseSettlementAmount/,
+  'accepted Offer decimal amount must be converted to token base units',
+);
+
+console.log('escrow Rekber cross-layer boundary checks: PASS');

@@ -144,11 +144,9 @@ Both frontend and contract currently use:
 fee = principal / 100
 ```
 
-## Escrow Rekber release/refund — BLOCKER
+## Escrow Rekber release/refund — code aligned, E2E pending
 
-### Contract
-
-Release commitment:
+Frontend and Cairo now use the same domain-separated formulas:
 
 ```text
 Poseidon(
@@ -156,11 +154,7 @@ Poseidon(
   custody_commitment,
   release_secret
 )
-```
 
-Refund commitment:
-
-```text
 Poseidon(
   VINSS_ESCROW_REFUND_V1,
   custody_commitment,
@@ -168,42 +162,13 @@ Poseidon(
 )
 ```
 
-### Current frontend
+The frontend also converts the accepted Offer's human-readable decimal amount
+to the selected settlement token's exact base units before funding.
 
-Current frontend computes:
+This removes the previously identified commitment mismatch.
 
-```text
-Poseidon(
-  custody_commitment,
-  release_secret
-)
-```
-
-and:
-
-```text
-Poseidon(
-  custody_commitment,
-  refund_secret
-)
-```
-
-without the domain felt.
-
-## Consequence
-
-Deposit can still store the non-zero frontend-provided commitments because deposit does not recompute them.
-
-Later release/refund recomputation in Cairo **will not match** those commitments.
-
-Therefore:
-
-```text
-Escrow Rekber release/refund E2E
-= NOT compatible yet
-```
-
-This mismatch must be fixed before Escrow Rekber can be marked end-to-end on-chain verified.
+It does **not** by itself upgrade Escrow Rekber to E2E verified. Release/refund
+contract tests and deployed testnet execution evidence are still required.
 
 ## Compatibility verification rule
 

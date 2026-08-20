@@ -224,6 +224,6 @@ Release/refund E2E behavior must not be claimed verified from this test alone.
 
 The contract commitment formula includes domain separators.
 
-Current frontend local release/refund commitment calculation does not.
+Current frontend release/refund commitment calculation now mirrors the Cairo domain-separated formulas.
 
-Until that mismatch is fixed, the deposited commitments produced by the current frontend will not validate against the contract's release/refund preimage computation.
+The commitment formulas are now aligned; deployed release/refund evidence is still pending.

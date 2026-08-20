@@ -91,11 +91,11 @@ VINSS_ESCROW_RELEASE_V1
 VINSS_ESCROW_REFUND_V1
 ```
 
-The current frontend helper computes those two commitments **without the domain felt**.
+The frontend and Cairo now use the same domain-separated release/refund commitments.
 
-That means the current deposit path can store the frontend-provided commitments, but the later contract release/refund preimage check will not match those locally computed commitments.
+The previously identified release/refund commitment mismatch has been corrected in the frontend.
 
-This is a real integration blocker for E2E settlement and must be fixed before Escrow Rekber is marked on-chain verified.
+Escrow Rekber remains E2E-pending until release/refund tests and deployed testnet evidence are completed.
 
 See [Frontend Compatibility](./frontend-compatibility.md).
 

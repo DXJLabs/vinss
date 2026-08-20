@@ -185,9 +185,11 @@ pub mod VinssPrivateEscrowHelper {
         ///
         /// 0. envelope_version
         /// 1. private_escrow_action_locator
-        /// 2. claimed_payload_commitment
-        /// 3. payload_chunk_count
-        /// 4... ciphertext_chunks
+        /// 2. sender_tag
+        /// 3. recipient_tag
+        /// 4. claimed_payload_commitment
+        /// 5. payload_chunk_count
+        /// 6... ciphertext_chunks
         fn store_private_escrow_action(
             ref self: ContractState,
             calldata: Span<felt252>,

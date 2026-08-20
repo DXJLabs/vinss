@@ -3,14 +3,26 @@
 import { useEffect, useState } from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 import {
-  sendEscrowCoordinationAction,
+  buildEscrowOfferSnapshot,
   generateEscrowSecrets,
   generateCustodyCommitment,
   computeReleaseCommitment,
   computeRefundCommitment,
   depositEscrow,
+  parseSettlementAmount,
+  resolveSettlementAsset,
 } from "@/lib/deal-room/escrow";
 import type { AgentProposal } from "@/lib/agent";
+import type {
+  EscrowActionPayload,
+  SendActionResult,
+} from "@/types/deal-room";
+import type {
+  DiscoveredEscrowAction,
+} from "@/hooks/room/useRoomEscrow";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import { humanizeError } from "@/lib/errors/uiError";
 import { FeeBreakdown } from "@/components/FeeBreakdown";
@@ -24,6 +36,9 @@ export function EscrowPanel({
   setError,
   agentDraft,
   acceptedOffer,
+  escrowActions,
+  onPrepareAcceptedOffer,
+  onCreateCoordination,
 }: {
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
@@ -36,6 +51,14 @@ export function EscrowPanel({
     { type: "prepare_escrow" }
   > | null;
   acceptedOffer?: ConversationEntry | null;
+  escrowActions: DiscoveredEscrowAction[];
+  onPrepareAcceptedOffer: (
+    source: ConversationEntry,
+  ) => Promise<boolean>;
+  onCreateCoordination: (
+    peerAddress: string,
+    payload: EscrowActionPayload,
+  ) => Promise<SendActionResult>;
 }) {
   const [dealOfferLocator, setDealOfferLocator] = useState("");
   const [token, setToken] = useState("");
@@ -43,7 +66,12 @@ export function EscrowPanel({
   const [refundHours, setRefundHours] = useState("24");
 
   useEffect(() => {
-    if (!agentDraft) return;
+    if (
+      !agentDraft ||
+      acceptedOffer?.offerAction?.kind === "accept"
+    ) {
+      return;
+    }
 
     if (agentDraft.payload.dealOfferLocator) {
       setDealOfferLocator(
@@ -90,50 +118,235 @@ export function EscrowPanel({
     );
     setAmount(acceptedAction.amount);
 
+    const settlementAsset =
+      resolveSettlementAsset(
+        acceptedAction.asset,
+      );
+
+    setToken(
+      settlementAsset?.address ?? "",
+    );
+
     // Loading a different accepted deal starts a fresh local coordination view.
     setAgreedCustodyCommitment(null);
     setLastSecrets(null);
   }, [acceptedOffer?.actionLocator]);
 
+  useEffect(() => {
+    if (
+      !acceptedOffer ||
+      acceptedOffer.offerAction?.kind !==
+        "accept"
+    ) {
+      return;
+    }
+
+    const acceptedLocator =
+      acceptedOffer.actionLocator
+        .replace(/^0x/, "")
+        .toLowerCase();
+
+    const existing =
+      [...escrowActions]
+        .reverse()
+        .find((item) => {
+          if (
+            item.action.kind !==
+            "create" ||
+            !item.action
+              .custodyCommitment
+          ) {
+            return false;
+          }
+
+          const snapshotLocator =
+            item.action
+              .offerSnapshot
+              ?.acceptedOfferLocator
+              ?.replace(
+                /^0x/,
+                "",
+              )
+              .toLowerCase();
+
+          return (
+            snapshotLocator ===
+            acceptedLocator
+          );
+        });
+
+    if (
+      existing?.action
+        .custodyCommitment
+    ) {
+      try {
+        setAgreedCustodyCommitment(
+          BigInt(
+            existing.action
+              .custodyCommitment,
+          ),
+        );
+      } catch {
+        // Ignore malformed unrelated ciphertext.
+      }
+    }
+  }, [
+    acceptedOffer?.actionLocator,
+    escrowActions,
+  ]);
+
   async function handleCreateCoordination() {
-    if (!session || !channelKey || !dealOfferLocator.trim()) return;
+    const acceptedAction =
+      acceptedOffer?.offerAction;
+
+    if (
+      !session ||
+      !channelKey ||
+      !acceptedOffer ||
+      !acceptedAction ||
+      acceptedAction.kind !== "accept"
+    ) {
+      setError(
+        "Escrow Rekber must start from an accepted Offer.",
+      );
+      return;
+    }
+
+    const self =
+      session.account.address;
+
+    const peerAddress =
+      sameStarknetAddress(
+        acceptedAction.senderAddress,
+        self,
+      )
+        ? acceptedAction.recipientAddress
+        : sameStarknetAddress(
+              acceptedAction.recipientAddress,
+              self,
+            )
+          ? acceptedAction.senderAddress
+          : undefined;
+
+    if (!peerAddress) {
+      setError(
+        "The accepted Offer counterparty could not be resolved.",
+      );
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
     try {
-      const custodyCommitment = generateCustodyCommitment();
+      if (
+        agreedCustodyCommitment
+      ) {
+        return;
+      }
 
-      const result = await sendEscrowCoordinationAction(session.account, channelKey, {
-        kind: "create",
-        dealOfferLocator: dealOfferLocator.trim(),
-        custodyCommitment: custodyCommitment.toString(),
-      });
+      const prepared =
+        await onPrepareAcceptedOffer(
+          acceptedOffer,
+        );
 
-      setAgreedCustodyCommitment(custodyCommitment);
+      if (!prepared) {
+        return;
+      }
+
+      const custodyCommitment =
+        generateCustodyCommitment();
+
+      const offerSnapshot =
+        buildEscrowOfferSnapshot(
+          acceptedOffer.actionLocator,
+          acceptedAction,
+        );
+
+      const result =
+        await onCreateCoordination(
+          peerAddress,
+          {
+            kind: "create",
+            dealOfferLocator:
+              offerSnapshot.termsOfferLocator,
+            custodyCommitment:
+              custodyCommitment.toString(),
+            offerSnapshot,
+          },
+        );
+
+      setAgreedCustodyCommitment(
+        custodyCommitment,
+      );
 
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
-        summary: `Escrow ready — custody 0x${custodyCommitment.toString(16).slice(0, 10)}…`,
-        transactionHash: result.transactionHash,
-        actionLocator: result.actionLocator.toString(16),
-        sentAt: new Date().toISOString(),
+        summary:
+          `Escrow ready — ${acceptedAction.dealType ?? "deal"} · ${acceptedAction.amount} ${acceptedAction.asset}`,
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          result.actionLocator.toString(
+            16,
+          ),
+        sentAt:
+          new Date().toISOString(),
       });
     } catch (err) {
-      setError(humanizeError(err, "We couldn't start the escrow process. Please try again."));
+      setError(
+        humanizeError(
+          err,
+          "We couldn't start the escrow process. Please try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDeposit() {
-    if (!session || !agreedCustodyCommitment || !token.trim() || !amount.trim()) return;
+    const acceptedAction =
+      acceptedOffer?.offerAction;
+
+    if (
+      !session ||
+      !agreedCustodyCommitment ||
+      !acceptedAction ||
+      acceptedAction.kind !== "accept"
+    ) {
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
     try {
-      const secrets = generateEscrowSecrets();
-      const custodyCommitment = agreedCustodyCommitment;
+      const settlementAsset =
+        resolveSettlementAsset(
+          acceptedAction.asset,
+        );
+
+      if (
+        !settlementAsset ||
+        !settlementAsset.address
+      ) {
+        throw new Error(
+          `Settlement token ${acceptedAction.asset} is not configured for this network.`,
+        );
+      }
+
+      const principal =
+        parseSettlementAmount(
+          acceptedAction.amount,
+          settlementAsset.decimals,
+        );
+
+      const secrets =
+        generateEscrowSecrets();
+      const custodyCommitment =
+        agreedCustodyCommitment;
       const releaseCommitment = computeReleaseCommitment(
         custodyCommitment,
         secrets.releaseSecret
@@ -150,8 +363,9 @@ export function EscrowPanel({
         releaseCommitment,
         refundCommitment,
         refundAfter,
-        token: token.trim(),
-        amount: BigInt(amount.trim()),
+        token:
+          settlementAsset.address,
+        amount: principal,
       });
 
       setLastSecrets({ custodyCommitment, ...secrets });
@@ -159,7 +373,8 @@ export function EscrowPanel({
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
-        summary: `Escrow deposit — ${amount} token ${token.slice(0, 10)}…`,
+        summary:
+          `Escrow deposit — ${acceptedAction.amount} ${acceptedAction.asset}`,
         transactionHash: result.transactionHash,
         actionLocator: custodyCommitment.toString(16),
         sentAt: new Date().toISOString(),
@@ -171,17 +386,35 @@ export function EscrowPanel({
     }
   }
 
+  const acceptedAction =
+    acceptedOffer?.offerAction;
+
+  const acceptedSettlement =
+    acceptedAction?.kind === "accept"
+      ? resolveSettlementAsset(
+          acceptedAction.asset,
+        )
+      : null;
+
   const canCoordinate =
     Boolean(session) &&
     Boolean(channelKey) &&
     !busy &&
+    acceptedAction?.kind ===
+      "accept" &&
     Boolean(dealOfferLocator.trim());
 
   const canDeposit =
     Boolean(session) &&
     !busy &&
-    Boolean(agreedCustodyCommitment) &&
-    Boolean(token.trim()) &&
+    Boolean(
+      agreedCustodyCommitment,
+    ) &&
+    acceptedAction?.kind ===
+      "accept" &&
+    Boolean(
+      acceptedSettlement?.address,
+    ) &&
     Boolean(amount.trim());
 
   return (
@@ -270,8 +503,8 @@ export function EscrowPanel({
               <input
                 id="escrow-offer-locator"
                 value={dealOfferLocator}
-                onChange={(e) => setDealOfferLocator(e.target.value)}
-                placeholder="Paste the offer reference"
+                readOnly
+                placeholder="Accepted Offer reference"
                 disabled={
                   !session ||
                   !channelKey ||
@@ -352,8 +585,8 @@ export function EscrowPanel({
               <input
                 id="escrow-token"
                 value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="0x…"
+                readOnly
+                placeholder="Configured settlement token"
                 disabled={!session || busy || !agreedCustodyCommitment}
                 className="w-full border border-wire bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/25 focus:border-signal disabled:cursor-not-allowed disabled:opacity-40"
               />
@@ -377,8 +610,8 @@ export function EscrowPanel({
               <input
                 id="escrow-amount"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
+                readOnly
+                placeholder="Accepted Offer amount"
                 inputMode="numeric"
                 disabled={!session || busy || !agreedCustodyCommitment}
                 className="w-full border border-wire bg-transparent px-3 py-3 text-lg text-paper outline-none placeholder:text-paper/20 focus:border-signal disabled:cursor-not-allowed disabled:opacity-40"

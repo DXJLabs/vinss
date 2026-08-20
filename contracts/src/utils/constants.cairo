@@ -123,9 +123,11 @@ pub const VINSS_PRIVATE_ESCROW_ENVELOPE_VERSION: u8 = 2;
 /// Layout:
 /// 0. envelope_version
 /// 1. private_escrow_action_locator
-/// 2. claimed_payload_commitment
-/// 3. payload_chunk_count
-/// 4... ciphertext_chunks
+/// 2. sender_tag
+/// 3. recipient_tag
+/// 4. claimed_payload_commitment
+/// 5. payload_chunk_count
+/// 6... ciphertext_chunks
 pub const PRIVATE_ESCROW_ENVELOPE_HEADER_FELTS: usize = 6;
 
 /// Domain separator for encrypted Private Escrow action commitments.

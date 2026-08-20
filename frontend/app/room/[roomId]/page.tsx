@@ -29,6 +29,7 @@ import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
 import { useRoomOffers } from "@/hooks/room/useRoomOffers";
+import { useRoomEscrow } from "@/hooks/room/useRoomEscrow";
 import {
   isGroupAdmin,
 } from "@/lib/groups/localGroups";
@@ -112,6 +113,7 @@ export default function DealRoomPage() {
     counterDirectOffer,
     acceptDirectOffer,
     rejectDirectOffer,
+    prepareEscrowDirectOffer,
     markOfferRead,
     handleOfferRefresh,
   } = useRoomOffers({
@@ -123,6 +125,17 @@ export default function DealRoomPage() {
     active: tab === "timeline" || tab === "offer",
     setBusy,
     setError,
+  });
+
+  const {
+    escrowActions,
+    sendDirectEscrowCoordination,
+  } = useRoomEscrow({
+    roomId: room?.id ?? null,
+    session,
+    channelKey,
+    participants,
+    active: tab === "escrow",
   });
 
   const {
@@ -550,6 +563,9 @@ export default function DealRoomPage() {
           busy={busy}
           agentDraft={agentEscrowDraft}
           acceptedOffer={escrowOfferSource}
+          escrowActions={escrowActions}
+          onPrepareAcceptedOffer={prepareEscrowDirectOffer}
+          onCreateCoordination={sendDirectEscrowCoordination}
         />
       )}
 
