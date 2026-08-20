@@ -11,10 +11,10 @@
  * header fields and every ciphertext chunk, matching
  * contracts/utils/constants.cairo's VINSS_MESSAGE_COMMITMENT_DOMAIN pattern.
  *
- * IMPORTANT: this file never sees a viewing key. `deriveChannelKey` takes an
- * already-derived per-channel symmetric key as input — key agreement itself
- * happens inside the wallet via the same ECDH the pool already uses for note
- * encryption. See references/concepts.md "the golden rule".
+ * IMPORTANT: this file never sees a viewing key. It accepts an already-derived
+ * application symmetric key. Current direct Chat/Offer pairwise key agreement
+ * is implemented client-side in participantKeys.ts; do not describe it as the
+ * Privacy Pool viewing-key ECDH path.
  */
 
 import { hash, num } from "starknet";
@@ -22,7 +22,7 @@ import { hash, num } from "starknet";
 export const ENVELOPE_VERSION = 1;
 export const MAX_PAYLOAD_CHUNKS = 64;
 
-export type ChannelKey = Uint8Array; // 32-byte symmetric key, wallet-derived.
+export type ChannelKey = Uint8Array; // 32-byte application symmetric key.
 
 export interface EncryptedEnvelope {
   envelopeVersion: number;
@@ -80,11 +80,12 @@ export function generateActionLocator(channelKey: ChannelKey): bigint {
   combined.set(channelKey, 0);
   combined.set(random, channelKey.length);
   const asFelts = Array.from(combined).map((b) => BigInt(b));
-  return BigInt(hash.computePoseidonHashOnElements(asFelts.map(String))) % FELT_PRIME;
+  return (
+    BigInt(hash.computePoseidonHashOnElements(asFelts.map(String))) % FELT_PRIME
+  );
 }
 
-const FELT_PRIME =
-  2n ** 251n + 17n * 2n ** 192n + 1n; // Starknet field prime.
+const FELT_PRIME = 2n ** 251n + 17n * 2n ** 192n + 1n; // Starknet field prime.
 
 /**
  * Convert any calldata item (bigint / number / already-hex string) into the
@@ -110,14 +111,9 @@ export function toFelt(value: bigint | number | string): string {
  * (references/links.md → "Channels & subchannels",
  * "Actions, phases, proofs").
  */
-function channelKeyToArrayBuffer(
-  channelKey: ChannelKey,
-): ArrayBuffer {
+function channelKeyToArrayBuffer(channelKey: ChannelKey): ArrayBuffer {
   const copy = new Uint8Array(channelKey);
-  return copy.buffer.slice(
-    copy.byteOffset,
-    copy.byteOffset + copy.byteLength,
-  );
+  return copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength);
 }
 
 export async function encryptPayload(

@@ -22,19 +22,22 @@ function normalizeAddress(address: string): string {
 }
 
 export const CONTRACTS = {
-  privacyPool: normalizeAddress(process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? ""),
+  privacyPool: normalizeAddress(
+    process.env.NEXT_PUBLIC_PRIVACY_POOL_ADDRESS ?? "",
+  ),
   messageHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_MESSAGE_HELPER_ADDRESS ?? "",
   ),
   // Must match the `open_note_token` constructor arg VinssMessageHelper was
-  // deployed with — the token the zero-amount OpenNoteDeposit is reported
-  // against. Only used to build the paired `transfer: "OPEN"` action; no
-  // real value ever moves.
+  // deployed with. It participates in the STRK20 action bundle that routes
+  // the current 0.5 STRK per-message VINSS application revenue.
   messageHelperOpenNoteToken: normalizeAddress(
     process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ?? "",
   ),
   invite: normalizeAddress(process.env.NEXT_PUBLIC_INVITE_ADDRESS ?? ""),
-  offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? ""),
+  offerHelper: normalizeAddress(
+    process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS ?? "",
+  ),
   offerHelperOpenNoteToken: normalizeAddress(
     process.env.NEXT_PUBLIC_OFFER_HELPER_OPEN_NOTE_TOKEN ??
       process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ??
