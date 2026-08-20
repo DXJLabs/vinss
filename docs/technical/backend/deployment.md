@@ -1,25 +1,27 @@
-# Deployment
+# Backend Deployment
 
-## Build first
+## Objective
+
+Deployment must preserve the privacy boundary and environment consistency, not merely start the process successfully.
+
+## Build gate
 
 ```bash
 cd ~/vinss/backend
+
+npm run typecheck
 npm run build
 npm test
 ```
 
-Do not use deployment as the first build validation.
+Do not use production deployment as the first build test.
 
-## Railway
-
-Current deployment flow:
+## Current Railway flow
 
 ```bash
 cd ~/vinss/backend
 railway up
 ```
-
-Deploy from the backend application directory unless the Railway project root is explicitly configured otherwise.
 
 ## Post-deploy smoke checks
 
@@ -33,44 +35,58 @@ echo
 curl -s https://<backend-domain>/openapi.json | head
 ```
 
-Open:
+Also inspect:
 
 ```text
 https://<backend-domain>/docs
 ```
 
-## Mainnet deployment sequence
+## Environment consistency gate
 
-Recommended sequence:
+Before enabling frontend traffic, confirm:
 
 ```text
-1. Freeze commit SHA
-2. Build and test locally/CI
-3. Verify mainnet environment variables
-4. Verify deployed contract addresses
-5. Deploy backend
-6. Check health/readiness
-7. Smoke-test discovery
-8. Smoke-test Agent provider list
-9. Verify logs contain no request bodies
-10. Enable frontend traffic
+network
+RPC
+Message Helper
+Offer Helper
+Private Escrow Helper
+Escrow Rekber reference
+production CORS
 ```
+
+all belong to the intended deployment environment.
+
+## Privacy deployment checks
+
+Confirm that:
+
+- request bodies are not logged;
+- channel keys are rejected by discovery;
+- provider credentials remain server-side;
+- no raw provider prompt/error content appears in logs;
+- production CORS is explicit.
+
+## In-memory service warning
+
+Redeploy/restart resets:
+
+```text
+encrypted presence map
+loyalty account/event maps
+```
+
+Presence is ephemeral by design.
+
+Loyalty must not be treated as durable valuable state in its current form.
 
 ## Rollback
 
-Keep the previous known-good deployment available.
+If a release changes privacy behavior unexpectedly:
 
-If a backend release changes privacy behavior unexpectedly:
-
-1. stop routing new traffic to the bad release;
-2. roll back to the previous known-good commit/deployment;
-3. preserve operational logs that do not contain secrets;
-4. inspect the privacy boundary before redeploying.
-
-## Database note
-
-The current presence and loyalty services are in-memory.
-
-A process redeploy resets those maps.
-
-Do not assume Railway deployment persistence for these structures.
+1. stop routing traffic to the affected release;
+2. restore the previous known-good deployment;
+3. preserve only safe operational evidence;
+4. identify the boundary violation;
+5. patch + add regression coverage;
+6. redeploy only after privacy tests pass.

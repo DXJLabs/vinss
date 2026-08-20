@@ -1,8 +1,8 @@
 # Discovery & Indexer
 
-## Goal
+## Objective
 
-The discovery subsystem provides a keyless way for clients to find VINSS encrypted on-chain actions.
+The discovery subsystem provides a **keyless ciphertext transport/indexing path** for VINSS encrypted on-chain actions.
 
 Endpoint:
 
@@ -18,23 +18,7 @@ offer
 escrow
 ```
 
-## Flow
-
-```mermaid
-flowchart LR
-    C[Client]
-    -->|kind + block range| R[/discover]
-    --> I[scanCommittedActions]
-    --> E[Helper events]
-    --> G[Helper getters]
-    --> X[Ciphertext chunks]
-    --> R
-    -->|encrypted records| C
-```
-
-## Event families
-
-The indexer maps discovery kinds to helper events:
+## Event mapping
 
 ```text
 message → MessageCommitted
@@ -42,47 +26,29 @@ offer   → OfferActionCommitted
 escrow  → PrivateEscrowActionCommitted
 ```
 
-The associated contract address is selected from backend configuration.
+Contract selection is configuration-driven.
 
-## Public record returned
+## Important indexer rule
 
-Typical discovery record:
+The indexer scans helper events, not transaction sender identity.
 
-```json
-{
-  "actionLocator": "0x...",
-  "payloadCommitment": "0x...",
-  "senderTag": "0x...",
-  "recipientTag": "0x...",
-  "ciphertextChunks": ["1", "2", "3"],
-  "blockNumber": 123456,
-  "transactionHash": "0x..."
-}
+Relevant mechanism:
+
+```ts
+const events = await rp.getEvents({
+  address: contractAddress,
+  from_block: { block_number: effectiveFromBlock },
+  to_block: { block_number: effectiveToBlock },
+  keys: [[EVENT_KEY_BY_KIND[kind]]],
+  chunk_size: 100,
+});
 ```
 
-Ciphertext chunks are serialized as strings because JSON does not support JavaScript `bigint`.
-
-## Block-range behavior
-
-The API accepts:
-
-```json
-{
-  "kind": "message",
-  "fromBlock": 0,
-  "toBlock": "latest"
-}
-```
-
-When the request uses the default genesis-to-latest shape, the current indexer bounds live discovery to the latest 10,000 blocks.
-
-This avoids a single unbounded RPC scan.
-
-Explicit caller-provided ranges keep their requested bounds.
+Each record is keyed by the action locator exposed by the helper event.
 
 ## Ciphertext retrieval
 
-After an event is found, the indexer calls the matching helper getter.
+After event discovery, the backend reads the helper record and ciphertext chunks through view calls.
 
 Record getter mapping:
 
@@ -100,32 +66,67 @@ offer   → get_offer_payload_chunk
 escrow  → get_private_escrow_payload_chunk
 ```
 
-## Scaling considerations
+Current retrieval performs one getter call per ciphertext chunk.
 
-The current implementation is a live RPC-backed indexer.
+## Response shape
 
-For mainnet scale, monitor:
+Typical result:
 
-- RPC event-query latency;
-- RPC rate limits;
-- number of committed actions in the scan window;
-- number of chunk getter calls per action;
-- `/discover` request frequency;
-- duplicate scanning between users.
+```json
+{
+  "actionLocator": "0x...",
+  "payloadCommitment": "0x...",
+  "senderTag": "0x...",
+  "recipientTag": "0x...",
+  "ciphertextChunks": ["123", "456"],
+  "blockNumber": 123456,
+  "transactionHash": "0x..."
+}
+```
 
-Potential future optimization must preserve the privacy boundary.
+The backend does not decide whether the record belongs to a specific private pair.
 
-Good options:
+That matching happens in the authorized frontend.
 
-- persistent cache of public ciphertext records;
-- background event ingestion;
-- block checkpoints;
-- database indexes over public action locators;
-- response pagination;
-- RPC failover.
+## Default scan bound
 
-Avoid solving scale by:
+When called with the default broad range:
 
-- sending channel keys to the backend;
-- server-side plaintext matching;
-- introducing a public reusable conversation identifier without explicit privacy review.
+```text
+fromBlock = 0
+toBlock   = latest
+```
+
+the current implementation changes the effective live scan to approximately the latest **10,000 blocks**.
+
+Explicit caller-provided ranges preserve their requested bounds.
+
+## Failure behavior
+
+If a helper address is missing, discovery fails explicitly.
+
+If RPC scanning/getters fail, the route returns a generic `500` response while the server logs only a safe error message.
+
+## Scaling limitations
+
+Current implementation is live RPC-backed discovery, not a durable background index.
+
+Current costs include:
+
+```text
+event scan
++
+record getter
++
+N ciphertext chunk getters
+```
+
+Before high-volume mainnet use, likely hardening areas are:
+
+- persistent cache of public encrypted records;
+- background ingestion/checkpoints;
+- pagination;
+- RPC failover;
+- request rate limiting.
+
+Any optimization must preserve the no-key/no-decryption boundary.

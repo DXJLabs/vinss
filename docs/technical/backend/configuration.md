@@ -1,35 +1,41 @@
-# Configuration
+# Backend Configuration
 
-Backend configuration is loaded from environment variables.
+## Objective
 
-## Core runtime
+Backend configuration separates deployment-specific public infrastructure from server-side secrets and prevents accidental environment mixing.
 
-| Variable           | Purpose                   |
-| ------------------ | ------------------------- |
-| `PORT`             | HTTP port, default `4000` |
-| `STARKNET_NETWORK` | `sepolia` or `mainnet`    |
-| `RPC_URL`          | Starknet RPC endpoint     |
-| `CORS_ORIGIN`      | Allowed frontend origin   |
+## Runtime
 
-## Contracts
+| Variable | Purpose | Current fallback |
+|---|---|---|
+| `PORT` | HTTP port | `4000` |
+| `STARKNET_NETWORK` | `sepolia` / `mainnet` | `sepolia` |
+| `RPC_URL` | Starknet RPC | Sepolia RPC |
+| `CORS_ORIGIN` | Allowed frontend origin | `http://localhost:3000` |
 
-| Variable                        | Purpose                              |
-| ------------------------------- | ------------------------------------ |
-| `PRIVACY_POOL_ADDRESS`          | STRK20 Privacy Pool                  |
-| `MESSAGE_HELPER_ADDRESS`        | Messaging helper                     |
-| `OFFER_HELPER_ADDRESS`          | Offer helper                         |
-| `PRIVATE_ESCROW_HELPER_ADDRESS` | Private escrow helper                |
-| `ESCROW_REKBER_ADDRESS`         | Settlement/rekber contract reference |
+## Contract addresses
 
-## Agent
+```text
+PRIVACY_POOL_ADDRESS
+MESSAGE_HELPER_ADDRESS
+OFFER_HELPER_ADDRESS
+PRIVATE_ESCROW_HELPER_ADDRESS
+ESCROW_REKBER_ADDRESS
+```
 
-| Variable              | Purpose                                          |
-| --------------------- | ------------------------------------------------ |
-| `VINSS_FEE_BPS`       | Fee basis points used by Agent calculation tools |
-| `VINSS_LLM_PROVIDER`  | Preferred provider                               |
-| `VINSS_LLM_FALLBACKS` | Provider fallback order                          |
+Current configuration permits empty contract-address values and fails later when a required address is used.
 
-Provider credentials/model variables may include:
+Mainnet hardening should fail closed earlier.
+
+## Agent configuration
+
+```text
+VINSS_FEE_BPS
+VINSS_LLM_PROVIDER
+VINSS_LLM_FALLBACKS
+```
+
+Provider credentials/model settings may include:
 
 ```text
 GROQ_API_KEY
@@ -51,40 +57,39 @@ QWEN_MODEL
 QWEN_BASE_URL
 ```
 
-## Mainnet configuration rules
+## Important fee distinction
 
-Do not rely on development defaults for a mainnet launch.
+`VINSS_FEE_BPS` is consumed by the backend Agent fee-calculation tool.
 
-Explicitly set:
+It must not be treated as proof that every VINSS financial path uses the same fee.
+
+The current Escrow Rekber fee path is implemented separately in frontend/contract integration code.
+
+## Mainnet configuration rule
+
+Do not rely on development fallbacks.
+
+Explicitly configure:
 
 ```env
 STARKNET_NETWORK=mainnet
-RPC_URL=<mainnet RPC>
+RPC_URL=<verified-mainnet-rpc>
+CORS_ORIGIN=https://<production-origin>
 
-PRIVACY_POOL_ADDRESS=<verified mainnet address>
-MESSAGE_HELPER_ADDRESS=<verified mainnet address>
-OFFER_HELPER_ADDRESS=<verified mainnet address>
-PRIVATE_ESCROW_HELPER_ADDRESS=<verified mainnet address>
-ESCROW_REKBER_ADDRESS=<verified mainnet address>
-
-CORS_ORIGIN=https://<production-vinss-origin>
+PRIVACY_POOL_ADDRESS=<verified-address>
+MESSAGE_HELPER_ADDRESS=<verified-address>
+OFFER_HELPER_ADDRESS=<verified-address>
+PRIVATE_ESCROW_HELPER_ADDRESS=<verified-address>
+ESCROW_REKBER_ADDRESS=<verified-address>
 ```
 
-## Secret handling
+## Secret boundary
 
 Never:
 
-- commit API keys to Git;
-- expose provider keys through `NEXT_PUBLIC_*`;
-- log environment contents;
-- paste production secrets into documentation.
+- commit provider API keys;
+- expose provider keys through frontend public environment variables;
+- log the environment;
+- include production secrets in docs or screenshots.
 
-Use Railway/environment secret management for production credentials.
-
-## Current configuration caveat
-
-The current code has a Sepolia RPC fallback.
-
-That is convenient for development but means mainnet operations must set `RPC_URL` explicitly.
-
-A production hardening improvement is to fail closed when `STARKNET_NETWORK=mainnet` but a required mainnet RPC/contract address is missing.
+Production secrets belong in server-side environment/secret management.

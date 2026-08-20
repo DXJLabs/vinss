@@ -1,66 +1,100 @@
 # Backend Architecture
 
-## Purpose
+## Objective
 
-VINSS uses the backend as a privacy-safe infrastructure layer, not as a trusted deal server.
+VINSS uses the backend for discovery, relay, scoped Agent orchestration, and operational APIs without turning it into a trusted plaintext deal server.
 
-The backend performs work that is expensive or inconvenient for clients:
+The backend performs work that is inconvenient or expensive for browsers while preserving local encryption/decryption.
 
-- scan helper-contract events;
-- retrieve ciphertext chunks;
-- expose a consistent discovery API;
-- relay encrypted ephemeral presence;
-- orchestrate scoped Agent requests;
-- expose application-side loyalty state;
-- provide health and API documentation endpoints.
+## Responsibilities
 
-Encryption and decryption remain client responsibilities.
+### Discovery / indexer
+
+```text
+helper event
+→ action locator
+→ helper getter
+→ ciphertext chunks
+→ /discover response
+```
+
+Supported encrypted action families:
+
+```text
+message
+offer
+escrow
+```
+
+The `escrow` discovery kind refers to **Private Escrow coordination actions**, not custody execution inside the Escrow Rekber contract.
+
+### Presence relay
+
+Stores only opaque encrypted presence records with bounded TTL.
+
+### Agent boundary
+
+Rebuilds remote Agent context from a strict allowlist, selects an explicit skill, and exposes only that skill's allowed tools.
+
+### Operational APIs
+
+Provides:
+
+```text
+GET /health
+GET /openapi.json
+GET /docs
+```
+
+### Auxiliary loyalty service
+
+The backend currently mounts `/loyalty/*`, but loyalty is application-side in-memory state, not protocol-critical private settlement state.
+
+## Runtime structure
+
+```text
+backend/src/
+├── index.ts
+├── config.ts
+├── openapi.ts
+├── routes/
+│   ├── discover.ts
+│   ├── presence.ts
+│   └── agent.ts
+├── indexer/
+│   └── poolEvents.ts
+├── agent/
+│   ├── context.ts
+│   ├── runtime.ts
+│   ├── tools.ts
+│   ├── skills/
+│   └── providers/
+└── loyalty/
+    ├── routes.ts
+    ├── service.ts
+    └── types.ts
+```
 
 ## System architecture
 
 ```mermaid
 flowchart TB
-    subgraph USERS["User Devices"]
-      UA[User A]
-      UB[User B]
-    end
+    CLIENT["VINSS frontend"]
+    WALLET["Privacy-enabled wallet"]
+    POOL["STRK20 Privacy Pool"]
+    MSG["Message Helper"]
+    OFFER["Offer Helper"]
+    ESCROW["Private Escrow Helper"]
 
-    subgraph CLIENT["VINSS Frontend"]
-      ENC[Encrypt locally]
-      DEC[Decrypt locally]
-      CACHE[Encrypted local cache]
-    end
+    INDEX["Backend event indexer"]
+    DISC["POST /discover"]
+    PRES["Encrypted presence relay"]
+    SAN["Agent context sanitizer"]
+    AGENT["Agent runtime"]
+    LLM["Configured LLM provider"]
+    LOY["Auxiliary loyalty service"]
 
-    WALLET[Ready Wallet / STRK20]
-
-    subgraph STARKNET["Starknet Privacy Layer"]
-      POOL[STRK20 Privacy Pool]
-      MSG[Messaging Helper]
-      OFFER[Offer Helper]
-      ESCROW[Private Escrow Helper]
-    end
-
-    subgraph BACKEND["VINSS Backend"]
-      DISC[POST /discover]
-      INDEX[Event Indexer]
-      PRES[Presence Relay]
-      SAN[Agent Context Sanitizer]
-      AGENT[Agent Runtime]
-      LOY[Loyalty Service]
-    end
-
-    subgraph PROVIDERS["Agent Providers"]
-      GROQ[Groq]
-      OPENAI[OpenAI]
-      CLAUDE[Anthropic]
-      QWEN[Qwen]
-    end
-
-    UA --> CLIENT
-    UB --> CLIENT
-
-    CLIENT --> WALLET
-    WALLET --> POOL
+    CLIENT --> WALLET --> POOL
     POOL --> MSG
     POOL --> OFFER
     POOL --> ESCROW
@@ -68,106 +102,54 @@ flowchart TB
     MSG --> INDEX
     OFFER --> INDEX
     ESCROW --> INDEX
-    INDEX --> DISC
-    DISC --> CLIENT
+    INDEX --> DISC --> CLIENT
 
-    CLIENT --> PRES
-
-    CLIENT --> SAN
-    SAN --> AGENT
-
-    AGENT --> GROQ
-    AGENT --> OPENAI
-    AGENT --> CLAUDE
-    AGENT --> QWEN
-
+    CLIENT <--> PRES
+    CLIENT --> SAN --> AGENT --> LLM
     CLIENT --> LOY
-
-    DEC -. plaintext stays on device .-> CLIENT
 ```
 
 ## Trust boundaries
 
-### Client trust boundary
+### Client
 
-The client is allowed to hold:
+Allowed to hold private Deal Room material:
 
-- plaintext messages;
+- plaintext Message content;
 - plaintext Offer terms;
-- room secret;
-- channel/pairwise encryption material;
+- room/channel/pairwise keys;
 - decrypted history;
-- wallet interaction state.
+- Escrow Rekber secrets.
 
-### Backend trust boundary
+### Backend
 
-The backend is designed to handle:
+Designed to handle:
 
 - public Starknet metadata;
-- opaque ciphertext;
+- opaque routing tags;
+- ciphertext;
 - encrypted presence envelopes;
-- bounded privacy-safe Agent context;
-- application loyalty metadata.
+- bounded sanitized Agent context;
+- auxiliary loyalty metadata.
 
-### LLM trust boundary
+### Remote LLM provider
 
-A remote LLM provider receives only:
+May receive:
 
 - the user's explicit Agent instruction;
-- context rebuilt by the backend sanitizer;
-- tool definitions allowed by the active skill.
+- sanitized metadata context;
+- tool definitions for the selected skill.
 
-The provider is not given signing authority or wallet access.
+It receives no signing authority.
 
-## Main modules
+## Architectural invariant
 
-```text
-src/
-├── index.ts
-├── config.ts
-├── openapi.ts
-│
-├── routes/
-│   ├── discover.ts
-│   ├── presence.ts
-│   └── agent.ts
-│
-├── indexer/
-│   └── poolEvents.ts
-│
-├── agent/
-│   ├── index.ts
-│   ├── context.ts
-│   ├── prompts.ts
-│   ├── runtime.ts
-│   ├── tools.ts
-│   ├── skills/
-│   └── providers/
-│
-└── loyalty/
-    ├── routes.ts
-    ├── service.ts
-    └── types.ts
-```
-
-## Relationship to the VINSS proposal
-
-The backend supports the proposal's core direction:
-
-> Encrypted on-chain messaging via the existing privacy layer, with encrypted payloads, persistent on-chain records, and no trusted decryption server.
-
-VINSS extends that messaging primitive into a deal workflow:
+The backend separates:
 
 ```text
-Encrypted messaging
-        ↓
-Private negotiation
-        ↓
-Offer actions
-        ↓
-Escrow coordination
-        ↓
-Settlement
+finding encrypted application records
+from
+being able to read those records
 ```
 
-A key implementation refinement is that VINSS discovery is **keyless and ciphertext-only**. The backend does not receive a viewing key or channel key to decrypt records.
+That separation is one of the main VINSS privacy boundaries.

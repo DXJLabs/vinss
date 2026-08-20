@@ -1,6 +1,6 @@
-# API Reference
+# Backend API Reference
 
-Interactive API documentation is served by Swagger.
+Interactive API documentation:
 
 ```text
 GET /docs
@@ -11,9 +11,7 @@ GET /openapi.json
 
 ### `GET /health`
 
-Returns basic process/network health metadata.
-
-Example:
+Current response:
 
 ```json
 {
@@ -22,13 +20,11 @@ Example:
 }
 ```
 
-Note: this is currently a liveness-style response, not a full RPC/contract readiness probe.
+This is a liveness/configuration response, not a complete dependency readiness probe.
 
 ## Discovery
 
 ### `POST /discover`
-
-Discovers encrypted committed actions.
 
 Request:
 
@@ -40,7 +36,7 @@ Request:
 }
 ```
 
-`kind`:
+Allowed `kind`:
 
 ```text
 message
@@ -48,22 +44,20 @@ offer
 escrow
 ```
 
-The API rejects `channelKeyHex`.
+`channelKeyHex` is explicitly rejected.
 
-Response:
+Response record:
 
 ```json
-[
-  {
-    "actionLocator": "0x...",
-    "payloadCommitment": "0x...",
-    "senderTag": "0x...",
-    "recipientTag": "0x...",
-    "ciphertextChunks": ["123"],
-    "blockNumber": 123,
-    "transactionHash": "0x..."
-  }
-]
+{
+  "actionLocator": "0x...",
+  "payloadCommitment": "0x...",
+  "senderTag": "0x...",
+  "recipientTag": "0x...",
+  "ciphertextChunks": ["123"],
+  "blockNumber": 123,
+  "transactionHash": "0x..."
+}
 ```
 
 ## Presence
@@ -74,7 +68,7 @@ Request:
 
 ```json
 {
-  "channelId": "64-character-hex-id",
+  "channelId": "64-character-lowercase-hex",
   "eventId": "opaque_event_id",
   "iv": "opaque-encoded-iv",
   "ciphertext": "opaque-encoded-ciphertext",
@@ -82,7 +76,7 @@ Request:
 }
 ```
 
-Successful response:
+Success:
 
 ```text
 204 No Content
@@ -94,7 +88,7 @@ Request:
 
 ```json
 {
-  "channelId": "64-character-hex-id"
+  "channelId": "64-character-lowercase-hex"
 }
 ```
 
@@ -118,7 +112,13 @@ Response:
 
 ### `GET /agent/providers`
 
-Returns configured providers and available skills.
+Returns:
+
+```text
+defaultProvider
+configuredProviders
+skills
+```
 
 ### `POST /agent`
 
@@ -151,40 +151,26 @@ anthropic
 qwen
 ```
 
-`provider` is optional.
+The server sanitizes `context` before Agent execution.
 
-The server sanitizes `context` again before provider execution.
+The explicit `message` string is remote-provider input.
 
-## Loyalty
+## Loyalty — auxiliary
 
-### `GET /loyalty/config`
-
-Returns points and level rules.
-
-### `GET /loyalty/:subject`
-
-Returns the current in-process loyalty account.
-
-### `POST /loyalty/events`
-
-Request:
-
-```json
-{
-  "subject": "user-or-account-subject",
-  "action": "offer_created",
-  "eventId": "unique-event-id"
-}
+```text
+GET  /loyalty/config
+GET  /loyalty/:subject
+POST /loyalty/events
 ```
 
-See [Loyalty Service](./loyalty.md) before using this as production mainnet state.
+This API is current in-memory application state, not production settlement state.
 
-## Error policy
+## Error boundary
 
-Privacy-sensitive endpoints should return generic operational errors rather than upstream provider internals or secret-bearing context.
+Privacy-sensitive endpoints should return bounded/generic operational errors rather than raw upstream content that could echo request data.
 
-## Abuse protection
+## Public API hardening
 
-Swagger documents what exists; it does not provide access control.
+Before public mainnet use, add abuse protection to costly/public endpoints.
 
-Before a public mainnet launch, apply rate limits/authentication where required by [Mainnet Readiness](./mainnet-readiness.md).
+CORS is not authentication.

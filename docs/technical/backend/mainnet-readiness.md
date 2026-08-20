@@ -1,132 +1,153 @@
-# Mainnet Readiness
+# Backend Mainnet Readiness
 
-This checklist is intentionally strict.
+**Documentation completeness is not mainnet readiness.**
 
-**Documentation completeness is not proof of mainnet readiness.**
-
-Status terms:
+## Status vocabulary
 
 ```text
-READY     implemented and validated in current backend
-REQUIRED  must be verified for the deployment
-BLOCKER   should be fixed or explicitly disabled before public mainnet use
+READY
+  implemented/validated in current backend code or tests
+
+REQUIRED
+  deployment-specific verification still needed
+
+BLOCKER
+  should be fixed, protected, or explicitly disabled
+  before serious public mainnet use
 ```
 
 ## Privacy architecture
 
-| Item                                        | Status             | Note                             |
-| ------------------------------------------- | ------------------ | -------------------------------- |
-| Ciphertext-only discovery                   | READY              | `/discover` rejects channel keys |
-| Client-side decryption                      | READY architecture | Backend has no decryption path   |
-| Agent server-side context sanitizer         | READY              | Backend rebuilds safe context    |
-| Skill tool allowlist enforced in code       | READY              | Cross-skill execution blocked    |
-| Request bodies excluded from normal logging | READY              | Minimal method/path logging      |
-| Raw provider errors hidden from client      | READY              | Generic Agent failure            |
+| Item | Status | Evidence |
+|---|---|---|
+| Ciphertext-only discovery | READY | `/discover` rejects `channelKeyHex` |
+| No backend decrypt path | READY | regression checks |
+| Server Agent sanitizer | READY | allowlist reconstruction |
+| Skill tool scope | READY | code-enforced allowlist + tests |
+| Minimal request logging | READY | method + path only |
+| Generic Agent failure response | READY | no raw upstream error response |
 
-## Network and contracts
+## Network / contracts
 
-| Item                                | Status            | Note                                         |
-| ----------------------------------- | ----------------- | -------------------------------------------- |
-| `STARKNET_NETWORK=mainnet`          | REQUIRED          | Must be explicit                             |
-| Mainnet `RPC_URL`                   | REQUIRED          | Do not use Sepolia fallback                  |
-| Privacy Pool address verified       | REQUIRED          | Verify exact mainnet deployment              |
-| Messaging helper verified           | REQUIRED          | Address/class/ABI                            |
-| Offer helper verified               | REQUIRED          | Address/class/ABI                            |
-| Escrow helper verified              | REQUIRED          | Address/class/ABI                            |
-| Settlement/rekber address verified  | REQUIRED          | If enabled                                   |
-| Network/address mismatch protection | BLOCKER/Hardening | Current config does not strongly fail closed |
+| Item | Status |
+|---|---|
+| Explicit `STARKNET_NETWORK=mainnet` | REQUIRED |
+| Explicit mainnet `RPC_URL` | REQUIRED |
+| Privacy Pool address verified | REQUIRED |
+| Message Helper verified | REQUIRED |
+| Offer Helper verified | REQUIRED |
+| Private Escrow Helper verified | REQUIRED |
+| Escrow Rekber address/reference verified if enabled | REQUIRED |
+| Fail-closed network/address validation | BLOCKER / hardening |
 
-## Public API abuse protection
+Current config defaults to Sepolia and allows empty contract addresses.
 
-| Item                        | Status             | Note                                |
-| --------------------------- | ------------------ | ----------------------------------- |
-| Request body size limit     | READY              | Express `1mb`                       |
-| Production CORS origin      | REQUIRED           | Set exact frontend origin           |
-| `/discover` rate limiting   | BLOCKER            | RPC-heavy public endpoint           |
-| `/agent` rate limiting      | BLOCKER            | Prevent provider cost abuse         |
-| Loyalty write authorization | BLOCKER if enabled | Current event award route is public |
-| General request throttling  | BLOCKER/Required   | Protect public deployment           |
-| Input validation audit      | REQUIRED           | Recheck every write/costly endpoint |
+That is acceptable for development, not a mainnet safety guarantee.
+
+## Public API protection
+
+| Item | Status |
+|---|---|
+| JSON body limit (`1mb`) | READY |
+| Exact production CORS origin | REQUIRED |
+| `/discover` rate limiting | BLOCKER |
+| `/agent` cost/abuse limiting | BLOCKER |
+| General throttling | REQUIRED |
+| Input-validation audit | REQUIRED |
+| Loyalty write authorization | BLOCKER if enabled |
 
 CORS is not authentication.
 
-## Persistence
+## Discovery scalability
 
-| Item                               | Status                          | Note                              |
-| ---------------------------------- | ------------------------------- | --------------------------------- |
-| Presence persistence               | OPTIONAL/Architecture decision  | Currently in-memory and ephemeral |
-| Presence multi-replica consistency | BLOCKER if scaling horizontally | Use shared TTL store              |
-| Loyalty durability                 | BLOCKER if loyalty enabled      | Currently in-memory               |
-| Loyalty idempotency durability     | BLOCKER if loyalty enabled      | Event map resets on restart       |
+| Item | Status |
+|---|---|
+| Default live scan bounded to latest 10k blocks | READY |
+| RPC-backed event scanning | CURRENT |
+| Persistent ciphertext index | NOT YET |
+| Pagination | NOT YET |
+| RPC failover | REQUIRED for serious availability |
+| Abuse/rate protection | BLOCKER |
 
-If loyalty is not launching on mainnet, disable/isolate its write path until durable design is ready.
+## Presence
 
-## Discovery scaling
-
-| Item                               | Status                            | Note                                     |
-| ---------------------------------- | --------------------------------- | ---------------------------------------- |
-| Bounded default scan               | READY                             | Last 10,000 blocks for default live scan |
-| RPC error handling                 | BASIC                             | Generic route failure                    |
-| Persistent public ciphertext index | NOT YET                           | Future scaling                           |
-| Pagination/caching                 | NOT YET                           | Consider before high traffic             |
-| RPC failover                       | REQUIRED for serious availability | Operational configuration                |
+| Item | Status |
+|---|---|
+| Encrypted opaque relay | READY |
+| TTL bounds | READY |
+| Durable storage | NOT REQUIRED for strictly ephemeral single-instance use |
+| Multi-replica consistency | BLOCKER if horizontally scaled |
 
 ## Agent
 
-| Item                             | Status             | Note                                |
-| -------------------------------- | ------------------ | ----------------------------------- |
-| No signing tools                 | READY              | Agent cannot execute wallet actions |
-| Explicit skill required          | READY              | chat/offer/escrow                   |
-| Provider configuration discovery | READY              | `/agent/providers`                  |
-| Provider secrets server-side     | REQUIRED           | Verify production env               |
-| Provider timeout/cost limits     | REQUIRED hardening | Confirm provider adapter behavior   |
-| Agent endpoint abuse protection  | BLOCKER            | Rate limit/auth policy              |
+| Item | Status |
+|---|---|
+| No transaction execution tools | READY |
+| Explicit skill | READY |
+| Server-side sanitizer | READY |
+| Provider registry/fallback support | READY |
+| Provider credentials server-side | REQUIRED deployment check |
+| Timeout/cost policy | REQUIRED hardening |
+| Public endpoint abuse protection | BLOCKER |
+
+## Loyalty
+
+Current loyalty must be treated separately from core launch readiness.
+
+If disabled/non-valuable:
+
+```text
+does not block core private Deal Room backend
+```
+
+If enabled as valuable state:
+
+```text
+durable storage
+authentication
+authorized event issuer
+persistent idempotency
+anti-abuse
+reconciliation
+```
+
+become blockers.
 
 ## Operations
 
-| Item                          | Status                             | Note                             |
-| ----------------------------- | ---------------------------------- | -------------------------------- |
-| Build/test release gate       | READY process                      | Must be enforced                 |
-| Privacy regression tests      | READY                              | Existing checks                  |
-| `git diff --check`            | READY process                      | Run before release               |
-| Liveness endpoint             | READY                              | `/health`                        |
-| Dependency readiness endpoint | NOT YET                            | Recommended                      |
-| Metrics/alerts                | REQUIRED                           | Railway/external monitoring      |
-| Rollback procedure            | REQUIRED                           | Keep previous known-good release |
-| Incident runbook              | READY docs                         | See `incident-runbook.md`        |
-| Backup/recovery               | REQUIRED for future durable stores | Not applicable to current Maps   |
+| Item | Status |
+|---|---|
+| TypeScript build | READY process |
+| Unit/privacy regression tests | READY |
+| Liveness endpoint | READY |
+| Dependency readiness probe | NOT YET |
+| Monitoring/alerts | REQUIRED |
+| Rollback procedure | REQUIRED operational verification |
+| Incident runbook | READY docs |
 
-## Mainnet launch minimum
-
-Do not call the public backend mainnet-ready until at least:
+## Minimum launch gate
 
 ```text
-[ ] Mainnet RPC explicitly configured
-[ ] Every mainnet contract address verified
-[ ] Production CORS configured
-[ ] /discover protected from abuse
-[ ] /agent protected from abuse/cost attacks
-[ ] Loyalty write endpoint disabled OR authenticated + durable
-[ ] Presence single-instance limitation accepted OR shared TTL store added
-[ ] Build passes
-[ ] All tests pass
-[ ] Privacy boundary checks pass
-[ ] Mainnet smoke test passes
-[ ] Monitoring and rollback are available
+[ ] explicit mainnet network/RPC
+[ ] verified mainnet addresses
+[ ] production CORS
+[ ] /discover abuse protection
+[ ] /agent abuse/cost protection
+[ ] loyalty disabled OR production-hardened
+[ ] presence scaling assumption accepted
+[ ] typecheck/build/tests pass
+[ ] privacy boundary tests pass
+[ ] deployed mainnet smoke checks pass
+[ ] monitoring available
+[ ] rollback path available
 ```
 
-## Recommended launch strategy
-
-For the fastest safe launch, keep the initial mainnet backend scope narrow:
+Core backend mainnet scope should stay narrow:
 
 ```text
-Core:
-  ciphertext discovery
-  Agent (rate-limited)
-  optional ephemeral presence
-
-Do not enable as valuable state until hardened:
-  loyalty rewards
+ciphertext discovery
++ optional encrypted presence
++ optional rate-limited Agent
 ```
 
-The protocol-critical privacy path should remain independent from optional Agent and loyalty availability.
+Optional services must not become dependencies of the canonical private settlement path.

@@ -1,99 +1,99 @@
-# Incident Runbook
-
-Operational response guide for VINSS backend.
+# Backend Incident Runbook
 
 ## Priority order
 
-During an incident:
-
 ```text
 1. Protect user privacy
-2. Prevent incorrect mainnet actions/data exposure
+2. Prevent incorrect environment/data behavior
 3. Restore service
 4. Diagnose root cause
-5. Document and prevent recurrence
+5. Add prevention/regression coverage
 ```
 
-## Privacy incident
+## Privacy-boundary incident
 
 Examples:
 
-- plaintext appears in backend logs;
-- room/channel key reaches the backend;
-- Agent provider receives unintended private context;
-- new endpoint exposes sensitive metadata.
+```text
+plaintext appears in logs
+channel/pairwise key reaches backend
+Agent provider receives unintended automatic private context
+secret appears in telemetry
+```
 
 Actions:
 
-1. stop or roll back the affected deployment;
-2. revoke/rotate affected service credentials when necessary;
+1. stop/rollback affected release;
+2. revoke/rotate affected service credentials if needed;
 3. preserve only safe diagnostic evidence;
-4. identify the data path that crossed the boundary;
-5. patch and add a regression test;
-6. review whether external provider/log retention requires follow-up;
-7. redeploy only after privacy tests pass.
+4. identify the exact data path;
+5. patch the path;
+6. add a regression test;
+7. review external-provider/log retention impact;
+8. redeploy only after privacy checks pass.
 
-## RPC outage
+## Discovery / RPC incident
 
 Symptoms:
 
 ```text
-/discover returns 500
+/discover 500
 high discovery latency
-event scanning timeout
+event scan timeout
+helper getter failure
 ```
 
 Actions:
 
-1. confirm backend process is healthy;
-2. verify Starknet RPC status;
-3. switch to an approved fallback RPC if configured;
-4. avoid changing privacy boundaries as a quick workaround;
-5. restore and smoke-test discovery.
+1. verify backend process liveness;
+2. verify configured network/RPC;
+3. check helper addresses;
+4. use approved fallback RPC if available;
+5. never send keys to the backend as a shortcut;
+6. smoke-test discovery after recovery.
 
-## Agent provider outage
+## Agent outage
 
 Symptoms:
 
 ```text
-POST /agent returns Agent failed
-configured provider unavailable
+POST /agent → Agent failed
+no configured provider
+provider timeout/failure
 ```
 
 Actions:
 
-1. check `GET /agent/providers`;
-2. confirm server-side provider configuration;
-3. use configured fallback provider if policy allows;
-4. keep chat/Offer core protocol available without Agent;
-5. never expose raw vendor error bodies to clients.
-
-Agent outage should not break private messaging.
+1. inspect `GET /agent/providers`;
+2. verify server-side provider configuration;
+3. use configured fallback policy if appropriate;
+4. keep core Message/Offer/discovery functionality independent;
+5. do not expose raw provider error bodies.
 
 ## Presence incident
 
-Because current presence state is in-memory:
+Current state is in-memory.
 
-- restart clears events;
-- multi-replica inconsistency is possible.
+Restart/redeploy clearing presence is expected to lose only ephemeral state.
 
-Treat presence as non-critical ephemeral UX state.
-
-Do not attempt to restore it by logging/decrypting presence content.
+Do not reconstruct it by logging or decrypting presence payloads.
 
 ## Loyalty incident
 
-If current in-memory loyalty is enabled and the process restarts, state is lost.
+Current loyalty is non-durable and unauthenticated for production value.
 
-Do not manually reconstruct valuable reward balances from unverified client claims.
+Do not reconstruct valuable balances from unverified client claims.
 
-Before loyalty carries value, use durable canonical storage and a reconciliation procedure.
+If valuable loyalty is enabled later, incident handling requires canonical durable storage and reconciliation procedures.
 
 ## Bad deployment
 
-1. identify last known-good commit;
-2. roll back;
-3. run health/API smoke checks;
-4. verify privacy logs;
-5. open a root-cause issue/document;
-6. add regression coverage before re-release.
+```text
+identify last good commit
+→ rollback
+→ health/API smoke test
+→ privacy-log review
+→ root-cause analysis
+→ regression coverage
+→ re-release
+```

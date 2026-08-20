@@ -1,10 +1,22 @@
 # Agent System
 
-## Purpose
+## Objective
 
-VINSS Agent provides reasoning assistance around a private deal without turning an LLM into a wallet authority.
+VINSS Agent provides scoped reasoning and drafting assistance without turning a remote model into a transaction authority or automatically forwarding decrypted Deal Room history.
 
-Current skill IDs:
+## Request path
+
+```text
+POST /agent
+→ validate message/context/skill/provider
+→ sanitizeAgentContext()
+→ resolve explicit skill
+→ expose skill-specific tool definitions
+→ call configured provider
+→ return draft / analysis / proposal
+```
+
+Supported skills:
 
 ```text
 chat
@@ -12,58 +24,49 @@ offer
 escrow
 ```
 
-## Architecture
+## Server-side context minimization
 
-```mermaid
-flowchart TB
-    REQ[POST /agent]
-    --> SAN[sanitizeAgentContext]
-    --> SKILL{Explicit skill}
+The server does not trust the caller to pre-sanitize correctly.
 
-    SKILL --> CHAT[ChatSkill]
-    SKILL --> OFFER[OfferSkill]
-    SKILL --> ESCROW[EscrowSkill]
+It rebuilds context itself.
 
-    CHAT --> RT[Agent Runtime]
-    OFFER --> RT
-    ESCROW --> RT
+Automatic timeline summaries become generic labels such as:
 
-    RT --> PROVIDER[Provider Registry]
-    PROVIDER --> G[Groq]
-    PROVIDER --> O[OpenAI]
-    PROVIDER --> A[Anthropic]
-    PROVIDER --> Q[Qwen]
+```text
+Encrypted private message
+Encrypted Offer action
+Encrypted escrow action
+Encrypted private activity
 ```
 
-## Context sanitation
+The latest Offer is reduced to:
 
-The server rebuilds Agent context from a privacy-safe allowlist.
+```json
+{
+  "actionLocator": "0x..."
+}
+```
 
-The sanitizer retains only bounded workflow metadata such as generic timeline kind/summary, timestamp, and action locator where applicable.
+when available.
 
-It drops arbitrary caller fields such as:
+## Privacy trade-off
 
-- room labels;
-- raw timeline summary plaintext;
-- Offer asset;
-- Offer amount;
-- payment terms;
-- conditions;
-- addresses;
-- room secret;
-- channel keys;
-- other unrecognized properties.
+Because automatic context is deliberately stripped of Offer terms and detailed timeline semantics, remote Agent reasoning cannot reliably infer every private deal detail or lifecycle transition from automatic context alone.
 
-## Skill tool boundaries
+The user may explicitly provide information in the Agent instruction when they want the remote model to reason about it.
 
-### ChatSkill
+That explicit text is remote-provider input.
+
+## Skill boundaries
+
+### Chat
 
 ```text
 inspect_deal_state
 draft_message
 ```
 
-### OfferSkill
+### Offer
 
 ```text
 inspect_deal_state
@@ -73,7 +76,7 @@ draft_counter_offer
 calculate_fee
 ```
 
-### EscrowSkill
+### Escrow
 
 ```text
 inspect_deal_state
@@ -82,72 +85,68 @@ review_rekber
 calculate_fee
 ```
 
-## Runtime enforcement
-
-Tool restrictions are enforced in code.
+Runtime enforcement:
 
 ```ts
 if (!skill.allowedTools.includes(name)) {
-  throw new Error(`Tool not allowed for ${skill.id} skill: ${name}`);
+  throw new Error(
+    `Tool not allowed for ${skill.id} skill: ${name}`,
+  );
 }
 ```
 
-A prompt injection cannot expand the active skill's tool allowlist.
+## No execution authority
 
-## No execution tools
-
-The Agent layer does not expose tools for:
+No Agent tool performs:
 
 ```text
-send transaction
-sign transaction
-deposit funds
-release escrow
-refund escrow
+wallet signing
+transaction submission
+escrow deposit
+escrow release
+escrow refund
+Offer accept/reject execution
 ```
 
-Any actual wallet action remains outside the model's authority.
+Agent proposals use:
+
+```ts
+requiresApproval: true
+```
+
+Actual blockchain execution remains a frontend + wallet action.
+
+## Fee-tool boundary
+
+`calculate_fee` uses `VINSS_FEE_BPS` and defaults to **25 bps** if unset.
+
+It is an illustrative Agent calculation helper.
+
+It is **not** the canonical source for the currently implemented Escrow Rekber contract/frontend fee path, which is defined elsewhere in the application code.
 
 ## Providers
 
-The provider abstraction supports:
+Current provider registry supports:
 
-- Groq;
-- OpenAI-compatible provider;
-- Anthropic;
-- Qwen through the compatible provider layer.
-
-Only configured providers are considered available.
-
-Inspect runtime capability:
-
-```http
-GET /agent/providers
+```text
+groq
+openai
+anthropic
+qwen
 ```
 
-Example:
+`VINSS_LLM_PROVIDER` chooses the preferred provider and `VINSS_LLM_FALLBACKS` can define fallback order.
+
+`GET /agent/providers` exposes configured provider IDs and available skills without exposing provider credentials.
+
+## Provider failure boundary
+
+Raw upstream failure content is not returned to the client.
+
+`POST /agent` returns a generic:
 
 ```json
-{
-  "defaultProvider": "groq",
-  "configuredProviders": ["groq"],
-  "skills": ["chat", "offer", "escrow"]
-}
+{ "error": "Agent failed." }
 ```
 
-## Remote provider privacy
-
-A remote provider can still see:
-
-- the user's instruction explicitly typed into the Agent;
-- the sanitized metadata context.
-
-Therefore users should not be told that an LLM provider receives zero information.
-
-The guarantee is narrower:
-
-> VINSS does not automatically forward decrypted room history or private Offer terms through the normal Agent context path.
-
-## Provider failures
-
-Raw upstream errors are not returned to users and are not logged with full detail because provider error messages can echo request data.
+on internal provider/runtime failure.

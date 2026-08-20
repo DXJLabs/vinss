@@ -1,10 +1,20 @@
 # Loyalty Service
 
-## Purpose
+## Classification
 
-The loyalty service is application-side state. It is not part of the privacy-pool protocol.
+**Auxiliary / experimental application service.**
 
-Current endpoints:
+Loyalty exists in the current backend codebase, but it is not part of:
+
+```text
+STRK20 privacy protocol
+ciphertext discovery
+Offer settlement authority
+Escrow Rekber custody
+canonical settlement evidence
+```
+
+## Current endpoints
 
 ```text
 GET  /loyalty/config
@@ -25,36 +35,52 @@ invite_user
 successful_referral
 ```
 
-## Idempotency
-
-Each award includes an `eventId`.
-
-The current service prevents the same recorded event ID from awarding points twice during the lifetime of the process.
-
 ## Current storage
 
-The implementation currently uses:
+Implementation uses process memory:
 
 ```ts
-const accounts = new Map<string, LoyaltyAccount>();
-const events = new Map<string, LoyaltyEvent>();
+const accounts =
+  new Map<string, LoyaltyAccount>();
+
+const events =
+  new Map<string, LoyaltyEvent>();
 ```
 
-This means loyalty state is not durable.
+A restart/redeploy resets state.
 
-## Mainnet status
+## In-process idempotency
 
-**Do not treat the current in-memory loyalty service as a production ledger.**
+`eventId` prevents duplicate awards only while the process map survives.
 
-Before enabling loyalty as valuable mainnet product state:
+This is not persistent replay protection.
 
-- use durable storage;
-- make idempotency persistent;
-- define subject authentication/ownership;
-- authorize who may award events;
-- add anti-abuse rules;
-- define replay protection;
-- define reconciliation against canonical application/on-chain events;
-- define backup/restore strategy.
+## Authorization limitation
 
-If loyalty is not part of the initial mainnet launch, disable or isolate the write endpoint rather than presenting it as final production accounting.
+The current write route accepts:
+
+```text
+subject
+action
+eventId
+```
+
+and does not implement a production authentication/authorization model for valuable reward state.
+
+Therefore the current service must **not** be presented as a production reward ledger.
+
+## Production rule
+
+If loyalty is not part of the initial production/mainnet scope, isolate or disable valuable write behavior.
+
+If it later carries value, it requires at minimum:
+
+- durable storage;
+- persistent idempotency/replay protection;
+- authenticated subjects;
+- authorized event issuers;
+- anti-abuse rules;
+- canonical event reconciliation;
+- backup/recovery procedures.
+
+The core private Deal Room path should not depend on loyalty availability.

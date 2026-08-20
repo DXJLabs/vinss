@@ -1,4 +1,10 @@
-# Testing
+# Backend Testing
+
+## Objective
+
+Backend tests should verify both normal behavior and privacy boundaries.
+
+A successful TypeScript build does not prove the server remains privacy-safe.
 
 ## Standard validation
 
@@ -8,63 +14,87 @@ cd ~/vinss/backend
 npm run typecheck
 npm run build
 npm test
+
+cd ~/vinss
 git diff --check
 ```
 
-## Current backend tests
+## Current `npm test`
 
-The test command runs:
+Current script runs:
 
 ```text
-Agent/tool tests
-Privacy boundary checks
-Ciphertext-only discovery boundary checks
+backend/tests/agent-tools.test.ts
++
+scripts/test-privacy-boundaries.mjs
 ```
 
-Important behaviors covered include:
+## Agent/tool coverage
+
+Current tests verify, among other things:
 
 - deterministic fee calculation;
 - Offer analysis behavior;
-- approval-required counter proposals;
-- private message remains a draft;
-- deal-stage inference;
-- Agent tool allowlist excludes execution tools;
+- approval-required proposals;
+- private Message remains a draft;
 - skill-specific tool exposure;
-- cross-domain tool execution is blocked;
-- Agent context sanitizer strips private plaintext;
-- backend discovery remains ciphertext-only.
+- no transaction-execution tools;
+- cross-skill tool execution is rejected;
+- Agent context sanitizer strips private plaintext.
 
-## Release gate
+Example security assertion:
 
-For mainnet-targeted releases, do not deploy if any of these fail:
-
-```text
-TypeScript build
-Unit tests
-Privacy boundary tests
-Ciphertext-only checks
-git diff --check
+```ts
+assert.throws(
+  () =>
+    executeSkillTool(
+      getAgentSkill("offer"),
+      "prepare_escrow",
+      {},
+      {},
+      25,
+    ),
+  /Tool not allowed for offer skill/,
+);
 ```
 
-## Additional mainnet test categories
+## Ciphertext-only regression coverage
 
-Before mainnet, add or verify:
+The privacy script verifies:
 
-- mainnet configuration validation tests;
+```text
+backend discovery has no decrypt path
+backend rejects channelKeyHex
+DiscoverRequest has no channelKeyHex
+indexer contains no decryption code
+frontend Message/Offer discovery sends no channel key
+frontend performs local decryption
+```
+
+## Verification levels
+
+Use distinct labels:
+
+```text
+Implemented
+Tested
+Testnet On-chain Verified
+Mainnet Verified
+```
+
+Backend unit/privacy tests are not a substitute for deployed network evidence.
+
+## Mainnet-targeted additions
+
+Before serious public mainnet operation, add/verify:
+
+- mainnet configuration validation;
 - rate-limit behavior;
-- malformed request fuzz/validation tests;
-- RPC outage behavior;
-- large discovery result behavior;
+- malformed input/fuzz cases;
+- RPC outage/failover behavior;
+- large discovery responses;
 - provider timeout/fallback behavior;
-- presence restart behavior;
-- loyalty replay/idempotency persistence if enabled;
-- contract-address/network mismatch tests;
-- smoke tests against deployed mainnet helper contracts.
-
-## Privacy regression principle
-
-Whenever a new backend field is added, ask:
-
-> Does this field allow the server or a remote provider to learn more private deal metadata than before?
-
-If yes, update the threat model and privacy tests before shipping.
+- multi-instance presence behavior if used;
+- loyalty auth/durability tests if enabled;
+- network/contract mismatch protection;
+- deployed helper smoke tests.

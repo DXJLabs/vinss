@@ -1,76 +1,81 @@
-# Observability
+# Backend Observability
 
-## Logging principle
+## Objective
 
-VINSS backend logging must optimize for operational usefulness **without capturing private user content**.
+Observability must help operate VINSS without turning logs/metrics into a secondary plaintext data store.
 
-Current request logging records:
+## Current logging
+
+Normal request logging records only:
 
 ```text
 HTTP method
 path
 ```
 
+Implementation:
+
+```ts
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
+```
+
 Request bodies are intentionally excluded.
 
-## Safe operational fields
+## Safe operational telemetry
 
-Generally safe:
+Examples:
 
 ```text
 timestamp
 route
-HTTP status
+status code
 latency
-network
+configured network
 provider ID
-generic error category
-RPC latency
-RPC status
+generic failure category
+RPC latency/status
 deployment/commit version
 ```
 
-Review any new field before logging it.
+Review every new field before logging it.
 
-## Do not log
+## Never log
 
 ```text
 request bodies
-room secrets
-channel keys
+room/channel/pairwise keys
 viewing keys
-private message text
+Message plaintext
 Offer terms
+decrypted payloads
+Escrow Rekber secrets
 wallet private keys
 provider API keys
-decrypted payloads
 raw Agent context
+raw provider errors that may echo prompts
 ```
 
-## Metrics recommended for mainnet
-
-### HTTP
-
-- requests by route/status;
-- p50/p95/p99 latency;
-- request rejection count;
-- rate-limit rejection count.
+## Mainnet metrics
 
 ### Discovery
 
-- event scan latency;
-- number of events scanned;
-- ciphertext chunk getter count;
-- RPC failures/timeouts;
-- requested block span.
+- request count/status;
+- event-scan latency;
+- scanned block span;
+- events found;
+- chunk getter count;
+- RPC failures/timeouts.
 
 ### Agent
 
-- calls per provider;
-- provider success/failure;
-- provider latency;
+- calls by provider;
+- success/failure;
+- latency;
 - fallback count;
-- token/cost metrics where available without logging prompts.
+- cost/token metrics only when prompt content is not logged.
 
 ### Runtime
 
@@ -80,15 +85,17 @@ raw Agent context
 - uptime;
 - event-loop health.
 
-## Readiness vs liveness
+## Liveness vs readiness
 
-`GET /health` currently indicates the process is alive and reports configured network.
+`GET /health` currently proves that the process responds and reports configured network.
 
-For production, consider a separate readiness check that verifies critical dependencies such as:
+It does not prove:
 
-- RPC reachable;
-- required contract addresses configured;
-- expected chain/network;
-- optional Agent provider availability.
+```text
+RPC reachable
+correct chain ID
+required helper contracts reachable
+Agent provider healthy
+```
 
-Do not make a readiness probe leak secrets or private data.
+A future readiness probe should validate dependencies without exposing secrets.

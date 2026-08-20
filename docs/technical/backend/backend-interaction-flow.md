@@ -1,130 +1,128 @@
 # Backend Interaction Flow
 
-This document explains the backend-specific flow from a user's action to the backend services involved.
+## Objective
 
-It is not a frontend UX flow. It answers:
+This document shows where the backend participates in a VINSS action and, equally importantly, where it does **not** participate.
 
-> When a VINSS user does something, what role does the backend play?
-
-## Private messaging
+## Private Message discovery
 
 ```mermaid
 sequenceDiagram
-    participant A as User A Device
-    participant W as Ready / STRK20
-    participant H as Messaging Helper
+    participant A as User A Frontend
+    participant W as Wallet / STRK20
+    participant H as Message Helper
     participant B as VINSS Backend
-    participant I as Indexer
-    participant C as User B Device
+    participant C as User B Frontend
 
-    A->>A: Encrypt message locally
-    A->>W: Submit privacy action
-    W->>H: Invoke privacy action
-    H-->>H: Commit locator + payload commitment + ciphertext
+    A->>A: Encrypt Message locally
+    A->>W: User-authorized STRK20 action
+    W->>H: privacy_invoke
+    H-->>H: Commit opaque encrypted record
 
-    C->>B: POST /discover { kind: message }
-    B->>I: Scan MessageCommitted events
-    I->>H: Read message + ciphertext chunks
-    H-->>I: Ciphertext + public metadata
-    I-->>B: Encrypted record
-    B-->>C: Ciphertext only
-    C->>C: Match/decrypt locally
+    C->>B: POST /discover {kind: message}
+    B->>H: Scan event + read ciphertext chunks
+    H-->>B: Public metadata + ciphertext
+    B-->>C: Candidate encrypted records
+    C->>C: Match routing tag + decrypt locally
 ```
 
-### Backend value to the user
+The backend never receives the Message key.
 
-The user does not need to implement raw Starknet event scanning and chunk retrieval in the browser for every refresh.
+## Private Offer discovery
 
-The backend provides the transport/indexing layer while preserving local decryption.
-
-## Offer actions
-
-```mermaid
-sequenceDiagram
-    participant A as User A
-    participant H as Offer Helper
-    participant B as VINSS Backend
-    participant C as User B
-
-    A->>A: Create and encrypt Offer action
-    A->>H: Commit encrypted action through privacy path
-    C->>B: POST /discover { kind: offer }
-    B->>H: Read OfferActionCommitted + chunks
-    H-->>B: Ciphertext + public metadata
-    B-->>C: Encrypted Offer record
-    C->>C: Decrypt and update deal state
+```text
+encrypted Offer action
+→ STRK20 / Offer Helper
+→ OfferActionCommitted
+→ backend indexer
+→ /discover
+→ authorized browser
+→ local route match / decrypt
 ```
 
-The same discovery family supports:
+All lifecycle semantics remain inside encrypted Offer payloads.
 
-- create;
-- counter;
-- accept;
-- reject;
+The backend transports encrypted Offer actions without needing to know whether an action is:
 
-as encrypted Offer actions.
+```text
+create
+counter
+accept
+reject
+cancel
+expire
+prepare_escrow
+```
 
-## Escrow discovery
+## Private Escrow coordination discovery
 
-The backend also recognizes the `escrow` discovery kind and scans `PrivateEscrowActionCommitted`.
+`kind: "escrow"` maps to:
 
-This is a technical primitive. It does not mean the complete product-level Escrow E2E flow is already considered finished.
+```text
+PrivateEscrowActionCommitted
+```
+
+and retrieves encrypted coordination payload chunks.
+
+This is **not** the same thing as executing:
+
+```text
+deposit
+release
+refund
+```
+
+against the Escrow Rekber custody contract.
+
+Those financial actions remain wallet/contract execution paths.
 
 ## Presence
 
 ```mermaid
 sequenceDiagram
-    participant A as User A
+    participant A as User A Frontend
     participant B as VINSS Backend
-    participant C as User B
+    participant C as User B Frontend
 
-    A->>A: Encrypt typing/read event
+    A->>A: Encrypt presence payload
     A->>B: POST /presence/publish
-    Note over B: Store opaque envelope with TTL
-
+    Note over B: Store opaque envelope + TTL
     C->>B: POST /presence/poll
-    B-->>C: Encrypted presence events
+    B-->>C: Opaque encrypted events
     C->>C: Decrypt locally
 ```
 
-The backend never needs to know whether an opaque presence event means `typing`, `read`, or another client-defined event.
-
-## Agent interaction
-
-```mermaid
-flowchart LR
-    U[User explicit instruction]
-    --> F[Frontend]
-    --> R[POST /agent]
-    --> S[Server-side sanitizer]
-    --> K{Skill}
-
-    K -->|chat| C[ChatSkill]
-    K -->|offer| O[OfferSkill]
-    K -->|escrow| E[EscrowSkill]
-
-    C --> A[Agent Runtime]
-    O --> A
-    E --> A
-
-    A --> P[Configured Provider]
-    P --> A
-    A --> X[Draft / analysis / proposal]
-    X --> U2[User reviews]
-```
-
-The Agent does not submit the blockchain transaction.
-
-## Loyalty interaction
-
-The current loyalty service provides:
+## Agent
 
 ```text
-GET  /loyalty/config
-GET  /loyalty/:subject
-POST /loyalty/events
+user instruction
+→ frontend context minimization
+→ POST /agent
+→ backend sanitizer
+→ explicit skill
+→ skill-specific tools
+→ configured provider
+→ draft / analysis / proposal
+→ user review
 ```
 
-This is application-side state, not part of the STRK20 privacy protocol.
+The Agent path does not sign or submit transactions.
 
-See [Loyalty Service](./loyalty.md) and [Mainnet Readiness](./mainnet-readiness.md) before enabling it as a production reward system.
+## Failure separation
+
+Optional backend services should not become transaction authorities.
+
+Examples:
+
+```text
+Agent outage
+≠ private Message settlement failure
+
+Presence reset
+≠ loss of canonical on-chain Message / Offer record
+
+Loyalty reset
+≠ loss of canonical deal settlement
+```
+
+Canonical on-chain actions remain separate from optional backend state.

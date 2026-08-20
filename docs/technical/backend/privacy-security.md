@@ -2,83 +2,116 @@
 
 ## Core security objective
 
-The VINSS backend must remain useful without becoming capable of reading private deal content.
+The VINSS backend must remain operationally useful without becoming capable of decrypting private Deal Room content through the normal protocol path.
 
-## Data classification
+## Forbidden server knowledge
 
-### Must remain client-side
+The core backend must not receive:
 
-| Data                           | Backend   |
-| ------------------------------ | --------- |
-| Message plaintext              | Forbidden |
-| Offer plaintext terms          | Forbidden |
-| Room secret                    | Forbidden |
-| Channel key                    | Forbidden |
-| Pairwise key                   | Forbidden |
-| Viewing key                    | Forbidden |
-| Wallet private key             | Forbidden |
-| Decrypted conversation history | Forbidden |
+| Data | Boundary |
+|---|---|
+| Message plaintext | Client-side only |
+| Offer plaintext terms | Client-side only |
+| Room secret | Client-side only |
+| Channel / pairwise key | Client-side only |
+| Viewing key | Client / privacy infrastructure only |
+| Wallet private key | Wallet only |
+| Decrypted Deal Room history | Client-side only |
+| Escrow Rekber release/refund secrets | Client-side only |
 
-### May pass through the backend
+## Allowed backend data
 
-| Data                            | Reason                |
-| ------------------------------- | --------------------- |
-| Ciphertext chunks               | Discovery transport   |
-| Payload commitment              | Public chain metadata |
-| Action locator                  | Public helper record  |
-| Opaque sender/recipient tags    | Helper event metadata |
-| Block number                    | Public chain metadata |
-| Transaction hash                | Public chain metadata |
-| Encrypted presence envelope     | Temporary relay       |
-| Sanitized Agent metadata        | Remote reasoning      |
-| Loyalty application identifiers | Application service   |
+The backend may process:
 
-## Ciphertext-only discovery boundary
+| Data | Reason |
+|---|---|
+| Action locator | Public helper record |
+| Payload commitment | Public helper record |
+| Opaque sender/recipient tags | Public helper metadata |
+| Ciphertext chunks | Discovery transport |
+| Block number | Public chain metadata |
+| Transaction hash | Public chain metadata |
+| Encrypted presence envelope | Ephemeral relay |
+| Sanitized Agent metadata | Scoped remote reasoning |
+| Loyalty subject/event metadata | Auxiliary application state |
 
-`POST /discover` explicitly rejects `channelKeyHex`.
+## Enforced ciphertext-only discovery
+
+The route explicitly rejects a channel key:
 
 ```ts
 if ("channelKeyHex" in body) {
   return res.status(400).json({
-    error: "channelKeyHex is not accepted. Discovery is ciphertext-only.",
+    error:
+      "channelKeyHex is not accepted. Discovery is ciphertext-only.",
   });
 }
 ```
 
-This is a network boundary, not merely a UI convention.
+This is a server-side boundary, not only a frontend convention.
 
-## Client-side matching
+Regression tests also verify that:
 
-VINSS does not add a reusable public conversation identifier solely to make server indexing easier.
+- discovery code has no decryption path;
+- `DiscoverRequest` has no channel-key field;
+- frontend Message/Offer discovery does not send channel keys;
+- decryption remains in frontend code.
 
-The backend can return candidate encrypted records; channel membership is determined by client-side cryptographic processing.
+## No transaction-sender attribution
 
-This deliberately trades some indexing efficiency for metadata resistance.
+The event indexer reads VINSS helper events and keyed action locators.
 
-## Sender attribution
+It does **not** use a normal transaction sender as the private user identity.
 
-The indexer reads VINSS helper events rather than treating a normal transaction sender as the private user identity.
-
-Private operations pass through the privacy infrastructure, so the privacy layer/helper context is not equivalent to a public user address.
-
-## Agent boundary
-
-The Agent has two separate defenses:
-
-1. **context sanitation** — arbitrary private context is not forwarded as-is;
-2. **tool authorization** — each active skill has a code-enforced tool allowlist.
+Important code intent:
 
 ```ts
-if (!skill.allowedTools.includes(name)) {
-  throw new Error(`Tool not allowed for ${skill.id} skill: ${name}`);
+const actionLocator = event.keys[1];
+const payloadCommitment = event.data[0];
+```
+
+User-facing attribution is reconstructed only after authorized client-side decryption/routing validation.
+
+## Agent defense in depth
+
+### Context sanitizer
+
+The server rebuilds context from an allowlist.
+
+Example:
+
+```ts
+if (isRecord(value.latestOffer)) {
+  const actionLocator = boundedString(
+    value.latestOffer.actionLocator,
+    MAX_LOCATOR_LENGTH,
+  );
+
+  if (actionLocator) {
+    context.latestOffer = { actionLocator };
+  }
 }
 ```
 
-The model cannot grant itself a transaction execution tool.
+Offer asset, amount, payment terms, conditions, room labels, arbitrary addresses, and arbitrary plaintext timeline summaries are not automatically preserved.
 
-## Logging
+### Skill tool allowlist
 
-The Express request logger records only:
+Tool scope is enforced in code:
+
+```ts
+if (!skill.allowedTools.includes(name)) {
+  throw new Error(
+    `Tool not allowed for ${skill.id} skill: ${name}`,
+  );
+}
+```
+
+The model cannot expand its own tool authority through prompting.
+
+## Logging boundary
+
+Normal request logging records:
 
 ```text
 METHOD PATH
@@ -86,46 +119,26 @@ METHOD PATH
 
 Request bodies are intentionally excluded.
 
-Provider failures are also logged without raw upstream error details because an upstream error can echo request content.
-
-## Presence privacy
-
-Presence storage receives only:
+Do not add:
 
 ```text
-channelId
-eventId
-iv
-ciphertext
-ttl
+raw Agent context
+request bodies
+decrypted payloads
+keys / secrets
+provider raw errors that may echo prompts
 ```
 
-The backend should not receive plaintext event semantics or cryptographic room/pairwise keys.
+to production logs.
 
-## Security assumptions
+## External trust assumptions
 
-VINSS still depends on external infrastructure:
+The backend still depends on:
 
-- Starknet RPC correctness/availability;
-- deployed helper-contract correctness;
-- wallet behavior;
-- privacy-pool behavior;
-- LLM provider availability for optional Agent functionality;
-- Railway/runtime security for backend execution.
+- Starknet RPC correctness and availability;
+- deployed helper correctness;
+- STRK20 / wallet behavior outside this process;
+- runtime hosting security;
+- remote LLM providers for optional Agent functionality.
 
-The backend privacy model minimizes sensitive server knowledge but does not eliminate infrastructure risk.
-
-## Mainnet rules
-
-Before mainnet:
-
-- use explicit mainnet RPC;
-- use verified mainnet helper addresses;
-- restrict CORS to production origins;
-- keep LLM keys server-side;
-- add abuse protection to public/costly endpoints;
-- replace or explicitly disable non-durable product state;
-- run privacy tests on every release;
-- never log request bodies or secrets.
-
-See [Mainnet Readiness](./mainnet-readiness.md).
+Privacy minimization reduces server knowledge; it does not eliminate infrastructure risk.

@@ -1,13 +1,19 @@
 # Encrypted Presence
 
-## Purpose
+## Objective
 
-The presence service supports ephemeral coordination such as:
+Presence provides ephemeral coordination without requiring the backend to know plaintext event semantics.
 
-- typing indicators;
-- read receipts.
+Current client-defined uses include:
 
-The backend relays opaque encrypted envelopes and does not interpret the event meaning.
+```text
+typing
+read
+participant
+group_member
+```
+
+The backend itself treats them as opaque ciphertext.
 
 ## Endpoints
 
@@ -16,36 +22,12 @@ POST /presence/publish
 POST /presence/poll
 ```
 
-## Publish payload
+## Stored record
 
-The server expects:
+The backend receives/stores only:
 
 ```text
 channelId
-eventId
-iv
-ciphertext
-ttlMs
-```
-
-Validation includes:
-
-- 64-character lowercase hex channel ID;
-- bounded event ID;
-- bounded IV/ciphertext size;
-- finite TTL.
-
-## Storage model
-
-The current implementation uses an in-memory map:
-
-```ts
-const channels = new Map<string, PresenceRecord[]>();
-```
-
-Stored record:
-
-```text
 eventId
 iv
 ciphertext
@@ -53,38 +35,53 @@ createdAt
 expiresAt
 ```
 
-## Limits
-
-Current constraints:
-
-```text
-minimum TTL         1 second
-maximum TTL         24 hours
-max events/channel  120
-```
-
-Expired records are removed during channel access.
-
-## Privacy boundary
-
-The backend does not need:
+It does not receive:
 
 ```text
 room key
 pairwise key
-wallet address
+wallet address as a presence field
 typing plaintext
 read plaintext
+participant plaintext
 ```
 
-## Mainnet operational limitation
+## Validation and limits
 
-The current in-memory design means:
+Current server limits:
 
-- events disappear after process restart/redeploy;
-- events are not shared across multiple backend replicas;
-- horizontal scaling can produce inconsistent polling results.
+```text
+channelId            64 lowercase hex chars
+eventId              8–96 allowed chars
+minimum TTL          1 second
+maximum TTL          24 hours
+max events/channel   120
+ciphertext max       16,384 chars
+```
 
-This can be acceptable for strictly ephemeral optional presence on a single instance, but multi-instance production should use an ephemeral shared store such as Redis with TTL semantics.
+## Current storage mechanism
 
-Presence must never be migrated to a store that requires server-side decryption.
+Important implementation:
+
+```ts
+const channels =
+  new Map<string, PresenceRecord[]>();
+```
+
+This makes presence intentionally non-durable.
+
+Expired entries are cleaned during channel access.
+
+## Failure semantics
+
+Process restart/redeploy clears presence state.
+
+This should degrade ephemeral UX only; it must not erase canonical Message/Offer on-chain records.
+
+## Scaling boundary
+
+Multiple backend replicas do not share the in-memory map.
+
+If presence must work consistently across replicas, use a shared TTL-oriented store.
+
+Do not solve this by decrypting presence server-side.
