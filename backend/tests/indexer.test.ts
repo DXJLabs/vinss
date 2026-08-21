@@ -29,6 +29,7 @@ function testConfig(): AppConfig {
         message: 100,
         offer: 200,
         escrow: 300,
+        rekber: 400,
       },
       pollIntervalMs: 5_000,
       blockRange: 2_000,

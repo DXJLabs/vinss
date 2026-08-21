@@ -2,15 +2,21 @@ import { Router, type Request, type Response } from "express";
 
 import type { StarknetNetwork } from "../config.js";
 import type {
+  ActivityKind,
   DiscoverKind,
   GlobalActivityItem,
+  RekberEventKind,
 } from "../types.js";
+import { RekberStore } from "../indexer/rekberStore.js";
 import { DiscoveryStore } from "../indexer/store.js";
 
-const VALID_KINDS: readonly DiscoverKind[] = [
+const VALID_KINDS: readonly ActivityKind[] = [
   "message",
   "offer",
   "escrow",
+  "rekber_funded",
+  "rekber_released",
+  "rekber_refunded",
 ];
 
 interface ActivityCursor {
@@ -26,29 +32,23 @@ function parseLimit(value: unknown): number {
 
   const parsed = Number(value);
 
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < 1 ||
-    parsed > 100
-  ) {
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100) {
     throw new Error("limit must be an integer from 1 to 100.");
   }
 
   return parsed;
 }
 
-function parseKind(value: unknown): DiscoverKind | undefined {
+function parseKind(value: unknown): ActivityKind | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  if (VALID_KINDS.includes(value as DiscoverKind)) {
-    return value as DiscoverKind;
+  if (VALID_KINDS.includes(value as ActivityKind)) {
+    return value as ActivityKind;
   }
 
-  throw new Error(
-    `kind must be one of: ${VALID_KINDS.join(", ")}`,
-  );
+  throw new Error(`kind must be one of: ${VALID_KINDS.join(", ")}`);
 }
 
 function decodeCursor(value: unknown): ActivityCursor | undefined {
@@ -84,9 +84,7 @@ function decodeCursor(value: unknown): ActivityCursor | undefined {
   }
 }
 
-function encodeCursor(
-  item: GlobalActivityItem | undefined,
-): string | null {
+function encodeCursor(item: GlobalActivityItem | undefined): string | null {
   if (!item) {
     return null;
   }
@@ -101,56 +99,105 @@ function encodeCursor(
   ).toString("base64url");
 }
 
+function isRekberKind(kind: ActivityKind): kind is `rekber_${RekberEventKind}` {
+  return kind.startsWith("rekber_");
+}
+
+function rekberEventFromKind(
+  kind: `rekber_${RekberEventKind}`,
+): RekberEventKind {
+  return kind.slice("rekber_".length) as RekberEventKind;
+}
+
+function compareActivity(a: GlobalActivityItem, b: GlobalActivityItem): number {
+  if (a.blockNumber !== b.blockNumber) {
+    return b.blockNumber - a.blockNumber;
+  }
+
+  if (a.transactionHash !== b.transactionHash) {
+    return a.transactionHash > b.transactionHash ? -1 : 1;
+  }
+
+  if (a.actionLocator !== b.actionLocator) {
+    return a.actionLocator > b.actionLocator ? -1 : 1;
+  }
+
+  return 0;
+}
+
 export function createActivityRouter(
   store: DiscoveryStore,
+  rekberStore: RekberStore,
   network: StarknetNetwork,
+  rekberContractAddress: string,
 ): Router {
   const router = Router();
 
-  router.get(
-    "/activity",
-    async (req: Request, res: Response) => {
-      let limit: number;
-      let kind: DiscoverKind | undefined;
-      let cursor: ActivityCursor | undefined;
+  router.get("/activity", async (req: Request, res: Response) => {
+    let limit: number;
+    let kind: ActivityKind | undefined;
+    let cursor: ActivityCursor | undefined;
 
-      try {
-        limit = parseLimit(req.query.limit);
-        kind = parseKind(req.query.kind);
-        cursor = decodeCursor(req.query.cursor);
-      } catch (error) {
-        return res.status(400).json({
-          error:
-            error instanceof Error
-              ? error.message
-              : "Invalid activity request.",
-        });
-      }
+    try {
+      limit = parseLimit(req.query.limit);
+      kind = parseKind(req.query.kind);
+      cursor = decodeCursor(req.query.cursor);
+    } catch (error) {
+      return res.status(400).json({
+        error:
+          error instanceof Error ? error.message : "Invalid activity request.",
+      });
+    }
 
-      try {
-        const items = await store.recentActivity(network, {
+    try {
+      let items: GlobalActivityItem[];
+
+      if (kind && isRekberKind(kind)) {
+        items = await rekberStore.recentActivity(
+          network,
+          rekberContractAddress,
+          {
+            limit,
+            cursor,
+            eventKind: rekberEventFromKind(kind),
+          },
+        );
+      } else if (kind) {
+        items = await store.recentActivity(network, {
           limit,
-          kind,
+          kind: kind as DiscoverKind,
           cursor,
         });
+      } else {
+        const [privateItems, rekberItems] = await Promise.all([
+          store.recentActivity(network, {
+            limit,
+            cursor,
+          }),
+          rekberStore.recentActivity(network, rekberContractAddress, {
+            limit,
+            cursor,
+          }),
+        ]);
 
-        return res.json({
-          network,
-          items,
-          nextCursor:
-            items.length === limit
-              ? encodeCursor(items.at(-1))
-              : null,
-        });
-      } catch {
-        console.error("[activity] indexed lookup failed");
-
-        return res.status(500).json({
-          error: "Activity lookup failed.",
-        });
+        items = [...privateItems, ...rekberItems]
+          .sort(compareActivity)
+          .slice(0, limit);
       }
-    },
-  );
+
+      return res.json({
+        network,
+        items,
+        nextCursor: items.length === limit ? encodeCursor(items.at(-1)) : null,
+      });
+    } catch {
+      console.error("[activity] indexed lookup failed");
+
+      return res.status(500).json({
+        error: "Activity lookup failed.",
+      });
+    }
+  });
 
   return router;
 }

@@ -31,25 +31,61 @@ export interface IndexedAction extends DiscoveredAction {
   indexedAt: string;
 }
 
-export interface GlobalActivityItem {
+export type RekberEventKind = "funded" | "released" | "refunded";
+
+export type ActivityKind = DiscoverKind | `rekber_${RekberEventKind}`;
+
+export interface IndexedRekberEvent {
   network: StarknetNetwork;
-  kind: DiscoverKind;
+  eventKind: RekberEventKind;
   contractAddress: string;
-  actionLocator: string;
+  custodyCommitment: string;
+  token?: string;
+  amount?: string;
+  refundAfter?: number;
+  outputNoteId?: string;
+  timestamp: number;
   blockNumber: number;
   transactionHash: string;
   indexedAt: string;
 }
 
+export interface GlobalActivityItem {
+  network: StarknetNetwork;
+  kind: ActivityKind;
+  contractAddress: string;
+  actionLocator: string;
+  blockNumber: number;
+  transactionHash: string;
+  indexedAt: string;
+  rekber?: {
+    eventKind: RekberEventKind;
+    custodyCommitment: string;
+    token?: string;
+    amount?: string;
+    refundAfter?: number;
+    outputNoteId?: string;
+    timestamp: number;
+  };
+}
+
 export type IndexerCheckpointStatus =
-  | "idle"
-  | "syncing"
-  | "caught_up"
-  | "error";
+  "idle" | "syncing" | "caught_up" | "error";
 
 export interface IndexerCheckpointView {
   identity: string;
   kind: DiscoverKind;
+  contractAddress: string;
+  startBlock: number;
+  nextBlock: number;
+  lastIndexedBlock: number | null;
+  latestObservedBlock: number | null;
+  status: IndexerCheckpointStatus;
+  updatedAt: string;
+}
+
+export interface RekberIndexerCheckpointView {
+  identity: string;
   contractAddress: string;
   startBlock: number;
   nextBlock: number;

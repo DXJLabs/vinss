@@ -2,11 +2,7 @@ import "dotenv/config";
 
 export type StarknetNetwork = "sepolia" | "mainnet";
 export type VinssLlmSelection =
-  | "auto"
-  | "groq"
-  | "openai"
-  | "anthropic"
-  | "qwen";
+  "auto" | "groq" | "openai" | "anthropic" | "qwen";
 
 export interface AppConfig {
   port: number;
@@ -29,6 +25,7 @@ export interface AppConfig {
       message: number;
       offer: number;
       escrow: number;
+      rekber: number;
     };
     pollIntervalMs: number;
     blockRange: number;
@@ -41,10 +38,7 @@ export interface AppConfig {
   };
 }
 
-function requireEnv(
-  env: NodeJS.ProcessEnv,
-  name: string,
-): string {
+function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim();
 
   if (!value) {
@@ -89,13 +83,8 @@ function parseDatabaseUrl(value: string): string {
     throw new Error("DATABASE_URL must be a valid PostgreSQL URL.");
   }
 
-  if (
-    parsed.protocol !== "postgres:" &&
-    parsed.protocol !== "postgresql:"
-  ) {
-    throw new Error(
-      "DATABASE_URL must use postgres or postgresql.",
-    );
+  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+    throw new Error("DATABASE_URL must use postgres or postgresql.");
   }
 
   return value;
@@ -137,10 +126,7 @@ function parseInteger(
   return parsed;
 }
 
-function parseBoolean(
-  value: string | undefined,
-  fallback: boolean,
-): boolean {
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined || value.trim() === "") {
     return fallback;
   }
@@ -194,9 +180,7 @@ function parseLlmSelection(value: string | undefined): VinssLlmSelection {
   );
 }
 
-export function loadConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): AppConfig {
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const network = parseNetwork(requireEnv(env, "STARKNET_NETWORK"));
 
   return {
@@ -209,9 +193,7 @@ export function loadConfig(
     rpcUrl: parseUrl(requireEnv(env, "RPC_URL"), "RPC_URL"),
     network,
     database: {
-      url: parseDatabaseUrl(
-        requireEnv(env, "DATABASE_URL"),
-      ),
+      url: parseDatabaseUrl(requireEnv(env, "DATABASE_URL")),
       ssl: parseBoolean(env.DATABASE_SSL, false),
     },
     contracts: {
@@ -253,17 +235,22 @@ export function loadConfig(
           "PRIVATE_ESCROW_HELPER_START_BLOCK",
           { min: 0 },
         ),
+        rekber: parseInteger(
+          env.ESCROW_REKBER_START_BLOCK,
+          "ESCROW_REKBER_START_BLOCK",
+          { min: 0 },
+        ),
       },
       pollIntervalMs: parseInteger(
         env.INDEXER_POLL_INTERVAL_MS,
         "INDEXER_POLL_INTERVAL_MS",
         { fallback: 5_000, min: 1_000, max: 300_000 },
       ),
-      blockRange: parseInteger(
-        env.INDEXER_BLOCK_RANGE,
-        "INDEXER_BLOCK_RANGE",
-        { fallback: 2_000, min: 1, max: 50_000 },
-      ),
+      blockRange: parseInteger(env.INDEXER_BLOCK_RANGE, "INDEXER_BLOCK_RANGE", {
+        fallback: 2_000,
+        min: 1,
+        max: 50_000,
+      }),
       eventPageSize: parseInteger(
         env.INDEXER_EVENT_PAGE_SIZE,
         "INDEXER_EVENT_PAGE_SIZE",
