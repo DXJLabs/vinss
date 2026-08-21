@@ -1,19 +1,20 @@
+import type { StarknetNetwork } from "./config.js";
+
 export type DiscoverKind = "message" | "offer" | "escrow";
 
 export interface DiscoverRequest {
   /**
    * Public discovery parameters only.
    *
-   * IMPORTANT: channel keys, room secrets, viewing keys, plaintext and any
-   * other decryption material must never be sent to the backend.
+   * Decryption material, room identifiers, room secrets and plaintext are
+   * deliberately not part of this API.
    */
   kind: DiscoverKind;
-  /** Optional: narrow the scan window to speed up discovery. */
   fromBlock?: number;
   toBlock?: number | "latest";
 }
 
-export interface DiscoveredAction<TPayload = unknown> {
+export interface DiscoveredAction {
   actionLocator: string;
   payloadCommitment: string;
   senderTag?: string;
@@ -21,4 +22,39 @@ export interface DiscoveredAction<TPayload = unknown> {
   ciphertextChunks: string[];
   blockNumber: number;
   transactionHash: string;
+}
+
+export interface IndexedAction extends DiscoveredAction {
+  network: StarknetNetwork;
+  kind: DiscoverKind;
+  contractAddress: string;
+  indexedAt: string;
+}
+
+export interface GlobalActivityItem {
+  network: StarknetNetwork;
+  kind: DiscoverKind;
+  contractAddress: string;
+  actionLocator: string;
+  blockNumber: number;
+  transactionHash: string;
+  indexedAt: string;
+}
+
+export type IndexerCheckpointStatus =
+  | "idle"
+  | "syncing"
+  | "caught_up"
+  | "error";
+
+export interface IndexerCheckpointView {
+  identity: string;
+  kind: DiscoverKind;
+  contractAddress: string;
+  startBlock: number;
+  nextBlock: number;
+  lastIndexedBlock: number | null;
+  latestObservedBlock: number | null;
+  status: IndexerCheckpointStatus;
+  updatedAt: string;
 }

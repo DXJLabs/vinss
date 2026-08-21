@@ -2,13 +2,14 @@ export const openApiDocument = {
   openapi: "3.0.3",
   info: {
     title: "VINSS Backend API",
-    version: "0.1.0",
+    version: "0.2.0",
     description:
-      "Privacy-safe VINSS backend: ciphertext discovery, encrypted presence, scoped Agent orchestration, and application services.",
+      "Privacy-safe VINSS backend with persistent ciphertext indexing, global public activity metadata, encrypted presence, scoped Agent orchestration, and network-aware application services.",
   },
   tags: [
     { name: "System" },
     { name: "Discovery" },
+    { name: "Activity" },
     { name: "Presence" },
     { name: "Agent" },
     { name: "Loyalty" },
@@ -17,18 +18,24 @@ export const openApiDocument = {
     "/health": {
       get: {
         tags: ["System"],
-        summary: "Backend liveness",
+        summary: "Backend and indexer health",
         responses: {
           "200": {
-            description: "Process is running",
+            description: "Backend is healthy",
             content: {
               "application/json": {
                 schema: {
-                  type: "object",
-                  properties: {
-                    status: { type: "string", example: "ok" },
-                    network: { type: "string", example: "sepolia" },
-                  },
+                  $ref: "#/components/schemas/HealthResponse",
+                },
+              },
+            },
+          },
+          "503": {
+            description: "Backend or indexer is degraded",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/HealthResponse",
                 },
               },
             },
@@ -39,9 +46,9 @@ export const openApiDocument = {
     "/discover": {
       post: {
         tags: ["Discovery"],
-        summary: "Discover committed encrypted actions",
+        summary: "Read indexed encrypted actions",
         description:
-          "Returns ciphertext and public Starknet metadata. Channel keys are rejected and decryption is not performed by the backend.",
+          "Reads the persistent ciphertext index. It does not scan Starknet on request and never accepts room identifiers, room secrets, decryption keys, viewing keys, or plaintext.",
         requestBody: {
           required: true,
           content: {
@@ -49,6 +56,7 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: ["kind"],
+                additionalProperties: false,
                 properties: {
                   kind: {
                     type: "string",
@@ -61,8 +69,14 @@ export const openApiDocument = {
                   },
                   toBlock: {
                     oneOf: [
-                      { type: "integer", minimum: 0 },
-                      { type: "string", enum: ["latest"] },
+                      {
+                        type: "integer",
+                        minimum: 0,
+                      },
+                      {
+                        type: "string",
+                        enum: ["latest"],
+                      },
                     ],
                     default: "latest",
                   },
@@ -78,13 +92,89 @@ export const openApiDocument = {
               "application/json": {
                 schema: {
                   type: "array",
-                  items: { $ref: "#/components/schemas/EncryptedAction" },
+                  items: {
+                    $ref: "#/components/schemas/EncryptedAction",
+                  },
                 },
               },
             },
           },
-          "400": { description: "Invalid discovery request" },
-          "500": { description: "Discovery failed" },
+          "400": {
+            description: "Invalid or privacy-unsafe discovery request",
+          },
+          "500": {
+            description: "Indexed discovery failed",
+          },
+        },
+      },
+    },
+    "/activity": {
+      get: {
+        tags: ["Activity"],
+        summary: "Read global public VINSS activity metadata",
+        description:
+          "Returns only public transaction/index metadata for the Home Global Activity feed. Ciphertext, routing tags, room identifiers and plaintext are not returned here.",
+        parameters: [
+          {
+            in: "query",
+            name: "limit",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 30,
+            },
+          },
+          {
+            in: "query",
+            name: "kind",
+            schema: {
+              type: "string",
+              enum: ["message", "offer", "escrow"],
+            },
+          },
+          {
+            in: "query",
+            name: "cursor",
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Global activity page",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["network", "items", "nextCursor"],
+                  properties: {
+                    network: {
+                      type: "string",
+                      enum: ["sepolia", "mainnet"],
+                    },
+                    items: {
+                      type: "array",
+                      items: {
+                        $ref: "#/components/schemas/GlobalActivityItem",
+                      },
+                    },
+                    nextCursor: {
+                      nullable: true,
+                      type: "string",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid activity query",
+          },
+          "500": {
+            description: "Activity lookup failed",
+          },
         },
       },
     },
@@ -96,13 +186,19 @@ export const openApiDocument = {
           required: true,
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/PresencePublish" },
+              schema: {
+                $ref: "#/components/schemas/PresencePublish",
+              },
             },
           },
         },
         responses: {
-          "204": { description: "Accepted" },
-          "400": { description: "Invalid encrypted presence envelope" },
+          "204": {
+            description: "Accepted",
+          },
+          "400": {
+            description: "Invalid encrypted presence envelope",
+          },
         },
       },
     },
@@ -128,8 +224,12 @@ export const openApiDocument = {
           },
         },
         responses: {
-          "200": { description: "Encrypted presence events" },
-          "400": { description: "Invalid presence channel" },
+          "200": {
+            description: "Encrypted presence events",
+          },
+          "400": {
+            description: "Invalid presence channel",
+          },
         },
       },
     },
@@ -139,16 +239,24 @@ export const openApiDocument = {
         summary: "List Agent providers and skills",
         responses: {
           "200": {
-            description: "Configured Agent capabilities",
+            description: "Configured Agent capabilities and service network",
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
-                    defaultProvider: { type: "string" },
+                    network: {
+                      type: "string",
+                      enum: ["sepolia", "mainnet"],
+                    },
+                    defaultProvider: {
+                      type: "string",
+                    },
                     configuredProviders: {
                       type: "array",
-                      items: { type: "string" },
+                      items: {
+                        type: "string",
+                      },
                     },
                     skills: {
                       type: "array",
@@ -170,7 +278,7 @@ export const openApiDocument = {
         tags: ["Agent"],
         summary: "Run a scoped VINSS Agent request",
         description:
-          "Context is sanitized server-side before a configured LLM provider receives it. Agent tools cannot execute blockchain transactions.",
+          "Context is sanitized server-side before a configured LLM provider receives it. Agent tools remain proposal-only and cannot execute blockchain transactions.",
         requestBody: {
           required: true,
           content: {
@@ -179,15 +287,26 @@ export const openApiDocument = {
                 type: "object",
                 required: ["message", "context", "skill"],
                 properties: {
-                  message: { type: "string", minLength: 1 },
-                  context: { type: "object" },
+                  message: {
+                    type: "string",
+                    minLength: 1,
+                  },
+                  context: {
+                    type: "object",
+                  },
                   skill: {
                     type: "string",
                     enum: ["chat", "offer", "escrow"],
                   },
                   provider: {
                     type: "string",
-                    enum: ["auto", "groq", "openai", "anthropic", "qwen"],
+                    enum: [
+                      "auto",
+                      "groq",
+                      "openai",
+                      "anthropic",
+                      "qwen",
+                    ],
                   },
                 },
               },
@@ -195,44 +314,56 @@ export const openApiDocument = {
           },
         },
         responses: {
-          "200": { description: "Agent result/proposal" },
-          "400": { description: "Invalid Agent request" },
-          "500": { description: "Agent failed" },
+          "200": {
+            description: "Agent result or proposal",
+          },
+          "400": {
+            description: "Invalid Agent request",
+          },
+          "500": {
+            description: "Agent failed",
+          },
         },
       },
     },
     "/loyalty/config": {
       get: {
         tags: ["Loyalty"],
-        summary: "Get loyalty rules",
+        summary: "Get network-scoped loyalty rules",
         responses: {
-          "200": { description: "Points and levels" },
+          "200": {
+            description: "Points and levels",
+          },
         },
       },
     },
     "/loyalty/{subject}": {
       get: {
         tags: ["Loyalty"],
-        summary: "Get a loyalty account",
+        summary: "Get a network-scoped loyalty account",
         parameters: [
           {
             in: "path",
             name: "subject",
             required: true,
-            schema: { type: "string" },
+            schema: {
+              type: "string",
+            },
           },
         ],
         responses: {
-          "200": { description: "Loyalty account" },
+          "200": {
+            description: "Loyalty account",
+          },
         },
       },
     },
     "/loyalty/events": {
       post: {
         tags: ["Loyalty"],
-        summary: "Award a loyalty event",
+        summary: "Award a network-scoped loyalty event",
         description:
-          "Current implementation is in-memory and must not be treated as a durable production reward ledger.",
+          "Loyalty remains a separate application service and is not part of the discovery indexer.",
         requestBody: {
           required: true,
           content: {
@@ -241,7 +372,10 @@ export const openApiDocument = {
                 type: "object",
                 required: ["subject", "action", "eventId"],
                 properties: {
-                  subject: { type: "string", minLength: 1 },
+                  subject: {
+                    type: "string",
+                    minLength: 1,
+                  },
                   action: {
                     type: "string",
                     enum: [
@@ -255,15 +389,22 @@ export const openApiDocument = {
                       "successful_referral",
                     ],
                   },
-                  eventId: { type: "string", minLength: 1 },
+                  eventId: {
+                    type: "string",
+                    minLength: 1,
+                  },
                 },
               },
             },
           },
         },
         responses: {
-          "200": { description: "Updated loyalty account" },
-          "400": { description: "Invalid loyalty event" },
+          "200": {
+            description: "Updated loyalty account",
+          },
+          "400": {
+            description: "Invalid loyalty event",
+          },
         },
       },
     },
@@ -272,22 +413,168 @@ export const openApiDocument = {
     schemas: {
       EncryptedAction: {
         type: "object",
+        required: [
+          "actionLocator",
+          "payloadCommitment",
+          "ciphertextChunks",
+          "blockNumber",
+          "transactionHash",
+        ],
         properties: {
-          actionLocator: { type: "string", example: "0x..." },
-          payloadCommitment: { type: "string", example: "0x..." },
-          senderTag: { type: "string", example: "0x..." },
-          recipientTag: { type: "string", example: "0x..." },
+          actionLocator: {
+            type: "string",
+            example: "0x...",
+          },
+          payloadCommitment: {
+            type: "string",
+            example: "0x...",
+          },
+          senderTag: {
+            type: "string",
+            example: "0x...",
+          },
+          recipientTag: {
+            type: "string",
+            example: "0x...",
+          },
           ciphertextChunks: {
             type: "array",
-            items: { type: "string" },
+            items: {
+              type: "string",
+            },
           },
-          blockNumber: { type: "integer" },
-          transactionHash: { type: "string", example: "0x..." },
+          blockNumber: {
+            type: "integer",
+          },
+          transactionHash: {
+            type: "string",
+            example: "0x...",
+          },
+        },
+      },
+      GlobalActivityItem: {
+        type: "object",
+        required: [
+          "network",
+          "kind",
+          "contractAddress",
+          "actionLocator",
+          "blockNumber",
+          "transactionHash",
+          "indexedAt",
+        ],
+        properties: {
+          network: {
+            type: "string",
+            enum: ["sepolia", "mainnet"],
+          },
+          kind: {
+            type: "string",
+            enum: ["message", "offer", "escrow"],
+          },
+          contractAddress: {
+            type: "string",
+          },
+          actionLocator: {
+            type: "string",
+          },
+          blockNumber: {
+            type: "integer",
+          },
+          transactionHash: {
+            type: "string",
+          },
+          indexedAt: {
+            type: "string",
+            format: "date-time",
+          },
+        },
+      },
+      IndexerCheckpoint: {
+        type: "object",
+        required: [
+          "identity",
+          "kind",
+          "contractAddress",
+          "startBlock",
+          "nextBlock",
+          "status",
+          "updatedAt",
+        ],
+        properties: {
+          identity: {
+            type: "string",
+            example: "sepolia:offer:0x...",
+          },
+          kind: {
+            type: "string",
+            enum: ["message", "offer", "escrow"],
+          },
+          contractAddress: {
+            type: "string",
+          },
+          startBlock: {
+            type: "integer",
+          },
+          nextBlock: {
+            type: "integer",
+          },
+          lastIndexedBlock: {
+            nullable: true,
+            type: "integer",
+          },
+          latestObservedBlock: {
+            nullable: true,
+            type: "integer",
+          },
+          status: {
+            type: "string",
+            enum: ["idle", "syncing", "caught_up", "error"],
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time",
+          },
+        },
+      },
+      HealthResponse: {
+        type: "object",
+        required: ["status", "network", "indexer"],
+        properties: {
+          status: {
+            type: "string",
+            enum: ["ok", "degraded"],
+          },
+          network: {
+            type: "string",
+            enum: ["sepolia", "mainnet"],
+          },
+          indexer: {
+            nullable: true,
+            type: "object",
+            properties: {
+              message: {
+                $ref: "#/components/schemas/IndexerCheckpoint",
+              },
+              offer: {
+                $ref: "#/components/schemas/IndexerCheckpoint",
+              },
+              escrow: {
+                $ref: "#/components/schemas/IndexerCheckpoint",
+              },
+            },
+          },
         },
       },
       PresencePublish: {
         type: "object",
-        required: ["channelId", "eventId", "iv", "ciphertext", "ttlMs"],
+        required: [
+          "channelId",
+          "eventId",
+          "iv",
+          "ciphertext",
+          "ttlMs",
+        ],
         properties: {
           channelId: {
             type: "string",

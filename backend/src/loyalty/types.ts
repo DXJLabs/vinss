@@ -1,5 +1,12 @@
+import type { StarknetNetwork } from "../config.js";
+
 export type LoyaltyLevel =
-  "STARTER" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
+  | "STARTER"
+  | "BRONZE"
+  | "SILVER"
+  | "GOLD"
+  | "PLATINUM"
+  | "DIAMOND";
 
 export type LoyaltyAction =
   | "message_sent"
@@ -12,6 +19,7 @@ export type LoyaltyAction =
   | "successful_referral";
 
 export interface LoyaltyAccount {
+  network: StarknetNetwork;
   subject: string;
   points: number;
   level: LoyaltyLevel;
@@ -19,6 +27,7 @@ export interface LoyaltyAccount {
 }
 
 export interface LoyaltyEvent {
+  network: StarknetNetwork;
   eventId: string;
   subject: string;
   action: LoyaltyAction;

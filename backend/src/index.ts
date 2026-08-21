@@ -1,47 +1,81 @@
-import cors from "cors";
-import express from "express";
-import swaggerUi from "swagger-ui-express";
-
+import { createApp } from "./app.js";
 import { config } from "./config.js";
-import { loyaltyRouter } from "./loyalty/routes.js";
-import { openApiDocument } from "./openapi.js";
-import { agentRouter } from "./routes/agent.js";
-import { discoverRouter } from "./routes/discover.js";
-import { presenceRouter } from "./routes/presence.js";
+import { createDatabase } from "./database.js";
+import { createIndexerDefinitions } from "./indexer/definitions.js";
+import { StarknetEventSource } from "./indexer/poolEvents.js";
+import { DiscoveryIndexer } from "./indexer/service.js";
+import { DiscoveryStore } from "./indexer/store.js";
 
-const app = express();
+async function main(): Promise<void> {
+  const database = createDatabase(config);
+  const definitions = createIndexerDefinitions(config);
+  const store = new DiscoveryStore(database);
 
-app.use(cors({ origin: config.corsOrigin }));
-app.use(express.json({ limit: "1mb" }));
+  try {
+    await store.initialize(definitions);
+  } catch {
+    console.error("[startup] database initialization failed");
+    await database.end();
+    process.exitCode = 1;
+    return;
+  }
 
-// Deliberately minimal logging — request bodies are never logged. Discovery
-// is ciphertext-only, so channel keys must never reach this process.
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
-});
+  const source = new StarknetEventSource(
+    config.rpcUrl,
+    config.indexer.eventPageSize,
+  );
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", network: config.network });
-});
+  const indexer = new DiscoveryIndexer(
+    config,
+    definitions,
+    source,
+    store,
+  );
 
-app.get("/openapi.json", (_req, res) => {
-  res.json(openApiDocument);
-});
+  const app = createApp({
+    config,
+    definitions,
+    store,
+    indexer,
+  });
 
-app.use(
-  "/docs",
-  swaggerUi.serve,
-  swaggerUi.setup(openApiDocument, {
-    customSiteTitle: "VINSS Backend API",
-  }),
-);
+  const server = app.listen(config.port, () => {
+    console.log(
+      `VINSS backend listening on :${config.port} (${config.network})`,
+    );
+  });
 
-app.use(discoverRouter);
-app.use(agentRouter);
-app.use(loyaltyRouter);
-app.use(presenceRouter);
+  indexer.start();
 
-app.listen(config.port, () => {
-  console.log(`VINSS backend listening on :${config.port} (${config.network})`);
+  let shuttingDown = false;
+
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal}`);
+
+    await indexer.stop();
+
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+
+    await database.end();
+  };
+
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+}
+
+main().catch(() => {
+  console.error("[startup] fatal initialization error");
+  process.exitCode = 1;
 });
