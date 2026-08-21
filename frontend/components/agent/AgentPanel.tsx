@@ -333,6 +333,23 @@ export function AgentPanel({
     };
   }, [open]);
 
+  useEffect(() => {
+    const handleOpenAgent =
+      () => setOpen(true);
+
+    window.addEventListener(
+      "vinss:open-agent",
+      handleOpenAgent,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "vinss:open-agent",
+        handleOpenAgent,
+      );
+    };
+  }, []);
+
   async function submit(
     override?: string,
   ) {
@@ -433,13 +450,13 @@ export function AgentPanel({
           setOpen(true)
         }
         data-testid="agent-trigger"
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 border border-signal/35 bg-ink/95 px-3.5 py-2.5 shadow-2xl backdrop-blur transition hover:border-signal hover:bg-vault"
+        className="hidden"
       >
         <span className="text-sm text-signal">
           ✦
         </span>
 
-        <span className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/70">
+        <span className="hidden font-display text-[9px] uppercase tracking-[0.16em] text-paper/70 sm:inline">
           Agent
         </span>
       </button>

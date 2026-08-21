@@ -20,13 +20,13 @@
 
 body {
   background-image:
-    linear-gradient(180deg, rgba(94, 234, 212, 0.04), transparent 320px),
+    linear-gradient(180deg, rgba(94, 234, 212, 0.025), transparent 300px),
     repeating-linear-gradient(
       0deg,
-      rgba(246, 245, 241, 0.025) 0px,
-      rgba(246, 245, 241, 0.025) 1px,
+      rgba(246, 245, 241, 0.012) 0px,
+      rgba(246, 245, 241, 0.012) 1px,
       transparent 1px,
-      transparent 28px
+      transparent 40px
     );
 }
 
@@ -349,7 +349,8 @@ div[role="dialog"] > div:first-child {
 
   /* No fake mobile handle on desktop */
 
-  .get-starknet-ui::before {
+  .get-starknet-ui[data-vaul-drawer]::before,
+  [data-vaul-drawer].get-starknet-ui::before {
     display: none !important;
   }
 }
@@ -394,7 +395,8 @@ div[role="dialog"] > div:first-child {
 
   /* Handle */
 
-  .get-starknet-ui::before {
+  .get-starknet-ui[data-vaul-drawer]::before,
+  [data-vaul-drawer].get-starknet-ui::before {
     content: "" !important;
 
     position: absolute !important;

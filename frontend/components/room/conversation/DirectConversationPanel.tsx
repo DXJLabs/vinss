@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { MessageBubble } from "@/components/room/conversation/MessageBubble";
+import { ConversationActions } from "@/components/room/conversation/ConversationActions";
 import { OfferCard } from "@/components/room/conversation/OfferCard";
 import { ProofModal } from "@/components/room/conversation/ProofModal";
 import {
@@ -40,6 +41,7 @@ interface DirectConversationPanelProps {
     file?: File | null;
   }) => Promise<boolean>;
   onCreateOffer: () => void;
+  onAddEscrow: () => void;
   onAcceptOffer: (
     entry: ConversationEntry,
   ) => Promise<boolean>;
@@ -96,6 +98,7 @@ export function DirectConversationPanel({
   onSendMessage,
   onSubmitWork,
   onCreateOffer,
+  onAddEscrow,
   onAcceptOffer,
   onRejectOffer,
   onCounterOffer,
@@ -182,8 +185,15 @@ export function DirectConversationPanel({
     );
 
   const canonicalCustodyKey = (
-    value: string,
+    value: string | null | undefined,
   ) => {
+    if (
+      typeof value !== "string" ||
+      !value.trim()
+    ) {
+      return "";
+    }
+
     try {
       return BigInt(value)
         .toString(16)
@@ -194,6 +204,16 @@ export function DirectConversationPanel({
         .toLowerCase();
     }
   };
+
+  function normalizeLocator(
+    value: string | null | undefined,
+  ): string {
+    return typeof value === "string"
+      ? value
+          .replace(/^0x/, "")
+          .toLowerCase()
+      : "";
+  }
 
   const preparedCustodies =
     pairEntries
@@ -412,10 +432,10 @@ export function DirectConversationPanel({
             ),
         )
         .map((entry) =>
-          entry.offerAction!
-            .parentOfferLocator!
-            .replace(/^0x/, "")
-            .toLowerCase(),
+          normalizeLocator(
+            entry.offerAction
+              ?.parentOfferLocator,
+          ),
         ),
     );
 
@@ -431,10 +451,10 @@ export function DirectConversationPanel({
             ),
         )
         .map((entry) =>
-          entry.offerAction!
-            .parentOfferLocator!
-            .replace(/^0x/, "")
-            .toLowerCase(),
+          normalizeLocator(
+            entry.offerAction
+              ?.parentOfferLocator,
+          ),
         ),
     );
 
@@ -478,30 +498,37 @@ export function DirectConversationPanel({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 border-x border-b border-wire bg-vault/20 px-4 py-3">
+      <div className="flex items-center gap-3 border-x border-b border-wire bg-vault/20 px-3 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/35 transition hover:text-signal"
+          aria-label="Back to chats"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base text-paper/45 ring-1 ring-wire/60 transition hover:text-signal hover:ring-signal/25"
         >
-          ← Chats
+          ←
         </button>
 
-        <div className="min-w-0 text-right">
-          <p className="truncate text-xs text-paper/60">
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          title={peerAddress}
+        >
+          <p className="truncate text-[15px] font-medium text-paper/78">
             {peerLabel}
           </p>
-          <p className="truncate font-mono text-[8px] text-paper/20">
-            {peerAddress}
+
+          <p className="mt-0.5 flex items-center gap-1.5 text-[9px] text-paper/30">
+            <span className="text-signal/65">🛡</span>
+            <span>Encrypted</span>
           </p>
-        </div>
+        </button>
       </div>
 
       <div className="relative">
         <div
           ref={scrollBoxRef}
           onScroll={updateScrollIntent}
-          className="min-h-[360px] max-h-[58vh] overflow-y-auto overscroll-contain border-x border-b border-wire bg-black/10"
+          className="min-h-[360px] max-h-[58vh] overflow-y-auto overscroll-contain border-x border-wire/60 bg-black/10"
         >
         {pairEntries.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
@@ -694,19 +721,14 @@ export function DirectConversationPanel({
 
               if (
                 entry.offerAction?.kind ===
-                  "prepare_escrow"
+                  "prepare_escrow" &&
+                entry.offerAction
+                  .custodyCommitment
               ) {
-                const ownAction =
-                  sameStarknetAddress(
-                    entry.offerAction
-                      .senderAddress,
-                    walletAddress,
-                  );
-
                 const custodyKey =
                   canonicalCustodyKey(
                     entry.offerAction
-                      .custodyCommitment!,
+                      .custodyCommitment,
                   );
 
                 const funded =
@@ -716,115 +738,111 @@ export function DirectConversationPanel({
                     ],
                   );
 
+                const statusLabel =
+                  funded
+                    ? "Payment secured"
+                    : "Rekber ready";
+
+                const statusDetail =
+                  funded
+                    ? "Funds locked in VINSS Rekber"
+                    : "Ready to secure payment";
+
                 return (
                   <li
                     key={`rekber:${entry.actionLocator}`}
                     className="flex justify-center py-1"
                   >
-                    <div className="w-[92%] max-w-sm border border-signal/20 bg-signal/[0.04] px-3.5 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/30 text-[8px] text-signal">
-                          ✓
-                        </span>
-
-                        <span className="font-display text-[8px] uppercase tracking-[0.14em] text-signal/75">
-                          Rekber ready
-                        </span>
-                      </div>
-
-                      <p className="mt-2 text-[11px] text-paper/55">
-                        {entry.offerAction.dealType
-                          ?.replace(/_/g, " ") ??
-                          "Deal"}
-                        {" · "}
-                        {entry.offerAction.amount}
-                        {" "}
-                        {entry.offerAction.asset}
-                      </p>
-
-                      <p className="mt-1 text-[9px] text-paper/30">
-                        Started from the agreement above
-                        {" · "}
-                        Payment ready
-                      </p>
-
-                      {entry.transactionHash && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setProofEntry(entry)
-                          }
-                          className="mt-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/55 transition hover:text-signal"
-                        >
-                          Proof ↗
-                        </button>
-                      )}
-                    </div>
-
-                    {funded && (
-                      <div className="mt-2 w-full border border-signal/35 bg-signal/[0.055] px-3.5 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/30 text-[8px] text-signal">
+                    <div className="w-full max-w-md rounded-2xl bg-signal/[0.035] px-3.5 py-3 ring-1 ring-signal/20">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-signal/[0.08] text-[10px] text-signal ring-1 ring-signal/20">
                             ✓
                           </span>
 
-                          <span className="font-display text-[8px] uppercase tracking-[0.14em] text-signal">
-                            Payment secured
-                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium text-signal/78">
+                              {statusLabel}
+                            </p>
+
+                            <p className="mt-0.5 truncate text-[9px] text-paper/28">
+                              {entry.offerAction.dealType
+                                ?.replace(/_/g, " ") ??
+                                "Deal"}
+                              {" · "}
+                              {statusDetail}
+                            </p>
+                          </div>
                         </div>
 
-                        <p className="mt-2 text-[11px] text-paper/60">
+                        <p className="shrink-0 text-right text-[12px] font-medium text-paper/68">
                           {entry.offerAction.amount}{" "}
-                          {entry.offerAction.asset} locked in VINSS Rekber
+                          {entry.offerAction.asset}
                         </p>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const proof =
-                              await getEscrowFundedProof(
-                                BigInt(
-                                  entry.offerAction!
-                                    .custodyCommitment!,
-                                ),
-                              );
-
-                            if (!proof) {
-                              return;
-                            }
-
-                            setProofEntry({
-                              id:
-                                `rekber-funded:${custodyKey}`,
-                              kind:
-                                "offer",
-                              summary:
-                                `Payment secured — ${entry.offerAction!.amount} ${entry.offerAction!.asset}`,
-                              transactionHash:
-                                proof.transactionHash,
-                              actionLocator:
-                                `0x${custodyKey}`,
-                              sentAt:
-                                proof.timestamp
-                                  ? new Date(
-                                      proof.timestamp *
-                                        1000,
-                                    ).toISOString()
-                                  : entry.sentAt,
-                              scope:
-                                "direct",
-                              senderAddress:
-                                entry.senderAddress,
-                              recipientAddress:
-                                entry.recipientAddress,
-                            });
-                          }}
-                          className="mt-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/70 transition hover:text-signal"
-                        >
-                          TX Proof ↗
-                        </button>
                       </div>
-                    )}
+
+                      <div className="mt-3 flex items-center gap-4 border-t border-wire/45 pt-2.5">
+                        {entry.transactionHash && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProofEntry(entry)
+                            }
+                            className="text-[9px] text-signal/55 transition hover:text-signal"
+                          >
+                            Agreement proof ↗
+                          </button>
+                        )}
+
+                        {funded && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const proof =
+                                await getEscrowFundedProof(
+                                  BigInt(
+                                    entry.offerAction!
+                                      .custodyCommitment!,
+                                  ),
+                                );
+
+                              if (!proof) {
+                                return;
+                              }
+
+                              setProofEntry({
+                                id:
+                                  `rekber-funded:${custodyKey}`,
+                                kind:
+                                  "offer",
+                                summary:
+                                  `Payment secured — ${entry.offerAction!.amount} ${entry.offerAction!.asset}`,
+                                transactionHash:
+                                  proof.transactionHash,
+                                actionLocator:
+                                  `0x${custodyKey}`,
+                                sentAt:
+                                  proof.timestamp
+                                    ? new Date(
+                                        proof.timestamp *
+                                          1000,
+                                      ).toISOString()
+                                    : entry.sentAt,
+                                scope:
+                                  "direct",
+                                senderAddress:
+                                  entry.senderAddress,
+                                recipientAddress:
+                                  entry.recipientAddress,
+                              });
+                            }}
+                            className="text-[9px] text-signal/65 transition hover:text-signal"
+                          >
+                            Funding proof ↗
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </li>
                 );
               }
@@ -843,9 +861,9 @@ export function DirectConversationPanel({
                       walletAddress,
                     ) &&
                     !supersededOfferLocators.has(
-                      entry.actionLocator
-                        .replace(/^0x/, "")
-                        .toLowerCase(),
+                      normalizeLocator(
+                        entry.actionLocator,
+                      ),
                     ),
                 );
 
@@ -866,9 +884,9 @@ export function DirectConversationPanel({
                       entry.offerAction
                         ?.kind === "accept" &&
                       preparedAgreementLocators.has(
-                        entry.actionLocator
-                          .replace(/^0x/, "")
-                          .toLowerCase(),
+                        normalizeLocator(
+                          entry.actionLocator,
+                        ),
                       )
                     }
                     onAccept={
@@ -918,60 +936,30 @@ export function DirectConversationPanel({
         )}
       </div>
 
-      <div className="border border-wire bg-vault/20 p-2">
-        <div className="mb-2 flex items-center justify-between gap-3 border-b border-wire/60 px-2 pb-2">
-          <span className="font-display text-[9px] uppercase tracking-widest text-paper/30">
-            {peerLabel}
-          </span>
+      <ConversationActions
+        connected={
+          connected &&
+          channelReady
+        }
+        busy={busy}
+        onAddOffer={
+          onCreateOffer
+        }
+        onAddEscrow={
+          onAddEscrow
+        }
+        onSubmitWork={
+          canSubmitWork
+            ? () =>
+                setShowWorkComposer(
+                  (value) =>
+                    !value,
+                )
+            : undefined
+        }
+      />
 
-          <div className="flex items-center gap-3">
-            <span
-              className={
-                peerTyping
-                  ? "text-[9px] text-signal/70"
-                  : "text-[9px] text-paper/25"
-              }
-            >
-              {peerTyping
-                ? "Typing…"
-                : "Private"}
-            </span>
-
-            {canSubmitWork && (
-              <button
-                type="button"
-                onClick={() =>
-                  setShowWorkComposer(
-                    (value) =>
-                      !value,
-                  )
-                }
-                disabled={
-                  !connected ||
-                  !channelReady ||
-                  busy
-                }
-                className="border border-signal/30 px-2.5 py-1.5 font-display text-[8px] uppercase tracking-[0.12em] text-signal/75 transition hover:bg-signal/10 disabled:opacity-30"
-              >
-                Submit Work
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onCreateOffer}
-              disabled={
-                !connected ||
-                !channelReady ||
-                busy
-              }
-              className="border border-amber-400/30 px-2.5 py-1.5 font-display text-[8px] uppercase tracking-[0.12em] text-amber-300/75 transition hover:bg-amber-400/10 disabled:opacity-30"
-            >
-              + Create Offer
-            </button>
-          </div>
-        </div>
-
+      <div className="bg-vault/12 p-2">
         {showWorkComposer &&
           canSubmitWork &&
           fundedFreelanceEntry

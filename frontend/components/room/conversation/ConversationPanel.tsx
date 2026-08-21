@@ -15,9 +15,6 @@ import {
 import {
   DirectConversationList,
 } from "@/components/room/conversation/DirectConversationList";
-import {
-  shortAddress,
-} from "@/components/room/conversation/chatFormat";
 import type {
   ConversationEntry,
   ConversationParticipant,
@@ -66,6 +63,7 @@ interface ConversationPanelProps {
     file?: File | null;
   }) => Promise<boolean>;
   onCreateOffer: () => void;
+  onAddEscrow: () => void;
   onRefresh:
     () => void | Promise<void>;
   onAcceptOffer: (
@@ -107,6 +105,7 @@ export function ConversationPanel({
   onSendMessage,
   onSubmitWork,
   onCreateOffer,
+  onAddEscrow,
   onRefresh,
   onAcceptOffer,
   onRejectOffer,
@@ -114,106 +113,54 @@ export function ConversationPanel({
   onOpenEscrow,
   onOfferRead,
 }: ConversationPanelProps) {
-  const groupMode =
-    messageTarget ===
-      "groups" ||
-    messageTarget.startsWith(
-      "group:",
-    );
+  const showDirectoryHeader =
+    messageTarget === "chat" ||
+    messageTarget === "groups";
 
-  const activeLabel =
-    selectedGroup
-      ? selectedGroup.name
-      : messageTarget ===
-          "groups"
-        ? "Groups"
-        : messageTarget ===
-            "chat"
-          ? "Chat"
-          : shortAddress(
-              messageTarget,
-            );
+  const directoryLabel =
+    messageTarget === "groups"
+      ? "Groups"
+      : "Private messages";
 
   return (
     <section className="space-y-0">
-      <div className="border border-wire bg-vault/30">
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <div>
-            <div className="flex items-center gap-3">
-              <p className="font-display text-[10px] uppercase tracking-[0.2em] text-signal">
-                Messages
+      {showDirectoryHeader && (
+        <div className="rounded-t-2xl border border-b-0 border-wire/70 bg-vault/22">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <div>
+              <p className="text-[13px] font-medium text-paper/72">
+                {directoryLabel}
               </p>
 
-              <span className="flex items-center gap-1.5 font-display text-[8px] uppercase tracking-[0.14em] text-signal/65">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" />
-                Live
-              </span>
+              <p className="mt-1 text-[10px] text-paper/30">
+                E2E protected
+              </p>
             </div>
 
-            <p className="mt-1.5 text-[11px] text-paper/35">
-              {activeLabel} · encrypted
-            </p>
+            <button
+              type="button"
+              onClick={() =>
+                void onRefresh()
+              }
+              disabled={
+                !connected ||
+                busy
+              }
+              className="rounded-lg bg-black/15 px-3 py-2 text-[10px] text-paper/38 ring-1 ring-wire/60 transition hover:text-signal hover:ring-signal/25 disabled:opacity-30"
+            >
+              {busy
+                ? "Syncing…"
+                : "Sync"}
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              void onRefresh()
-            }
-            disabled={
-              !connected ||
-              busy
-            }
-            className="border border-wire px-3 py-2 font-display text-[9px] uppercase tracking-[0.14em] text-paper/35 transition hover:border-signal/50 hover:text-signal disabled:opacity-30"
-          >
-            {busy
-              ? "Syncing…"
-              : "Sync"}
-          </button>
         </div>
-
-        <div className="grid grid-cols-2 border-t border-wire">
-          <button
-            type="button"
-            onClick={() =>
-              onMessageTargetChange(
-                "chat",
-              )
-            }
-            className={
-              !groupMode
-                ? "border-r border-wire bg-signal px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-ink"
-                : "border-r border-wire px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:text-signal"
-            }
-          >
-            Chat
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              onMessageTargetChange(
-                "groups",
-              )
-            }
-            className={
-              groupMode
-                ? "bg-signal px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-ink"
-                : "px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-paper/40 transition hover:text-signal"
-            }
-          >
-            Groups
-          </button>
-        </div>
-      </div>
+      )}
 
       {messageTarget ===
       "groups" ? (
         <GroupConversationList
           groups={groups}
-          connected={
-            connected
-          }
+          connected={connected}
           walletAddress={
             walletAddress
           }
@@ -236,9 +183,7 @@ export function ConversationPanel({
           walletAddress={
             walletAddress
           }
-          connected={
-            connected
-          }
+          connected={connected}
           channelReady={
             groupReady
           }
@@ -293,9 +238,7 @@ export function ConversationPanel({
           peerAddress={
             messageTarget
           }
-          connected={
-            connected
-          }
+          connected={connected}
           channelReady={
             channelReady
           }
@@ -324,6 +267,9 @@ export function ConversationPanel({
           onCreateOffer={
             onCreateOffer
           }
+          onAddEscrow={
+            onAddEscrow
+          }
           onAcceptOffer={
             onAcceptOffer
           }
@@ -336,7 +282,9 @@ export function ConversationPanel({
           onOpenEscrow={
             onOpenEscrow
           }
-          onOfferRead={onOfferRead}
+          onOfferRead={
+            onOfferRead
+          }
         />
       )}
     </section>

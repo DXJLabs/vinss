@@ -12,6 +12,9 @@ import {
   MessageBubble,
 } from "@/components/room/conversation/MessageBubble";
 import {
+  ConversationActions,
+} from "@/components/room/conversation/ConversationActions";
+import {
   ProofModal,
 } from "@/components/room/conversation/ProofModal";
 import {
@@ -98,27 +101,27 @@ export function GroupConversationPanel({
 
   return (
     <>
-      <div className="border-x border-b border-wire bg-vault/20 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/35 transition hover:text-signal"
-          >
-            ← Groups
-          </button>
+      <div className="flex items-center gap-3 border-x border-b border-wire bg-vault/20 px-3 py-3">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to groups"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base text-paper/45 ring-1 ring-wire/60 transition hover:text-signal hover:ring-signal/25"
+        >
+          ←
+        </button>
 
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm text-paper/70">
-              {group.name}
-            </p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-medium text-paper/78">
+            {group.name}
+          </p>
 
-            <p className="mt-0.5 font-display text-[8px] uppercase tracking-[0.12em] text-paper/25">
-              {admin
-                ? "You are admin"
-                : "Member"}
-            </p>
-          </div>
+          <p className="mt-0.5 text-[9px] text-paper/30">
+            {group.members.length} participant
+            {group.members.length === 1 ? "" : "s"}
+            <span aria-hidden="true"> · </span>
+            <span className="text-signal/60">Encrypted</span>
+          </p>
         </div>
       </div>
 
@@ -198,7 +201,7 @@ export function GroupConversationPanel({
         </div>
       </div>
 
-      <div className="min-h-[320px] max-h-[52vh] overflow-y-auto border-x border-b border-wire bg-black/10">
+      <div className="min-h-[320px] max-h-[52vh] overflow-y-auto border-x border-wire/60 bg-black/10">
         {visibleEntries.length ===
         0 ? (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-8 text-center">
@@ -246,17 +249,15 @@ export function GroupConversationPanel({
         )}
       </div>
 
-      <div className="border border-wire bg-vault/20 p-2">
-        <div className="mb-2 flex items-center justify-between border-b border-wire/60 px-2 pb-2">
-          <span className="font-display text-[9px] uppercase tracking-widest text-paper/30">
-            {group.name}
-          </span>
+      <ConversationActions
+        connected={
+          connected &&
+          channelReady
+        }
+        busy={busy}
+      />
 
-          <span className="text-[9px] text-paper/25">
-            Group encrypted
-          </span>
-        </div>
-
+      <div className="bg-vault/12 p-2">
         <div className="flex items-end gap-2">
           <textarea
             value={draft}

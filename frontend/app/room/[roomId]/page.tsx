@@ -24,7 +24,7 @@ import { EscrowPanel } from "@/components/room/escrow/EscrowPanel";
 import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomTabs, type RoomTab } from "@/components/room/RoomTabs";
-import { LoyaltyPanel } from "@/components/room/loyalty/LoyaltyPanel";
+import { ActivityPanel } from "@/components/room/activity/ActivityPanel";
 import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
@@ -102,7 +102,7 @@ export default function DealRoomPage() {
     roomId: room?.id ?? null,
     session,
     channelKey,
-    active: tab === "timeline",
+    active: tab !== "loyalty",
     setBusy,
     setError,
   });
@@ -367,11 +367,35 @@ export default function DealRoomPage() {
         }
       : undefined;
 
+  const latestAcceptedDirectOffer =
+    directAgentPeer
+      ? [...offerEntries]
+          .filter(
+            (entry) =>
+              entry.offerAction?.kind ===
+                "accept" &&
+              isCurrentDirectEntry(
+                entry,
+              ),
+          )
+          .sort(
+            (left, right) =>
+              new Date(
+                left.sentAt,
+              ).getTime() -
+              new Date(
+                right.sentAt,
+              ).getTime(),
+          )
+          .at(-1) ?? null
+      : null;
+
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-6 py-16">
+    <main className="mx-auto min-h-screen max-w-4xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
       <RoomHeader
         label={room?.label ?? "Deal Room"}
         roomId={params.roomId}
+        participantCount={participants.length}
       />
 
       {!room && (
@@ -382,9 +406,8 @@ export default function DealRoomPage() {
       )}
 
       {!session && room && (
-        <p className="mb-6 border border-wire px-4 py-3 text-xs text-paper/50">
-          Connect your wallet to start messaging, making offers, or funding
-          escrow in this room.
+        <p className="mb-3 rounded-xl bg-vault/25 px-3.5 py-2.5 text-[11px] leading-relaxed text-paper/38 ring-1 ring-wire/50">
+          Connect your wallet to message, make offers, and use escrow.
         </p>
       )}
 
@@ -392,6 +415,21 @@ export default function DealRoomPage() {
         <RoomTabs
           value={tab}
           onChange={setTab}
+          messageMode={
+            messageTarget === "groups" ||
+            messageTarget.startsWith("group:")
+              ? "group"
+              : "chat"
+          }
+          onMessageModeChange={(mode) => {
+            setCounterSource(null);
+            setEscrowOfferSource(null);
+            setMessageTarget(
+              mode === "group"
+                ? "groups"
+                : "chat",
+            );
+          }}
         />
       )}
 
@@ -481,7 +519,7 @@ export default function DealRoomPage() {
         )}
 
       {!showAccessDetails &&
-        tab === "timeline" && (
+        tab !== "loyalty" && (
         <ConversationPanel
           roomId={room?.id ?? params.roomId}
           entries={entries}
@@ -515,6 +553,13 @@ export default function DealRoomPage() {
             setEscrowOfferSource(null);
             setTab("offer");
           }}
+          onAddEscrow={() => {
+            setCounterSource(null);
+            setEscrowOfferSource(
+              latestAcceptedDirectOffer,
+            );
+            setTab("escrow");
+          }}
           onRefresh={async () => {
             // Manual Sync refreshes chat first, then private Offer cards.
             await handleRefresh(false);
@@ -538,45 +583,124 @@ export default function DealRoomPage() {
 
       {!showAccessDetails &&
         tab === "offer" && (
-        <OfferPanel
-          session={session}
-          channelKey={channelKey}
-          messageTarget={messageTarget}
-          participants={participants}
-          counterSource={counterSource}
-          busy={busy}
-          agentDraft={agentOfferDraft}
-          onCreate={createDirectOffer}
-          onCounter={counterDirectOffer}
-          onCancelCounter={() => setCounterSource(null)}
-          onSubmitted={() => {
-            // Return to the same direct chat after the wallet-backed action.
-            setCounterSource(null);
-            setTab("timeline");
-          }}
-        />
+          <div
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add Offer"
+          >
+            <section className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:bottom-5 sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
+              <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-paper/75">
+                    Add Offer
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-paper/28">
+                    Add deal terms to this private conversation.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCounterSource(null);
+                    setTab("timeline");
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-paper/35 ring-1 ring-wire/60"
+                  aria-label="Close Offer"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="max-h-[calc(88vh-58px)] overflow-y-auto p-3 sm:p-4">
+                <OfferPanel
+                  session={session}
+                  channelKey={channelKey}
+                  messageTarget={messageTarget}
+                  participants={participants}
+                  counterSource={counterSource}
+                  busy={busy}
+                  agentDraft={agentOfferDraft}
+                  onCreate={createDirectOffer}
+                  onCounter={counterDirectOffer}
+                  onCancelCounter={() =>
+                    setCounterSource(null)
+                  }
+                  onSubmitted={() => {
+                    setCounterSource(null);
+                    setTab("timeline");
+                  }}
+                />
+              </div>
+            </section>
+          </div>
       )}
 
       {!showAccessDetails &&
         tab === "escrow" && (
-        <EscrowPanel
-          session={session}
-          channelKey={channelKey}
-          onSent={(entry) => setEntries((prev) => [entry, ...prev])}
-          setBusy={setBusy}
-          setError={setError}
-          busy={busy}
-          agentDraft={agentEscrowDraft}
-          acceptedOffer={escrowOfferSource}
-          offerEntries={offerEntries}
-          escrowActions={escrowActions}
-          onStartRekber={startDirectRekber}
-        />
+          <div
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add Escrow"
+          >
+            <section className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:bottom-5 sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
+              <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-paper/75">
+                    Add Escrow
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-paper/28">
+                    Secure an accepted Offer with VINSS Rekber.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEscrowOfferSource(null);
+                    setTab("timeline");
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-paper/35 ring-1 ring-wire/60"
+                  aria-label="Close Escrow"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="max-h-[calc(88vh-58px)] overflow-y-auto p-3 sm:p-4">
+                <EscrowPanel
+                  session={session}
+                  channelKey={channelKey}
+                  onSent={(entry) =>
+                    setEntries((prev) => [
+                      entry,
+                      ...prev,
+                    ])
+                  }
+                  setBusy={setBusy}
+                  setError={setError}
+                  busy={busy}
+                  agentDraft={agentEscrowDraft}
+                  acceptedOffer={escrowOfferSource}
+                  offerEntries={offerEntries}
+                  escrowActions={escrowActions}
+                  onStartRekber={startDirectRekber}
+                />
+              </div>
+            </section>
+          </div>
       )}
 
       {!showAccessDetails &&
         tab === "loyalty" && (
-          <LoyaltyPanel />
+          <ActivityPanel
+            entries={[
+              ...entries,
+              ...offerEntries,
+            ]}
+          />
         )}
     </main>
   );

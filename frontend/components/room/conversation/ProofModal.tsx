@@ -139,10 +139,10 @@ export function ProofModal({
 
                 <p className="break-all bg-transparent">
                   0x
-                  {recordId.replace(
+                  {(recordId ?? "").replace(
                     /^0x/,
                     "",
-                  )}
+                  ) || "Unavailable"}
                 </p>
               </div>
             </div>

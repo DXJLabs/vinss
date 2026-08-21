@@ -62,8 +62,14 @@ interface DirectOfferContext {
 }
 
 // Keep UI locators normalized without changing the on-chain felt value.
-function stripLocator(locator: string): string {
-  return locator.replace(/^0x/, "").toLowerCase();
+function stripLocator(
+  locator: string | null | undefined,
+): string {
+  return typeof locator === "string"
+    ? locator
+        .replace(/^0x/, "")
+        .toLowerCase()
+    : "";
 }
 
 // Store lifecycle parent/root references as explicit hex strings.
