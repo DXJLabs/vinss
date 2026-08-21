@@ -441,6 +441,63 @@ export function computeRefundCommitment(
   );
 }
 
+export interface EscrowFundedProof {
+  transactionHash: string;
+  blockNumber: number;
+  timestamp: number;
+}
+
+export async function getEscrowFundedProof(
+  custodyCommitment: bigint,
+): Promise<EscrowFundedProof | null> {
+  if (!CONTRACTS.escrowRekber) {
+    return null;
+  }
+
+  const result =
+    await getProvider().getEvents({
+      address:
+        CONTRACTS.escrowRekber,
+      from_block: {
+        block_number: 0,
+      },
+      to_block: "latest",
+      keys: [
+        [
+          hash.getSelectorFromName(
+            "EscrowRekberCustodyFunded",
+          ),
+        ],
+        [
+          toFelt(
+            custodyCommitment,
+          ),
+        ],
+      ],
+      chunk_size: 10,
+    });
+
+  const event =
+    result.events.at(-1);
+
+  if (!event) {
+    return null;
+  }
+
+  return {
+    transactionHash:
+      event.transaction_hash,
+    blockNumber:
+      event.block_number ?? 0,
+    timestamp:
+      Number(
+        BigInt(
+          event.data[2] ?? "0",
+        ),
+      ),
+  };
+}
+
 export async function escrowCustodyExists(
   custodyCommitment: bigint,
 ): Promise<boolean> {
@@ -523,13 +580,15 @@ export async function depositEscrow(
     );
   }
 
-  // Wallet API validates top-level addresses strictly.
-  // Keep this consistent with Message / Offer / START REKBER.
   const treasury =
     num.toHex(rawTreasury);
 
+  const token =
+    num.toHex(params.token);
+
   const principal =
     params.amount;
+
   const fee =
     principal / 100n;
 
@@ -541,43 +600,24 @@ export async function depositEscrow(
 
   const total =
     principal + fee;
-  const token =
-    num.toHex(params.token);
 
-  // Never ask Ready X to fund the same custody twice.
-  try {
-    if (
-      await escrowCustodyExists(
-        params.custodyCommitment,
-      )
-    ) {
-      return {
-        transactionHash: "",
-        confirmedByChain: true,
-      };
-    }
-  } catch {
-    // A temporary RPC failure must not block opening Ready X.
-  }
-
-  const calldata = [
+  // privacy_invoke calldata:
+  // [action, custody, release, refund,
+  //  refund_after, token, principal, revenue_open_note_id]
+  //
+  // revenue_open_note_id is injected by Ready X from ${openNoteIds[0]}.
+  const payload = [
     toFelt(1),
-    toFelt(
-      params.custodyCommitment,
-    ),
-    toFelt(
-      params.releaseCommitment,
-    ),
-    toFelt(
-      params.refundCommitment,
-    ),
+    toFelt(params.custodyCommitment),
+    toFelt(params.releaseCommitment),
+    toFelt(params.refundCommitment),
     toFelt(params.refundAfter),
     token,
     toFelt(principal),
   ];
 
-  const walletPromise =
-    account.strk20InvokeTransaction([
+  const result =
+    await account.strk20InvokeTransaction([
       {
         type: "withdraw",
         token,
@@ -599,139 +639,19 @@ export async function depositEscrow(
           CONTRACTS.escrowRekber,
         calldata: [
           toFelt(
-            calldata.length + 1,
+            payload.length + 1,
           ),
-          ...calldata,
+          ...payload,
           "${openNoteIds[0]}",
         ],
       },
     ]);
 
-  const walletOutcome =
-    walletPromise
-      .then((result) => ({
-        kind: "wallet" as const,
-        result,
-      }))
-      .catch((error) => ({
-        kind:
-          "wallet_error" as const,
-        error,
-      }));
-
-  const chainConfirmation =
-    waitForEscrowCustody(
-      params.custodyCommitment,
-    );
-
-  const first =
-    await Promise.race([
-      walletOutcome,
-      chainConfirmation.then(
-        (confirmed) => ({
-          kind: "chain" as const,
-          confirmed,
-        }),
-      ),
-    ]);
-
-  // Ready X returned normally.
-  if (first.kind === "wallet") {
-    const confirmed =
-      await waitForEscrowCustody(
-        params.custodyCommitment,
-        45_000,
-      );
-
-    if (!confirmed) {
-      throw new Error(
-        "ESCROW_DEPOSIT_NOT_CONFIRMED",
-      );
-    }
-
-    return {
-      transactionHash:
-        first.result.transaction_hash,
-      confirmedByChain: true,
-    };
-  }
-
-  // Ready X sometimes reports an error after the transaction was already
-  // submitted. Chain state is the source of truth.
-  if (
-    first.kind ===
-      "wallet_error"
-  ) {
-    const raw =
-      first.error instanceof Error
-        ? first.error.message
-        : String(first.error);
-
-    let confirmed = false;
-
-    try {
-      confirmed =
-        await escrowCustodyExists(
-          params.custodyCommitment,
-        );
-    } catch {
-      // checked below
-    }
-
-    if (
-      !confirmed &&
-      /timeout|timed out/i.test(raw)
-    ) {
-      confirmed =
-        await waitForEscrowCustody(
-          params.custodyCommitment,
-          45_000,
-        );
-    }
-
-    if (confirmed) {
-      return {
-        transactionHash: "",
-        confirmedByChain: true,
-      };
-    }
-
-    throw first.error;
-  }
-
-  // Chain confirmation can win before Ready X returns to the web page.
-  if (first.confirmed) {
-    void walletPromise.catch(
-      (err) => {
-        const raw =
-          err instanceof Error
-            ? err.message
-            : String(err);
-
-        if (
-          !/timeout|timed out/i.test(
-            raw,
-          )
-        ) {
-          console.error(
-            "[VINSS ESCROW LATE WALLET ERROR]",
-            err,
-          );
-        }
-      },
-    );
-
-    return {
-      transactionHash: "",
-      confirmedByChain: true,
-    };
-  }
-
-  // No chain state after the confirmation window.
-  // Do not leave the UI spinning forever.
-  throw new Error(
-    "ESCROW_WALLET_STILL_PREPARING",
-  );
+  return {
+    transactionHash:
+      result.transaction_hash,
+    confirmedByChain: false,
+  };
 }
 
 export async function releaseEscrow(

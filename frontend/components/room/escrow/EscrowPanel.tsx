@@ -9,6 +9,7 @@ import {
   computeRefundCommitment,
   depositEscrow,
   escrowCustodyExists,
+  getEscrowFundedProof,
   parseSettlementAmount,
   resolveSettlementAsset,
 } from "@/lib/deal-room/escrow";
@@ -25,6 +26,7 @@ import {
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import { humanizeError } from "@/lib/errors/uiError";
 import { FeeBreakdown } from "@/components/FeeBreakdown";
+import { explorerUrl } from "@/components/room/conversation/chatFormat";
 
 export function EscrowPanel({
   session,
@@ -102,6 +104,10 @@ export function EscrowPanel({
     paymentSecured,
     setPaymentSecured,
   ] = useState(false);
+  const [
+    paymentProofTx,
+    setPaymentProofTx,
+  ] = useState("");
 
   useEffect(() => {
     const acceptedAction =
@@ -136,6 +142,7 @@ export function EscrowPanel({
     setAgreedCustodyCommitment(null);
     setLastSecrets(null);
     setPaymentSecured(false);
+    setPaymentProofTx("");
   }, [acceptedOffer?.actionLocator]);
 
   useEffect(() => {
@@ -271,6 +278,20 @@ export function EscrowPanel({
           exists
         ) {
           setPaymentSecured(true);
+
+          const proof =
+            await getEscrowFundedProof(
+              agreedCustodyCommitment,
+            );
+
+          if (
+            !cancelled &&
+            proof?.transactionHash
+          ) {
+            setPaymentProofTx(
+              proof.transactionHash,
+            );
+          }
         }
       } catch (err) {
         console.debug(
@@ -430,6 +451,9 @@ export function EscrowPanel({
         ...secrets,
       });
       setPaymentSecured(true);
+      setPaymentProofTx(
+        result.transactionHash,
+      );
 
       onSent({
         id: crypto.randomUUID(),
@@ -638,6 +662,25 @@ export function EscrowPanel({
                 <p className="mt-1 text-xs leading-relaxed text-paper/40">
                   The payment is locked in VINSS Escrow Rekber.
                 </p>
+
+                {paymentProofTx && (
+                  <div className="mt-3 flex items-center justify-between border-t border-signal/15 pt-3">
+                    <span className="text-[10px] text-paper/35">
+                      Recorded on Starknet
+                    </span>
+
+                    <a
+                      href={explorerUrl(
+                        paymentProofTx,
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-display text-[9px] uppercase tracking-widest text-signal"
+                    >
+                      Proof ↗
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 

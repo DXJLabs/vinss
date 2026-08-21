@@ -15,6 +15,10 @@ import {
   shortAddress,
 } from "@/components/room/conversation/chatFormat";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
+import {
+  getEscrowFundedProof,
+  type EscrowFundedProof,
+} from "@/lib/deal-room/escrow";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -75,6 +79,12 @@ export function DirectConversationPanel({
   const endNodeRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [
+    fundedProofs,
+    setFundedProofs,
+  ] = useState<
+    Record<string, EscrowFundedProof>
+  >({});
 
   const pairEntries = [
     ...entries,
@@ -115,6 +125,138 @@ export function DirectConversationPanel({
         new Date(left.sentAt).getTime() -
         new Date(right.sentAt).getTime(),
     );
+
+  const canonicalCustodyKey = (
+    value: string,
+  ) => {
+    try {
+      return BigInt(value)
+        .toString(16)
+        .toLowerCase();
+    } catch {
+      return value
+        .replace(/^0x/, "")
+        .toLowerCase();
+    }
+  };
+
+  const preparedCustodies =
+    pairEntries
+      .filter(
+        (entry) =>
+          entry.offerAction?.kind ===
+            "prepare_escrow" &&
+          Boolean(
+            entry.offerAction
+              .custodyCommitment,
+          ),
+      )
+      .map((entry) => ({
+        key:
+          canonicalCustodyKey(
+            entry.offerAction!
+              .custodyCommitment!,
+          ),
+        custodyCommitment:
+          entry.offerAction!
+            .custodyCommitment!,
+      }));
+
+  const preparedCustodyFingerprint =
+    preparedCustodies
+      .map((item) => item.key)
+      .sort()
+      .join("|");
+
+  useEffect(() => {
+    if (!preparedCustodyFingerprint) {
+      return;
+    }
+
+    let stopped = false;
+    let running = false;
+
+    const known =
+      new Set(
+        Object.keys(
+          fundedProofs,
+        ),
+      );
+
+    const syncFundingProofs =
+      async () => {
+        if (stopped || running) {
+          return;
+        }
+
+        running = true;
+
+        try {
+          for (
+            const item
+            of preparedCustodies
+          ) {
+            if (
+              known.has(
+                item.key,
+              )
+            ) {
+              continue;
+            }
+
+            const proof =
+              await getEscrowFundedProof(
+                BigInt(
+                  item.custodyCommitment,
+                ),
+              );
+
+            if (
+              stopped ||
+              !proof
+            ) {
+              continue;
+            }
+
+            known.add(item.key);
+
+            setFundedProofs(
+              (prev) => ({
+                ...prev,
+                [item.key]:
+                  proof,
+              }),
+            );
+          }
+        } catch (err) {
+          console.debug(
+            "[VINSS REKBER PROOF SYNC]",
+            err,
+          );
+        } finally {
+          running = false;
+        }
+      };
+
+    void syncFundingProofs();
+
+    const timer =
+      window.setInterval(
+        () =>
+          void syncFundingProofs(),
+        5000,
+      );
+
+    return () => {
+      stopped = true;
+      window.clearInterval(
+        timer,
+      );
+    };
+  }, [
+    peerAddress,
+    preparedCustodyFingerprint,
+  ]);
 
   const preparedAgreementLocators =
     new Set(
@@ -266,6 +408,17 @@ export function DirectConversationPanel({
                     walletAddress,
                   );
 
+                const custodyKey =
+                  canonicalCustodyKey(
+                    entry.offerAction
+                      .custodyCommitment!,
+                  );
+
+                const fundedProof =
+                  fundedProofs[
+                    custodyKey
+                  ];
+
                 return (
                   <li
                     key={`rekber:${entry.actionLocator}`}
@@ -310,6 +463,59 @@ export function DirectConversationPanel({
                         </button>
                       )}
                     </div>
+
+                    {fundedProof && (
+                      <div className="mt-2 w-full border border-signal/35 bg-signal/[0.055] px-3.5 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/30 text-[8px] text-signal">
+                            ✓
+                          </span>
+
+                          <span className="font-display text-[8px] uppercase tracking-[0.14em] text-signal">
+                            Payment secured
+                          </span>
+                        </div>
+
+                        <p className="mt-2 text-[11px] text-paper/60">
+                          {entry.offerAction.amount}{" "}
+                          {entry.offerAction.asset} locked in VINSS Rekber
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProofEntry({
+                              id:
+                                `rekber-funded:${custodyKey}`,
+                              kind:
+                                "offer",
+                              summary:
+                                `Payment secured — ${entry.offerAction!.amount} ${entry.offerAction!.asset}`,
+                              transactionHash:
+                                fundedProof.transactionHash,
+                              actionLocator:
+                                `0x${custodyKey}`,
+                              sentAt:
+                                fundedProof.timestamp
+                                  ? new Date(
+                                      fundedProof.timestamp *
+                                        1000,
+                                    ).toISOString()
+                                  : new Date().toISOString(),
+                              scope:
+                                "direct",
+                              senderAddress:
+                                entry.senderAddress,
+                              recipientAddress:
+                                entry.recipientAddress,
+                            })
+                          }
+                          className="mt-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/70 transition hover:text-signal"
+                        >
+                          TX Proof ↗
+                        </button>
+                      </div>
+                    )}
                   </li>
                 );
               }
