@@ -16,8 +16,8 @@ import {
 } from "@/components/room/conversation/chatFormat";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 import {
+  escrowCustodyExists,
   getEscrowFundedProof,
-  type EscrowFundedProof,
 } from "@/lib/deal-room/escrow";
 
 interface DirectConversationPanelProps {
@@ -109,10 +109,10 @@ export function DirectConversationPanel({
   const autoScrollRef = useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [
-    fundedProofs,
-    setFundedProofs,
+    fundedCustodies,
+    setFundedCustodies,
   ] = useState<
-    Record<string, EscrowFundedProof>
+    Record<string, true>
   >({});
   const [
     showWorkComposer,
@@ -241,7 +241,7 @@ export function DirectConversationPanel({
         }
 
         return Boolean(
-          fundedProofs[
+          fundedCustodies[
             canonicalCustodyKey(
               action.custodyCommitment,
             )
@@ -273,19 +273,25 @@ export function DirectConversationPanel({
     const known =
       new Set(
         Object.keys(
-          fundedProofs,
+          fundedCustodies,
         ),
       );
 
-    const syncFundingProofs =
+    const syncFundingStatus =
       async () => {
-        if (stopped || running) {
+        if (
+          stopped ||
+          running
+        ) {
           return;
         }
 
         running = true;
 
         try {
+          const found:
+            Record<string, true> = {};
+
           for (
             const item
             of preparedCustodies
@@ -298,8 +304,8 @@ export function DirectConversationPanel({
               continue;
             }
 
-            const proof =
-              await getEscrowFundedProof(
+            const exists =
+              await escrowCustodyExists(
                 BigInt(
                   item.custodyCommitment,
                 ),
@@ -307,24 +313,33 @@ export function DirectConversationPanel({
 
             if (
               stopped ||
-              !proof
+              !exists
             ) {
               continue;
             }
 
-            known.add(item.key);
+            known.add(
+              item.key,
+            );
+            found[item.key] =
+              true;
+          }
 
-            setFundedProofs(
-              (prev) => ({
-                ...prev,
-                [item.key]:
-                  proof,
+          if (
+            !stopped &&
+            Object.keys(found)
+              .length > 0
+          ) {
+            setFundedCustodies(
+              (previous) => ({
+                ...previous,
+                ...found,
               }),
             );
           }
         } catch (err) {
           console.debug(
-            "[VINSS REKBER PROOF SYNC]",
+            "[VINSS REKBER STATUS SYNC]",
             err,
           );
         } finally {
@@ -332,19 +347,51 @@ export function DirectConversationPanel({
         }
       };
 
-    void syncFundingProofs();
+    // Cheap contract-state lookup. Do not scan historical events during chat load.
+    void syncFundingStatus();
 
     const timer =
       window.setInterval(
         () =>
-          void syncFundingProofs(),
-        5000,
+          void syncFundingStatus(),
+        15_000,
       );
+
+    const onVisible =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          void syncFundingStatus();
+        }
+      };
+
+    window.addEventListener(
+      "focus",
+      syncFundingStatus,
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      onVisible,
+    );
 
     return () => {
       stopped = true;
+
       window.clearInterval(
         timer,
+      );
+
+      window.removeEventListener(
+        "focus",
+        syncFundingStatus,
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible,
       );
     };
   }, [
@@ -662,10 +709,12 @@ export function DirectConversationPanel({
                       .custodyCommitment!,
                   );
 
-                const fundedProof =
-                  fundedProofs[
-                    custodyKey
-                  ];
+                const funded =
+                  Boolean(
+                    fundedCustodies[
+                      custodyKey
+                    ],
+                  );
 
                 return (
                   <li
@@ -712,7 +761,7 @@ export function DirectConversationPanel({
                       )}
                     </div>
 
-                    {fundedProof && (
+                    {funded && (
                       <div className="mt-2 w-full border border-signal/35 bg-signal/[0.055] px-3.5 py-3 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/30 text-[8px] text-signal">
@@ -731,7 +780,19 @@ export function DirectConversationPanel({
 
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={async () => {
+                            const proof =
+                              await getEscrowFundedProof(
+                                BigInt(
+                                  entry.offerAction!
+                                    .custodyCommitment!,
+                                ),
+                              );
+
+                            if (!proof) {
+                              return;
+                            }
+
                             setProofEntry({
                               id:
                                 `rekber-funded:${custodyKey}`,
@@ -740,24 +801,24 @@ export function DirectConversationPanel({
                               summary:
                                 `Payment secured — ${entry.offerAction!.amount} ${entry.offerAction!.asset}`,
                               transactionHash:
-                                fundedProof.transactionHash,
+                                proof.transactionHash,
                               actionLocator:
                                 `0x${custodyKey}`,
                               sentAt:
-                                fundedProof.timestamp
+                                proof.timestamp
                                   ? new Date(
-                                      fundedProof.timestamp *
+                                      proof.timestamp *
                                         1000,
                                     ).toISOString()
-                                  : new Date().toISOString(),
+                                  : entry.sentAt,
                               scope:
                                 "direct",
                               senderAddress:
                                 entry.senderAddress,
                               recipientAddress:
                                 entry.recipientAddress,
-                            })
-                          }
+                            });
+                          }}
                           className="mt-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/70 transition hover:text-signal"
                         >
                           TX Proof ↗

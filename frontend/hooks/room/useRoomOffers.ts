@@ -31,6 +31,10 @@ import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
+import {
+  loadEncryptedLocalJson,
+  saveEncryptedLocalJson,
+} from "@/lib/privacy/encryptedChatCache";
 
 export interface OfferTermsInput {
   dealType?: DealType;
@@ -140,6 +144,48 @@ export function useRoomOffers({
     .sort()
     .join("|");
 
+  function offerHistoryStorageKey():
+    string | null {
+    if (
+      !roomId ||
+      !session
+    ) {
+      return null;
+    }
+
+    return (
+      `vinss:offer-history:v1:${roomId}:` +
+      canonicalStarknetAddress(
+        session.account.address,
+      )
+    );
+  }
+
+  async function persistOfferHistory(
+    next:
+      ConversationEntry[],
+  ): Promise<void> {
+    const storageKey =
+      offerHistoryStorageKey();
+
+    if (
+      !storageKey ||
+      !channelKey
+    ) {
+      return;
+    }
+
+    await saveEncryptedLocalJson(
+      storageKey,
+      channelKey,
+      {
+        version: 1,
+        savedAt: Date.now(),
+        entries: next,
+      },
+    );
+  }
+
   useEffect(() => {
     // Direct Offers cannot derive a pairwise key without room and wallet identity.
     if (!roomId || !session) {
@@ -168,6 +214,64 @@ export function useRoomOffers({
       cancelled = true;
     };
   }, [roomId, session?.account.address]);
+
+  useEffect(() => {
+    if (
+      !roomId ||
+      !session ||
+      !channelKey
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrate =
+      async () => {
+        const storageKey =
+          offerHistoryStorageKey();
+
+        if (!storageKey) {
+          return;
+        }
+
+        const cached =
+          await loadEncryptedLocalJson<{
+            version: 1;
+            savedAt: number;
+            entries:
+              ConversationEntry[];
+          }>(
+            storageKey,
+            channelKey,
+          );
+
+        if (
+          cancelled ||
+          !cached?.entries
+            ?.length
+        ) {
+          return;
+        }
+
+        setOfferEntries(
+          (previous) =>
+            previous.length > 0
+              ? previous
+              : cached.entries,
+        );
+      };
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    roomId,
+    session?.account.address,
+    channelKey,
+  ]);
 
   /**
    * Resolve one pairwise Offer route.
@@ -256,7 +360,7 @@ export function useRoomOffers({
             ),
         );
 
-      return [
+      const next = [
         ...withoutSameLocator,
         entry,
       ].sort(
@@ -268,6 +372,12 @@ export function useRoomOffers({
             right.sentAt,
           ).getTime(),
       );
+
+      void persistOfferHistory(
+        next,
+      );
+
+      return next;
     });
   }
 
@@ -297,11 +407,24 @@ export function useRoomOffers({
           stripLocator(entry.actionLocator),
       );
 
-      return [...withoutSameLocator, entry].sort(
+      const next = [
+        ...withoutSameLocator,
+        entry,
+      ].sort(
         (left, right) =>
-          new Date(left.sentAt).getTime() -
-          new Date(right.sentAt).getTime(),
+          new Date(
+            left.sentAt,
+          ).getTime() -
+          new Date(
+            right.sentAt,
+          ).getTime(),
       );
+
+      void persistOfferHistory(
+        next,
+      );
+
+      return next;
     });
   }
 
@@ -458,11 +581,23 @@ export function useRoomOffers({
           });
         }
 
-        return [...byLocator.values()].sort(
-          (left, right) =>
-            new Date(left.sentAt).getTime() -
-            new Date(right.sentAt).getTime(),
+        const next =
+          [...byLocator.values()]
+            .sort(
+              (left, right) =>
+                new Date(
+                  left.sentAt,
+                ).getTime() -
+                new Date(
+                  right.sentAt,
+                ).getTime(),
+            );
+
+        void persistOfferHistory(
+          next,
         );
+
+        return next;
       });
     } catch (err) {
       // Detailed discovery errors stay in the developer console.
@@ -1440,7 +1575,7 @@ export function useRoomOffers({
 
     const timer = window.setInterval(() => {
       void sync();
-    }, 3000);
+    }, 5000);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
