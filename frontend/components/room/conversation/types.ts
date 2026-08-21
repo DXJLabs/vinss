@@ -1,4 +1,4 @@
-import type { OfferActionPayload } from "@/types/deal-room";
+import type { OfferActionPayload, WorkEvidence } from "@/types/deal-room";
 
 export interface ConversationEntry {
   id: string;
@@ -12,6 +12,7 @@ export interface ConversationEntry {
   senderAddress?: string;
   groupId?: string;
   offerAction?: OfferActionPayload;
+  workEvidence?: WorkEvidence;
   readAt?: string;
 }
 

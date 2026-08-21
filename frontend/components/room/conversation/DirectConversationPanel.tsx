@@ -34,6 +34,11 @@ interface DirectConversationPanelProps {
   onBack: () => void;
   onDraftChange: (value: string) => void;
   onSendMessage: () => void | Promise<void>;
+  onSubmitWork: (input: {
+    custodyCommitment: string;
+    note: string;
+    file?: File | null;
+  }) => Promise<boolean>;
   onCreateOffer: () => void;
   onAcceptOffer: (
     entry: ConversationEntry,
@@ -52,6 +57,29 @@ interface DirectConversationPanelProps {
   ) => void | Promise<void>;
 }
 
+async function sha256LocalFile(
+  file: File,
+): Promise<string> {
+  const digest =
+    await crypto.subtle.digest(
+      "SHA-256",
+      await file.arrayBuffer(),
+    );
+
+  return (
+    "0x" +
+    Array.from(
+      new Uint8Array(digest),
+    )
+      .map((value) =>
+        value
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
+}
+
 export function DirectConversationPanel({
   entries,
   offerEntries,
@@ -66,6 +94,7 @@ export function DirectConversationPanel({
   onBack,
   onDraftChange,
   onSendMessage,
+  onSubmitWork,
   onCreateOffer,
   onAcceptOffer,
   onRejectOffer,
@@ -84,6 +113,32 @@ export function DirectConversationPanel({
     setFundedProofs,
   ] = useState<
     Record<string, EscrowFundedProof>
+  >({});
+  const [
+    showWorkComposer,
+    setShowWorkComposer,
+  ] = useState(false);
+
+  const [
+    workNote,
+    setWorkNote,
+  ] = useState("");
+
+  const [
+    workFile,
+    setWorkFile,
+  ] = useState<File | null>(
+    null,
+  );
+
+  const [
+    workVerification,
+    setWorkVerification,
+  ] = useState<
+    Record<
+      string,
+      "match" | "mismatch"
+    >
   >({});
 
   const pairEntries = [
@@ -167,6 +222,45 @@ export function DirectConversationPanel({
       .map((item) => item.key)
       .sort()
       .join("|");
+
+  const fundedFreelanceEntry =
+    [...pairEntries]
+      .reverse()
+      .find((entry) => {
+        const action =
+          entry.offerAction;
+
+        if (
+          action?.kind !==
+            "prepare_escrow" ||
+          action.dealType !==
+            "freelance" ||
+          !action.custodyCommitment
+        ) {
+          return false;
+        }
+
+        return Boolean(
+          fundedProofs[
+            canonicalCustodyKey(
+              action.custodyCommitment,
+            )
+          ],
+        );
+      });
+
+  // Current freelance flow: the wallet that starts Rekber is the payer.
+  // The counterparty becomes the work submitter after funding is confirmed.
+  const canSubmitWork =
+    Boolean(
+      fundedFreelanceEntry,
+    ) &&
+    !sameStarknetAddress(
+      fundedFreelanceEntry
+        ?.offerAction
+        ?.senderAddress,
+      walletAddress,
+    );
 
   useEffect(() => {
     if (!preparedCustodyFingerprint) {
@@ -381,6 +475,160 @@ export function DirectConversationPanel({
         ) : (
           <ul className="space-y-4 p-4 sm:p-5">
             {pairEntries.map((entry) => {
+              if (
+                entry.kind ===
+                  "message" &&
+                entry.workEvidence
+                  ?.type ===
+                  "work_submission"
+              ) {
+                const evidence =
+                  entry.workEvidence;
+
+                const ownWork =
+                  sameStarknetAddress(
+                    entry.senderAddress,
+                    walletAddress,
+                  );
+
+                const verification =
+                  workVerification[
+                    entry.actionLocator
+                  ];
+
+                return (
+                  <li
+                    key={`work:${entry.actionLocator}`}
+                    className={
+                      ownWork
+                        ? "flex justify-end"
+                        : "flex justify-start"
+                    }
+                  >
+                    <div className="w-[88%] max-w-sm border border-amber-400/30 bg-amber-400/[0.04] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-display text-[9px] uppercase tracking-[0.14em] text-amber-300">
+                          Work submitted ✓
+                        </span>
+
+                        <span className="text-[9px] text-paper/25">
+                          {ownWork
+                            ? "You"
+                            : "Counterparty"}
+                        </span>
+                      </div>
+
+                      {evidence.note && (
+                        <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-paper/70">
+                          {evidence.note}
+                        </p>
+                      )}
+
+                      {evidence.fileName && (
+                        <div className="mt-3 border border-wire bg-black/10 p-3">
+                          <p className="break-all text-xs text-paper/65">
+                            {evidence.fileName}
+                          </p>
+
+                          <p className="mt-1 text-[9px] text-paper/30">
+                            {evidence.fileSize
+                              ? `${(
+                                  evidence.fileSize /
+                                  1024
+                                ).toFixed(1)} KB`
+                              : "File"}
+                            {" · "}
+                            fingerprint encrypted
+                          </p>
+
+                          {evidence.fileSha256 && (
+                            <>
+                              <p className="mt-2 break-all font-mono text-[8px] text-paper/25">
+                                {evidence.fileSha256}
+                              </p>
+
+                              <label className="mt-3 inline-flex cursor-pointer border border-signal/25 px-3 py-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/70 transition hover:bg-signal/10">
+                                Verify local file
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  onChange={async (
+                                    event,
+                                  ) => {
+                                    const file =
+                                      event.target.files?.[0];
+
+                                    if (!file) {
+                                      return;
+                                    }
+
+                                    const hash =
+                                      await sha256LocalFile(
+                                        file,
+                                      );
+
+                                    setWorkVerification(
+                                      (previous) => ({
+                                        ...previous,
+                                        [entry.actionLocator]:
+                                          hash.toLowerCase() ===
+                                          evidence.fileSha256!
+                                            .toLowerCase()
+                                            ? "match"
+                                            : "mismatch",
+                                      }),
+                                    );
+
+                                    event.target.value =
+                                      "";
+                                  }}
+                                />
+                              </label>
+
+                              {verification && (
+                                <p
+                                  className={
+                                    verification ===
+                                    "match"
+                                      ? "mt-2 text-[10px] text-signal"
+                                      : "mt-2 text-[10px] text-danger"
+                                  }
+                                >
+                                  {verification ===
+                                  "match"
+                                    ? "File verified ✓"
+                                    : "File does not match this submission"}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="mt-3 flex items-center justify-between border-t border-wire/60 pt-3">
+                        <span className="text-[9px] text-paper/30">
+                          Encrypted evidence
+                        </span>
+
+                        {entry.transactionHash && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProofEntry(
+                                entry,
+                              )
+                            }
+                            className="font-display text-[8px] uppercase tracking-[0.12em] text-signal/65"
+                          >
+                            TX Proof ↗
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              }
+
               if (entry.kind === "message") {
                 return (
                   <MessageBubble
@@ -628,6 +876,26 @@ export function DirectConversationPanel({
                 : "Private"}
             </span>
 
+            {canSubmitWork && (
+              <button
+                type="button"
+                onClick={() =>
+                  setShowWorkComposer(
+                    (value) =>
+                      !value,
+                  )
+                }
+                disabled={
+                  !connected ||
+                  !channelReady ||
+                  busy
+                }
+                className="border border-signal/30 px-2.5 py-1.5 font-display text-[8px] uppercase tracking-[0.12em] text-signal/75 transition hover:bg-signal/10 disabled:opacity-30"
+              >
+                Submit Work
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onCreateOffer}
@@ -642,6 +910,115 @@ export function DirectConversationPanel({
             </button>
           </div>
         </div>
+
+        {showWorkComposer &&
+          canSubmitWork &&
+          fundedFreelanceEntry
+            ?.offerAction
+            ?.custodyCommitment && (
+          <div className="mb-2 border border-signal/25 bg-signal/[0.025] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-display text-[9px] uppercase tracking-widest text-signal">
+                Submit work evidence
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWorkComposer(
+                    false,
+                  );
+                  setWorkNote("");
+                  setWorkFile(null);
+                }}
+                className="text-xs text-paper/35"
+              >
+                ×
+              </button>
+            </div>
+
+            <textarea
+              value={workNote}
+              onChange={(event) =>
+                setWorkNote(
+                  event.target.value,
+                )
+              }
+              placeholder="Describe what was completed, link, delivery note…"
+              rows={3}
+              disabled={busy}
+              className="mt-3 w-full resize-none border border-wire bg-transparent px-3 py-2 text-xs text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
+            />
+
+            <label className="mt-2 flex cursor-pointer items-center justify-between border border-wire px-3 py-2 text-[10px] text-paper/45">
+              <span>
+                {workFile
+                  ? workFile.name
+                  : "Choose proof file from this phone"}
+              </span>
+
+              <span className="font-display text-[8px] uppercase tracking-widest text-signal/65">
+                Browse
+              </span>
+
+              <input
+                type="file"
+                className="hidden"
+                disabled={busy}
+                onChange={(event) =>
+                  setWorkFile(
+                    event.target
+                      .files?.[0] ??
+                      null,
+                  )
+                }
+              />
+            </label>
+
+            {workFile && (
+              <p className="mt-1 text-[9px] text-paper/25">
+                File stays on this device. VINSS records only its encrypted fingerprint.
+              </p>
+            )}
+
+            <button
+              type="button"
+              disabled={
+                busy ||
+                (!workNote.trim() &&
+                  !workFile)
+              }
+              onClick={async () => {
+                const submitted =
+                  await onSubmitWork({
+                    custodyCommitment:
+                      fundedFreelanceEntry
+                        .offerAction!
+                        .custodyCommitment!,
+                    note:
+                      workNote,
+                    file:
+                      workFile,
+                  });
+
+                if (
+                  submitted
+                ) {
+                  setShowWorkComposer(
+                    false,
+                  );
+                  setWorkNote("");
+                  setWorkFile(null);
+                }
+              }}
+              className="mt-3 w-full border border-signal/35 px-3 py-2.5 font-display text-[9px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+            >
+              {busy
+                ? "Waiting for Ready X…"
+                : "Submit Work →"}
+            </button>
+          </div>
+        )}
 
         <div className="flex items-end gap-2">
           <textarea

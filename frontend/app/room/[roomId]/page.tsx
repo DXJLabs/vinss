@@ -96,6 +96,7 @@ export default function DealRoomPage() {
     setMessageTarget,
     peerTyping,
     handleSendMessage,
+    sendDirectWorkSubmission,
     handleRefresh,
   } = useRoomConversation({
     roomId: room?.id ?? null,
@@ -506,6 +507,7 @@ export default function DealRoomPage() {
             setEscrowOfferSource(null);
           }}
           onSendMessage={handleSendMessage}
+          onSubmitWork={sendDirectWorkSubmission}
           onCreateOffer={() => {
             // Offer editing starts from the active private chat and keeps
             // that exact peer as the encrypted Offer counterparty.

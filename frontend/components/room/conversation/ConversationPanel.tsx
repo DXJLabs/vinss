@@ -60,6 +60,11 @@ interface ConversationPanelProps {
   ) => void;
   onSendMessage:
     () => void | Promise<void>;
+  onSubmitWork: (input: {
+    custodyCommitment: string;
+    note: string;
+    file?: File | null;
+  }) => Promise<boolean>;
   onCreateOffer: () => void;
   onRefresh:
     () => void | Promise<void>;
@@ -100,6 +105,7 @@ export function ConversationPanel({
   onDraftChange,
   onMessageTargetChange,
   onSendMessage,
+  onSubmitWork,
   onCreateOffer,
   onRefresh,
   onAcceptOffer,
@@ -311,6 +317,9 @@ export function ConversationPanel({
           }
           onSendMessage={
             onSendMessage
+          }
+          onSubmitWork={
+            onSubmitWork
           }
           onCreateOffer={
             onCreateOffer

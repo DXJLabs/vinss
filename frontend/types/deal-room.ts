@@ -22,6 +22,23 @@ export interface MessageSenderIdentity {
   messagingPublicKey: string;
 }
 
+export interface WorkEvidence {
+  type: "work_submission";
+
+  // Links this submission to the funded Rekber without exposing it outside
+  // the encrypted Message payload.
+  custodyCommitment: string;
+
+  note: string;
+
+  // File bytes stay on user devices. Only the fingerprint and metadata are
+  // encrypted into the on-chain message ciphertext.
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileSha256?: string;
+}
+
 export interface MessagePayload {
   kind: MessageKind;
   scope?: MessageScope;
@@ -39,6 +56,7 @@ export interface MessagePayload {
   groupId?: string;
 
   attachmentUri?: string;
+  workEvidence?: WorkEvidence;
   sentAt: string; // ISO timestamp, part of the encrypted payload by choice —
   // block timestamp is already public, but an app-level timestamp lets the
   // UI show "sent at" without depending on indexer latency.

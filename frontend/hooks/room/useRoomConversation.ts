@@ -240,6 +240,8 @@ export function useRoomConversation({
     peerTyping:
       direct.peerTyping,
     handleSendMessage,
+    sendDirectWorkSubmission:
+      direct.sendDirectWorkSubmission,
     handleRefresh,
   };
 }

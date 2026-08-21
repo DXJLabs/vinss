@@ -27,7 +27,7 @@ import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
-import type { MessagePayload } from "@/types/deal-room";
+import type { MessagePayload, WorkEvidence } from "@/types/deal-room";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { humanizeError } from "@/lib/errors/uiError";
 import {
@@ -55,6 +55,11 @@ interface UseDirectConversationResult {
   chatEndRef: MutableRefObject<HTMLDivElement | null>;
   peerTyping: boolean;
   sendDirectMessage: () => Promise<void>;
+  sendDirectWorkSubmission: (input: {
+    custodyCommitment: string;
+    note: string;
+    file?: File | null;
+  }) => Promise<boolean>;
   refreshDirect: (silent?: boolean) => Promise<void>;
 }
 
@@ -80,6 +85,29 @@ function uniqueIdentities(
   }
 
   return result;
+}
+
+async function sha256FileHex(
+  file: File,
+): Promise<string> {
+  const digest =
+    await crypto.subtle.digest(
+      "SHA-256",
+      await file.arrayBuffer(),
+    );
+
+  return (
+    "0x" +
+    Array.from(
+      new Uint8Array(digest),
+    )
+      .map((value) =>
+        value
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
 }
 
 export function useDirectConversation({
@@ -321,6 +349,8 @@ export function useDirectConversation({
                 ?.address,
             recipientAddress:
               item.message.recipientAddress,
+            workEvidence:
+              item.message.workEvidence,
           }));
 
       setEntries((previous) => {
@@ -706,6 +736,286 @@ export function useDirectConversation({
           "Private message could not be sent.",
         ),
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendDirectWorkSubmission(
+    input: {
+      custodyCommitment: string;
+      note: string;
+      file?: File | null;
+    },
+  ): Promise<boolean> {
+    if (
+      !roomId ||
+      !session ||
+      !channelKey ||
+      !messagingIdentity ||
+      !selectedPeer
+    ) {
+      return false;
+    }
+
+    const note =
+      input.note.trim();
+
+    const file =
+      input.file ?? null;
+
+    if (!note && !file) {
+      setError(
+        "Add a work note or select a file first.",
+      );
+      return false;
+    }
+
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      setError(
+        "This private chat is not ready yet.",
+      );
+      return false;
+    }
+
+    let custodyCommitment: string;
+
+    try {
+      custodyCommitment =
+        `0x${BigInt(
+          input.custodyCommitment,
+        ).toString(16)}`;
+    } catch {
+      setError(
+        "The Rekber custody reference is invalid.",
+      );
+      return false;
+    }
+
+    const evidence:
+      WorkEvidence = {
+        type: "work_submission",
+        custodyCommitment,
+        note,
+      };
+
+    if (file) {
+      evidence.fileName =
+        file.name;
+      evidence.fileType =
+        file.type ||
+        "application/octet-stream";
+      evidence.fileSize =
+        file.size;
+      evidence.fileSha256 =
+        await sha256FileHex(
+          file,
+        );
+    }
+
+    const sentAt =
+      new Date().toISOString();
+
+    const route:
+      MessageRoute = {
+        recipientIdentity:
+          selectedPeer.address,
+        encryptionKey:
+          directKey,
+        routingKey:
+          directKey,
+      };
+
+    const payload:
+      MessagePayload = {
+        kind: file
+          ? "attachment_ref"
+          : "system_note",
+        scope: "direct",
+        body:
+          note ||
+          "Work submitted",
+        senderIdentity: {
+          address:
+            session.account.address,
+          messagingPublicKey:
+            messagingIdentity.publicKey,
+        },
+        recipientAddress:
+          selectedPeer.address,
+        workEvidence:
+          evidence,
+        sentAt,
+      };
+
+    let preparedLocator:
+      string | null = null;
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const sendPromise =
+        sendMessage(
+          session.account,
+          channelKey,
+          payload,
+          route,
+          (prepared) => {
+            preparedLocator =
+              prepared.actionLocator
+                .toString(16);
+
+            setEntries(
+              (previous) => {
+                const next:
+                  ConversationEntry[] = [
+                    ...previous.filter(
+                      (entry) =>
+                        entry.actionLocator !==
+                        preparedLocator,
+                    ),
+                    {
+                      id:
+                        `direct:${preparedLocator}`,
+                      kind:
+                        "message",
+                      summary:
+                        note ||
+                        "Work submitted",
+                      transactionHash:
+                        "",
+                      actionLocator:
+                        preparedLocator!,
+                      sentAt,
+                      scope:
+                        "direct",
+                      senderAddress:
+                        session.account.address,
+                      recipientAddress:
+                        selectedPeer.address,
+                      workEvidence:
+                        evidence,
+                    },
+                  ];
+
+                void persistHistory(
+                  next,
+                );
+
+                return next;
+              },
+            );
+          },
+        );
+
+      const result =
+        await Promise.race([
+          sendPromise,
+          new Promise<never>(
+            (_, reject) => {
+              window.setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      "VINSS_WORK_CALLBACK_TIMEOUT",
+                    ),
+                  ),
+                25_000,
+              );
+            },
+          ),
+        ]);
+
+      const confirmedLocator =
+        result.actionLocator
+          .toString(16);
+
+      setEntries(
+        (previous) =>
+          previous.map(
+            (entry) =>
+              entry.actionLocator ===
+              confirmedLocator
+                ? {
+                    ...entry,
+                    transactionHash:
+                      result.transactionHash,
+                  }
+                : entry,
+          ),
+      );
+
+      void refreshDirect(true);
+
+      return true;
+    } catch (err) {
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      const definitelyFailed =
+        /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
+          raw,
+        );
+
+      if (
+        definitelyFailed
+      ) {
+        if (
+          preparedLocator
+        ) {
+          setEntries(
+            (previous) =>
+              previous.filter(
+                (entry) =>
+                  entry.actionLocator !==
+                  preparedLocator,
+              ),
+          );
+        }
+
+        setError(
+          humanizeError(
+            err,
+            "Work submission could not be sent.",
+          ),
+        );
+
+        return false;
+      }
+
+      // Ready X can lose the browser callback after the encrypted message
+      // transaction is already submitted. Discovery reconciles the locator.
+      if (
+        preparedLocator
+      ) {
+        console.warn(
+          "[VINSS WORK SUBMISSION CALLBACK DELAYED]",
+          {
+            actionLocator:
+              preparedLocator,
+          },
+        );
+
+        setError(null);
+        void refreshDirect(true);
+
+        return true;
+      }
+
+      setError(
+        humanizeError(
+          err,
+          "Work submission could not be sent.",
+        ),
+      );
+
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1309,6 +1619,7 @@ export function useDirectConversation({
     chatEndRef,
     peerTyping,
     sendDirectMessage,
+    sendDirectWorkSubmission,
     refreshDirect,
   };
 }
