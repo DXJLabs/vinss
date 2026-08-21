@@ -278,11 +278,11 @@ export class DiscoveryStore {
     await this.pool.query(
       `
         UPDATE indexer_checkpoints
-        SET next_block = $4,
-            last_indexed_block = $5,
-            latest_observed_block = $6,
+        SET next_block = $4::bigint,
+            last_indexed_block = $5::bigint,
+            latest_observed_block = $6::bigint,
             status = CASE
-              WHEN $4 > $6 THEN 'caught_up'
+              WHEN $4::bigint > $6::bigint THEN 'caught_up'
               ELSE 'syncing'
             END,
             updated_at = NOW()
