@@ -395,7 +395,6 @@ export default function DealRoomPage() {
       <RoomHeader
         label={room?.label ?? "Deal Room"}
         roomId={params.roomId}
-        participantCount={participants.length}
       />
 
       {!room && (

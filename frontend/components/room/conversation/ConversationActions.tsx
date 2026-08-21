@@ -30,7 +30,7 @@ export function ConversationActions({
     "flex h-9 shrink-0 snap-start items-center gap-2 rounded-lg bg-vault/45 px-3 text-[10px] font-medium text-paper/58 transition hover:bg-vault/70 hover:text-signal disabled:cursor-not-allowed disabled:opacity-30";
 
   return (
-    <section className="bg-vault/[0.04] px-3 py-2">
+    <section className="border-x border-wire/60 bg-vault/[0.04] px-3 py-2">
       <button
         type="button"
         onClick={() =>

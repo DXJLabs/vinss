@@ -959,7 +959,7 @@ export function DirectConversationPanel({
         }
       />
 
-      <div className="bg-vault/12 p-2">
+      <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
         {showWorkComposer &&
           canSubmitWork &&
           fundedFreelanceEntry

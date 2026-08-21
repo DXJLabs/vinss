@@ -137,21 +137,6 @@ export function ConversationPanel({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onRefresh()
-              }
-              disabled={
-                !connected ||
-                busy
-              }
-              className="rounded-lg bg-black/15 px-3 py-2 text-[10px] text-paper/38 ring-1 ring-wire/60 transition hover:text-signal hover:ring-signal/25 disabled:opacity-30"
-            >
-              {busy
-                ? "Syncing…"
-                : "Sync"}
-            </button>
           </div>
         </div>
       )}
