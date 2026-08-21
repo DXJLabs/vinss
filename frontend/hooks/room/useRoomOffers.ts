@@ -571,8 +571,10 @@ export function useRoomOffers({
     try {
       await action();
 
-      // Refresh silently after local insertion to reconcile with on-chain data.
-      await handleOfferRefresh(true);
+      // Local confirmed state is already inserted. Reconcile ciphertext
+      // discovery in the background so backend/indexer latency does not keep
+      // the user-facing wallet action stuck in a loading state.
+      void handleOfferRefresh(true);
 
       return true;
     } catch (err) {
@@ -1020,13 +1022,33 @@ export function useRoomOffers({
             new Date().toISOString(),
         };
 
-        const result =
-          await prepareEscrowFromOffer(
+        // Ready X can execute successfully on-chain while its in-page
+        // callback later rejects with "Timeout". For prepare_escrow we do not
+        // make that callback the source of truth: once the exact prepared
+        // locator is known, race the wallet callback against ciphertext
+        // discovery of that same locator.
+        let preparedLocator!: bigint;
+        let preparedCommitment!: bigint;
+        let signalPrepared:
+          (() => void) | null = null;
+
+        const preparedReady =
+          new Promise<void>((resolve) => {
+            signalPrepared = resolve;
+          });
+
+        const walletPromise =
+          prepareEscrowFromOffer(
             session.account,
             channelKey,
             action,
             route,
             (prepared) => {
+              preparedLocator =
+                prepared.actionLocator;
+              preparedCommitment =
+                prepared.payloadCommitment;
+
               appendPreparedOffer(
                 prepared.actionLocator,
                 {
@@ -1035,8 +1057,205 @@ export function useRoomOffers({
                     "prepare_escrow",
                 },
               );
+
+              signalPrepared?.();
             },
           );
+
+        await preparedReady;
+
+        const locator =
+          preparedLocator;
+        const commitment =
+          preparedCommitment;
+        const locatorKey =
+          stripLocator(
+            locator.toString(16),
+          );
+
+        let stopDiscovery = false;
+
+        const confirmationPromise =
+          (async () => {
+            const deadline =
+              Date.now() + 45_000;
+
+            while (
+              !stopDiscovery &&
+              Date.now() < deadline
+            ) {
+              try {
+                const discovered =
+                  await discoverOfferActions(
+                    BACKEND_URL,
+                    channelKey,
+                    route,
+                  );
+
+                const match =
+                  discovered.find(
+                    (item) =>
+                      stripLocator(
+                        item.actionLocator,
+                      ) === locatorKey,
+                  );
+
+                if (match) {
+                  return match;
+                }
+              } catch {
+                // Indexer/backend may be briefly behind the chain.
+              }
+
+              await new Promise<void>(
+                (resolve) =>
+                  window.setTimeout(
+                    resolve,
+                    1500,
+                  ),
+              );
+            }
+
+            return null;
+          })();
+
+        const walletOutcome =
+          walletPromise
+            .then((result) => ({
+              kind: "wallet" as const,
+              result,
+            }))
+            .catch((error) => ({
+              kind: "wallet_error" as const,
+              error,
+            }));
+
+        const first =
+          await Promise.race([
+            walletOutcome,
+            confirmationPromise.then(
+              (match) => ({
+                kind:
+                  "discovery" as const,
+                match,
+              }),
+            ),
+          ]);
+
+        if (
+          first.kind === "wallet"
+        ) {
+          stopDiscovery = true;
+
+          appendLocalOffer(
+            first.result,
+            {
+              ...action,
+              kind:
+                "prepare_escrow",
+            },
+          );
+
+          return;
+        }
+
+        if (
+          first.kind === "discovery" &&
+          first.match
+        ) {
+          stopDiscovery = true;
+
+          void walletPromise.catch(
+            (err) => {
+              const raw =
+                err instanceof Error
+                  ? err.message
+                  : String(err);
+
+              if (
+                !/(?:timeout|timed out)/i.test(
+                  raw,
+                )
+              ) {
+                console.error(
+                  "[VINSS OFFER PREPARE_ESCROW LATE WALLET ERROR]",
+                  err,
+                );
+              }
+            },
+          );
+
+          appendLocalOffer(
+            {
+              transactionHash:
+                first.match
+                  .transactionHash,
+              actionLocator:
+                locator,
+              payloadCommitment:
+                commitment,
+            },
+            {
+              ...action,
+              kind:
+                "prepare_escrow",
+            },
+          );
+
+          return;
+        }
+
+        if (
+          first.kind ===
+          "wallet_error"
+        ) {
+          const raw =
+            first.error instanceof Error
+              ? first.error.message
+              : String(first.error);
+
+          if (
+            !/(?:timeout|timed out)/i.test(
+              raw,
+            )
+          ) {
+            stopDiscovery = true;
+            throw first.error;
+          }
+
+          const confirmed =
+            await confirmationPromise;
+
+          stopDiscovery = true;
+
+          if (confirmed) {
+            appendLocalOffer(
+              {
+                transactionHash:
+                  confirmed
+                    .transactionHash,
+                actionLocator:
+                  locator,
+                payloadCommitment:
+                  commitment,
+              },
+              {
+                ...action,
+                kind:
+                  "prepare_escrow",
+              },
+            );
+
+            return;
+          }
+
+          throw first.error;
+        }
+
+        const result =
+          await walletPromise;
+
+        stopDiscovery = true;
 
         appendLocalOffer(
           result,

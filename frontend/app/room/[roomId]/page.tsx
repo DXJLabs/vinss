@@ -113,7 +113,6 @@ export default function DealRoomPage() {
     counterDirectOffer,
     acceptDirectOffer,
     rejectDirectOffer,
-    prepareEscrowDirectOffer,
     markOfferRead,
     handleOfferRefresh,
   } = useRoomOffers({
@@ -122,7 +121,10 @@ export default function DealRoomPage() {
     channelKey,
     participants,
     selfRoutingIdentities,
-    active: tab === "timeline" || tab === "offer",
+    active:
+      tab === "timeline" ||
+      tab === "offer" ||
+      tab === "escrow",
     setBusy,
     setError,
   });
@@ -130,6 +132,7 @@ export default function DealRoomPage() {
   const {
     escrowActions,
     sendDirectEscrowCoordination,
+    startDirectRekber,
   } = useRoomEscrow({
     roomId: room?.id ?? null,
     session,
@@ -563,9 +566,9 @@ export default function DealRoomPage() {
           busy={busy}
           agentDraft={agentEscrowDraft}
           acceptedOffer={escrowOfferSource}
+          offerEntries={offerEntries}
           escrowActions={escrowActions}
-          onPrepareAcceptedOffer={prepareEscrowDirectOffer}
-          onCreateCoordination={sendDirectEscrowCoordination}
+          onStartRekber={startDirectRekber}
         />
       )}
 

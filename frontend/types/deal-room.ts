@@ -85,6 +85,11 @@ export interface OfferActionPayload {
   conditions?: string;
   expiresAt?: string;
   reason?: string;
+
+  // Rekber setup commitment. This stays inside encrypted Offer ciphertext.
+  // It lets prepare_escrow establish PAYMENT READY without invoking a
+  // second privacy helper in the same STRK20 transaction.
+  custodyCommitment?: string;
 }
 
 export type EscrowActionKind =
