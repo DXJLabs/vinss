@@ -89,6 +89,15 @@ function uniqueOfferRoutingIdentities(
 
 // Produce a compact Agent/UI summary without leaking it outside local state.
 function summarizeOffer(action: OfferActionPayload): string {
+  if (action.kind === "prepare_escrow") {
+    const deal =
+      action.dealType
+        ?.replace(/_/g, " ") ??
+      "deal";
+
+    return `Rekber ready — ${deal} · ${action.amount} ${action.asset}`;
+  }
+
   const verb =
     action.kind === "counter"
       ? "Counter offer"

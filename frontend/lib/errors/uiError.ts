@@ -24,6 +24,14 @@ export function humanizeError(err: unknown, fallback: string): string {
     return "The wallet blocked this action to protect your privacy.";
   }
 
+  if (/ESCROW_WALLET_STILL_PREPARING/i.test(raw)) {
+    return "Ready X is still preparing this payment. Finish or cancel the wallet request before trying again.";
+  }
+
+  if (/ESCROW_DEPOSIT_NOT_CONFIRMED/i.test(raw)) {
+    return "The payment is not confirmed on-chain yet. Do not submit it again until its status is checked.";
+  }
+
   if (/INVALID_REQUEST_PAYLOAD/i.test(raw)) {
     return "The private wallet could not process this action. Please try again.";
   }

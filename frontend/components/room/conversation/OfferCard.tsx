@@ -9,6 +9,7 @@ interface OfferCardProps {
   walletAddress?: string;
   busy: boolean;
   actionable: boolean;
+  rekberStarted?: boolean;
   onAccept: (
     entry: ConversationEntry,
   ) => Promise<boolean>;
@@ -86,6 +87,7 @@ export function OfferCard({
   walletAddress,
   busy,
   actionable,
+  rekberStarted = false,
   onAccept,
   onReject,
   onCounter,
@@ -344,7 +346,9 @@ export function OfferCard({
         {accepted && (
           <div className="mt-3 border-t border-signal/15 pt-2.5">
             <p className="text-[10px] text-signal/65">
-              Agreement confirmed · Escrow next
+              {rekberStarted
+                ? "✓ Rekber started from this agreement"
+                : "Agreement confirmed · Rekber next"}
             </p>
 
             {onOpenEscrow && (
@@ -356,7 +360,9 @@ export function OfferCard({
                 disabled={busy}
                 className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
               >
-                Continue to Escrow →
+                {rekberStarted
+                  ? "Open Rekber →"
+                  : "Start Rekber →"}
               </button>
             )}
           </div>

@@ -8,6 +8,7 @@ import {
   computeReleaseCommitment,
   computeRefundCommitment,
   depositEscrow,
+  escrowCustodyExists,
   parseSettlementAmount,
   resolveSettlementAsset,
 } from "@/lib/deal-room/escrow";
@@ -97,6 +98,10 @@ export function EscrowPanel({
     releaseSecret: bigint;
     refundSecret: bigint;
   } | null>(null);
+  const [
+    paymentSecured,
+    setPaymentSecured,
+  ] = useState(false);
 
   useEffect(() => {
     const acceptedAction =
@@ -130,6 +135,7 @@ export function EscrowPanel({
     // Loading a different accepted deal starts a fresh local coordination view.
     setAgreedCustodyCommitment(null);
     setLastSecrets(null);
+    setPaymentSecured(false);
   }, [acceptedOffer?.actionLocator]);
 
   useEffect(() => {
@@ -241,6 +247,56 @@ export function EscrowPanel({
     escrowActions,
   ]);
 
+  // Rekber custody is public contract state.
+  // Recover the funded state after reload and synchronize it across wallets.
+  useEffect(() => {
+    if (
+      !agreedCustodyCommitment ||
+      paymentSecured
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const check = async () => {
+      try {
+        const exists =
+          await escrowCustodyExists(
+            agreedCustodyCommitment,
+          );
+
+        if (
+          !cancelled &&
+          exists
+        ) {
+          setPaymentSecured(true);
+        }
+      } catch (err) {
+        console.debug(
+          "[VINSS ESCROW STATUS CHECK]",
+          err,
+        );
+      }
+    };
+
+    void check();
+
+    const timer =
+      window.setInterval(
+        () => void check(),
+        5000,
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    agreedCustodyCommitment,
+    paymentSecured,
+  ]);
+
   async function handleCreateCoordination() {
     const acceptedAction =
       acceptedOffer?.offerAction;
@@ -313,6 +369,7 @@ export function EscrowPanel({
     if (
       !session ||
       !agreedCustodyCommitment ||
+      paymentSecured ||
       !acceptedAction ||
       acceptedAction.kind !== "accept"
     ) {
@@ -368,7 +425,11 @@ export function EscrowPanel({
         amount: principal,
       });
 
-      setLastSecrets({ custodyCommitment, ...secrets });
+      setLastSecrets({
+        custodyCommitment,
+        ...secrets,
+      });
+      setPaymentSecured(true);
 
       onSent({
         id: crypto.randomUUID(),
@@ -380,7 +441,16 @@ export function EscrowPanel({
         sentAt: new Date().toISOString(),
       });
     } catch (err) {
-      setError(humanizeError(err, "We couldn't fund the escrow. Please try again."));
+      console.error(
+        "[VINSS ESCROW DEPOSIT FAILED]",
+        err,
+      );
+      setError(
+        humanizeError(
+          err,
+          "We couldn't fund the escrow. Please try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -407,6 +477,7 @@ export function EscrowPanel({
   const canDeposit =
     Boolean(session) &&
     !busy &&
+    !paymentSecured &&
     Boolean(
       agreedCustodyCommitment,
     ) &&
@@ -499,7 +570,7 @@ export function EscrowPanel({
                   )}
                 </button>
               </div>
-            ) : !lastSecrets ? (
+            ) : !paymentSecured ? (
               <>
                 <div>
                   <div className="mb-2 flex items-center justify-between">
@@ -553,7 +624,7 @@ export function EscrowPanel({
                   disabled={!canDeposit}
                   className="w-full border border-amber px-4 py-3 font-display text-xs uppercase tracking-widest text-amber transition-colors hover:bg-amber hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
                 >
-                  {busy ? "Securing payment…" : `Secure ${acceptedAction.amount} ${acceptedAction.asset}`}
+                  {busy ? "Waiting for Ready X…" : `Secure ${acceptedAction.amount} ${acceptedAction.asset}`}
                 </button>
               </>
             ) : (

@@ -116,6 +116,26 @@ export function DirectConversationPanel({
         new Date(right.sentAt).getTime(),
     );
 
+  const preparedAgreementLocators =
+    new Set(
+      pairEntries
+        .filter(
+          (entry) =>
+            entry.offerAction?.kind ===
+              "prepare_escrow" &&
+            Boolean(
+              entry.offerAction
+                .parentOfferLocator,
+            ),
+        )
+        .map((entry) =>
+          entry.offerAction!
+            .parentOfferLocator!
+            .replace(/^0x/, "")
+            .toLowerCase(),
+        ),
+    );
+
   const supersededOfferLocators =
     new Set(
       pairEntries
@@ -235,6 +255,65 @@ export function DirectConversationPanel({
                 );
               }
 
+              if (
+                entry.offerAction?.kind ===
+                  "prepare_escrow"
+              ) {
+                const ownAction =
+                  sameStarknetAddress(
+                    entry.offerAction
+                      .senderAddress,
+                    walletAddress,
+                  );
+
+                return (
+                  <li
+                    key={`rekber:${entry.actionLocator}`}
+                    className="flex justify-center py-1"
+                  >
+                    <div className="w-[92%] max-w-sm border border-signal/20 bg-signal/[0.04] px-3.5 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full border border-signal/30 text-[8px] text-signal">
+                          ✓
+                        </span>
+
+                        <span className="font-display text-[8px] uppercase tracking-[0.14em] text-signal/75">
+                          Rekber ready
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-[11px] text-paper/55">
+                        {entry.offerAction.dealType
+                          ?.replace(/_/g, " ") ??
+                          "Deal"}
+                        {" · "}
+                        {entry.offerAction.amount}
+                        {" "}
+                        {entry.offerAction.asset}
+                      </p>
+
+                      <p className="mt-1 text-[9px] text-paper/30">
+                        Started from the agreement above
+                        {" · "}
+                        Payment ready
+                      </p>
+
+                      {entry.transactionHash && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProofEntry(entry)
+                          }
+                          className="mt-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/55 transition hover:text-signal"
+                        >
+                          Proof ↗
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              }
+
               const actionable =
                 Boolean(
                   entry.offerAction &&
@@ -267,6 +346,15 @@ export function DirectConversationPanel({
                     busy={busy}
                     actionable={
                       actionable
+                    }
+                    rekberStarted={
+                      entry.offerAction
+                        ?.kind === "accept" &&
+                      preparedAgreementLocators.has(
+                        entry.actionLocator
+                          .replace(/^0x/, "")
+                          .toLowerCase(),
+                      )
                     }
                     onAccept={
                       onAcceptOffer
