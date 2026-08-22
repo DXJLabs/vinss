@@ -1,7 +1,7 @@
 name: Deploy VINSS Contract - Sepolia
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   workflow_dispatch:
@@ -16,6 +16,17 @@ on:
           - VinssOfferHelper
           - VinssPrivateEscrowHelper
           - VinssEscrowRekber
+          - VinssEscrowRekberV2
+          - VinssSettlementCertificate
+      escrow_rekber_v2_address:
+        description: "Required only when deploying VinssSettlementCertificate"
+        required: false
+        type: string
+      certificate_base_uri:
+        description: "Public certificate metadata base URI"
+        required: false
+        default: "https://vinss-nu.vercel.app/api/certificates/"
+        type: string
 
 jobs:
   deploy:
@@ -59,6 +70,8 @@ jobs:
         continue-on-error: true
         env:
           CONTRACT_NAME: ${{ inputs.contract }}
+          ESCROW_REKBER_V2_ADDRESS: ${{ inputs.escrow_rekber_v2_address }}
+          CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
         run: |
           set -e
 
@@ -108,13 +121,31 @@ jobs:
 
           echo "class_hash=$CLASS_HASH" >> "$GITHUB_OUTPUT"
 
-          if [ "$CONTRACT_NAME" = "VinssMessageHelper" ] || \
-             [ "$CONTRACT_NAME" = "VinssOfferHelper" ] || \
-             [ "$CONTRACT_NAME" = "VinssInvite" ]; then
-            DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
-          else
-            DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
-          fi
+          case "$CONTRACT_NAME" in
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
+              ;;
+            VinssPrivateEscrowHelper|VinssEscrowRekber|VinssEscrowRekberV2)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
+              ;;
+            VinssSettlementCertificate)
+              if ! [[ "$ESCROW_REKBER_V2_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "A valid escrow_rekber_v2_address is required for the certificate contract"
+                exit 1
+              fi
+
+              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
+                echo "certificate_base_uri must be an HTTPS URL ending with /"
+                exit 1
+              fi
+
+              DEPLOY_ARGS="$ESCROW_REKBER_V2_ADDRESS, \"$CERTIFICATE_BASE_URI\""
+              ;;
+            *)
+              echo "Unsupported contract: $CONTRACT_NAME"
+              exit 1
+              ;;
+          esac
 
           echo "=== DEPLOY $CONTRACT_NAME ==="
 
@@ -186,73 +217,6 @@ jobs:
           name: vinss-${{ inputs.contract }}-deployment-report
           path: contracts/deploy-report.md
           retention-days: 30
-
-      - name: Update permanent deployment history
-        if: always() && github.ref == 'refs/heads/main'
-        working-directory: ${{ github.workspace }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git pull --rebase origin main
-
-          mkdir -p reports
-
-          if [ ! -f reports/DEPLOYMENTS.md ]; then
-            printf '%s\n' \
-              '# VINSS Sepolia Deployment History' \
-              '' \
-              '| Date | Contract | Status | Class Hash | Contract | Transaction | Commit | Run |' \
-              '|---|---|---|---|---|---|---|---|' \
-              > reports/DEPLOYMENTS.md
-          fi
-
-          BUILD="${{ steps.build.outcome }}"
-          DEPLOY="${{ steps.deploy.outcome }}"
-          CLASS_HASH="${{ steps.deploy.outputs.class_hash }}"
-          ADDRESS="${{ steps.deploy.outputs.contract_address }}"
-          TX_HASH="${{ steps.deploy.outputs.transaction_hash }}"
-          CONTRACT_NAME="${{ inputs.contract }}"
-
-          if [ "$BUILD" = "success" ] && [ "$DEPLOY" = "success" ]; then
-            STATUS="✅ DEPLOYED"
-          else
-            STATUS="❌ FAILED"
-          fi
-
-          DATE="$(TZ=Asia/Makassar date '+%Y-%m-%d %H:%M WITA')"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          VOYAGER="https://sepolia.voyager.online"
-
-          CLASS_CELL="-"
-          CONTRACT_CELL="-"
-          TX_CELL="-"
-
-          [ -n "$CLASS_HASH" ] && CLASS_CELL="\`$CLASS_HASH\`"
-          [ -n "$ADDRESS" ] && CONTRACT_CELL="[Voyager]($VOYAGER/contract/$ADDRESS)"
-          [ -n "$TX_HASH" ] && TX_CELL="[Voyager]($VOYAGER/tx/$TX_HASH)"
-
-          if ! grep -q "| ${GITHUB_RUN_ID} |" reports/DEPLOYMENTS.md 2>/dev/null; then
-            printf '| %s | %s | %s | %s | %s | %s | `%s` | [Run](%s) <!-- | %s | -->\n' \
-              "$DATE" \
-              "$CONTRACT_NAME" \
-              "$STATUS" \
-              "$CLASS_CELL" \
-              "$CONTRACT_CELL" \
-              "$TX_CELL" \
-              "$SHORT_SHA" \
-              "$RUN_URL" \
-              "$GITHUB_RUN_ID" \
-              >> reports/DEPLOYMENTS.md
-          fi
-
-          git add reports/DEPLOYMENTS.md
-
-          git diff --cached --quiet || \
-            git commit -m "docs: update deployment report"
-
-          git push origin HEAD:main
 
       - name: Fail workflow when deployment fails
         if: always() && (steps.build.outcome != 'success' || steps.deploy.outcome != 'success')

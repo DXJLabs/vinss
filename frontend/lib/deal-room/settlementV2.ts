@@ -81,17 +81,23 @@ export interface SettlementCertificateRecord {
 }
 
 function randomFelt(): bigint {
-  const bytes = crypto.getRandomValues(
-    new Uint8Array(31),
-  );
+  let value = 0n;
 
-  return BigInt(
-    `0x${Array.from(bytes)
-      .map((byte) =>
-        byte.toString(16).padStart(2, "0"),
-      )
-      .join("")}`,
-  );
+  while (value === 0n) {
+    const bytes = crypto.getRandomValues(
+      new Uint8Array(31),
+    );
+
+    value = BigInt(
+      `0x${Array.from(bytes)
+        .map((byte) =>
+          byte.toString(16).padStart(2, "0"),
+        )
+        .join("")}`,
+    );
+  }
+
+  return value;
 }
 
 function poseidon(
@@ -289,6 +295,13 @@ async function invokeSettlement(
   account: WalletAccountV6,
   payload: string[],
 ): Promise<{ transactionHash: string }> {
+  // openNoteIds placeholders only exist for transfer actions whose amount is
+  // "OPEN". Release/refund contain no such transfer, so generate the private
+  // output note ID locally, as the proven V1 settlement path does.
+  const calldata = [
+    ...payload,
+    toFelt(randomFelt()),
+  ];
   const response =
     await account.strk20InvokeTransaction([
       {
@@ -296,9 +309,8 @@ async function invokeSettlement(
         contract:
           requireRekberV2Address(),
         calldata: [
-          toFelt(payload.length + 1),
-          ...payload,
-          "${openNoteIds[0]}",
+          toFelt(calldata.length),
+          ...calldata,
         ],
       },
     ]);

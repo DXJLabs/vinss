@@ -7,6 +7,7 @@ const WalletConnectModal = dynamic(
   { ssr: false },
 );
 import { useWallet } from "@/components/providers/WalletProvider";
+import { refreshInjectedWallets } from "@/lib/starknet/walletStore";
 
 export function WalletConnectButton({
   showCapability = true,
@@ -22,7 +23,11 @@ export function WalletConnectButton({
     : "NOT CONNECTED";
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div
+      className="flex flex-col items-end gap-1.5"
+      onFocusCapture={refreshInjectedWallets}
+      onPointerDown={refreshInjectedWallets}
+    >
       <WalletConnectModal
         buttonClassName="
           border border-signal/60

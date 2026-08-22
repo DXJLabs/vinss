@@ -725,6 +725,7 @@ export function useRoomEscrow({
     const prepareAction:
       OfferActionPayload = {
         kind: "prepare_escrow",
+        rekberVersion: 2,
         dealType:
           accepted.dealType,
         rootOfferLocator:

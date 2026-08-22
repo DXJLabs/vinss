@@ -107,6 +107,7 @@ export interface OfferActionPayload {
   // Rekber setup commitment. This stays inside encrypted Offer ciphertext.
   // It lets prepare_escrow establish PAYMENT READY without invoking a
   // second privacy helper in the same STRK20 transaction.
+  rekberVersion?: 2;
   custodyCommitment?: string;
 }
 

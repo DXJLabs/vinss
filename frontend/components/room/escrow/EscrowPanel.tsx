@@ -230,12 +230,69 @@ export function EscrowPanel({
     acceptedOffer?.actionLocator ??
     "";
 
+  const preparedV2 = useMemo(
+    () =>
+      [...offerEntries]
+        .reverse()
+        .find((entry) => {
+          const action = entry.offerAction;
+
+          return (
+            action?.kind === "prepare_escrow" &&
+            action.rekberVersion === 2 &&
+            Boolean(action.custodyCommitment) &&
+            canonicalLocator(
+              action.parentOfferLocator,
+            ) ===
+              canonicalLocator(
+                acceptedOffer?.actionLocator,
+              )
+          );
+        }) ?? null,
+    [
+      acceptedOffer?.actionLocator,
+      offerEntries,
+    ],
+  );
+
+  const legacyPrepared = useMemo(
+    () =>
+      [...offerEntries]
+        .reverse()
+        .find((entry) => {
+          const action = entry.offerAction;
+
+          return (
+            action?.kind === "prepare_escrow" &&
+            action.rekberVersion !== 2 &&
+            Boolean(action.custodyCommitment) &&
+            canonicalLocator(
+              action.parentOfferLocator,
+            ) ===
+              canonicalLocator(
+                acceptedOffer?.actionLocator,
+              )
+          );
+        }) ?? null,
+    [
+      acceptedOffer?.actionLocator,
+      offerEntries,
+    ],
+  );
+
   const discoveredCreate = useMemo(
     () =>
       [...escrowActions]
         .reverse()
         .find((item) => {
           if (item.action.kind !== "create") {
+            return false;
+          }
+
+          if (
+            item.action.coordinationVersion !==
+            REKBER_COORDINATION_VERSION
+          ) {
             return false;
           }
 
@@ -270,6 +327,11 @@ export function EscrowPanel({
     localCreate ?? discoveredCreate;
   const createAction =
     createRecord?.action ?? null;
+  const legacyDeal = Boolean(
+    legacyPrepared &&
+      !preparedV2 &&
+      !createAction,
+  );
 
   const discoveredAccept = useMemo(
     () =>
@@ -279,6 +341,8 @@ export function EscrowPanel({
           (item) =>
             item.action.kind ===
               "accept" &&
+            item.action.coordinationVersion ===
+              REKBER_COORDINATION_VERSION &&
             hasCustody(
               item.action,
               custodyCommitment,
@@ -303,6 +367,8 @@ export function EscrowPanel({
           (item) =>
             item.action.kind ===
               "resolve" &&
+            item.action.coordinationVersion ===
+              REKBER_COORDINATION_VERSION &&
             hasCustody(
               item.action,
               custodyCommitment,
@@ -596,30 +662,8 @@ export function EscrowPanel({
       return;
     }
 
-    const acceptedLocator =
-      canonicalLocator(
-        acceptedOffer.actionLocator,
-      );
-    const prepared =
-      [...offerEntries]
-        .reverse()
-        .find((entry) => {
-          const action =
-            entry.offerAction;
-
-          return (
-            action?.kind ===
-              "prepare_escrow" &&
-            Boolean(
-              action.custodyCommitment,
-            ) &&
-            canonicalLocator(
-              action.parentOfferLocator,
-            ) === acceptedLocator
-          );
-        });
     const fromPrepared = toBigInt(
-      prepared?.offerAction
+      preparedV2?.offerAction
         ?.custodyCommitment,
     );
     const fromCreate = toBigInt(
@@ -634,7 +678,7 @@ export function EscrowPanel({
     }
   }, [
     acceptedOffer?.actionLocator,
-    offerEntries,
+    preparedV2,
     discoveredCreate?.actionLocator,
   ]);
 
@@ -819,6 +863,7 @@ export function EscrowPanel({
       !acceptedOffer ||
       !accepted ||
       !peerAddress ||
+      legacyDeal ||
       createAction
     ) {
       return;
@@ -1296,6 +1341,8 @@ export function EscrowPanel({
     try {
       const payload: EscrowActionPayload = {
         kind: "resolve",
+        coordinationVersion:
+          REKBER_COORDINATION_VERSION,
         dealOfferLocator,
         custodyCommitment:
           custodyCommitment.toString(),
@@ -1642,7 +1689,18 @@ export function EscrowPanel({
           </div>
         )}
 
-        {accepted && !v2Configured && (
+        {accepted && legacyDeal && (
+          <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
+            <p className="text-xs font-medium text-amber">
+              Existing Rekber V1 deal
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
+              This agreement may already hold funds in the legacy Rekber contract. It cannot be migrated into V2. Do not fund it again; create a new Offer when testing V2 settlement.
+            </p>
+          </div>
+        )}
+
+        {accepted && !legacyDeal && !v2Configured && (
           <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
             <p className="text-xs font-medium text-amber">
               Secure settlement is not deployed on this network
@@ -1680,7 +1738,7 @@ export function EscrowPanel({
           </div>
         )}
 
-        {accepted && v2Configured && !createAction && (
+        {accepted && !legacyDeal && v2Configured && !createAction && (
           <div className="space-y-3">
             <div className="rounded-xl bg-signal/[0.045] p-4">
               <p className="text-sm font-medium text-paper/75">
