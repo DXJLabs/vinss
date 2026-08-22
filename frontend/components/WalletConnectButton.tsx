@@ -8,7 +8,11 @@ const WalletConnectModal = dynamic(
 );
 import { useWallet } from "@/components/providers/WalletProvider";
 
-export function WalletConnectButton() {
+export function WalletConnectButton({
+  showCapability = true,
+}: {
+  showCapability?: boolean;
+}) {
   const { session, connected } = useWallet();
 
   const capability = connected
@@ -21,7 +25,6 @@ export function WalletConnectButton() {
     <div className="flex flex-col items-end gap-1.5">
       <WalletConnectModal
         buttonClassName="
-          rounded-md
           border border-signal/60
           bg-signal/5
           px-3 py-1.5
@@ -37,7 +40,7 @@ export function WalletConnectButton() {
         "
       />
 
-      {connected && (
+      {connected && showCapability && (
         <div className="flex items-center gap-1.5 pr-1 text-[9px] font-mono uppercase tracking-wider text-paper/45">
           <span className="h-1.5 w-1.5 rounded-full bg-signal shadow-[0_0_5px_#10b981]" />
           <span>{capability}</span>
