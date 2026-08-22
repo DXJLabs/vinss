@@ -656,13 +656,13 @@ export default function DealRoomPage() {
 
       {!showAccessDetails &&
         tab === "escrow" && (
-          <div
-            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add Escrow"
-          >
-            <section className="absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:inset-x-auto sm:top-auto sm:right-5 sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
+          <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]">
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add Escrow"
+              className="absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
+            >
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/75">

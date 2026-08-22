@@ -524,15 +524,21 @@ export function EscrowPanel({
             type="button"
             onClick={() => setShowInfo(true)}
             aria-label="What is VINSS Escrow Rekber?"
-            className="flex h-5 w-5 items-center justify-center rounded-full border border-wire text-[10px] text-paper/45 transition-colors hover:border-signal hover:text-signal"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-wire/80 text-[8px] leading-none text-paper/40 transition-colors hover:border-signal hover:text-signal"
           >
             i
           </button>
         </div>
 
-        <h3 className="mt-2 text-lg text-paper">Secure this deal</h3>
+        <h3 className="mt-2 text-lg text-paper">
+          {paymentSecured
+            ? "Payment secured"
+            : "Secure this deal"}
+        </h3>
         <p className="mt-1 text-xs leading-relaxed text-paper/35">
-          The accepted payment is locked until the deal is settled.
+          {paymentSecured
+            ? "Funds are safely locked in VINSS Rekber."
+            : "Secure the accepted payment until the deal is settled."}
         </p>
       </div>
 
@@ -546,23 +552,18 @@ export function EscrowPanel({
           </div>
         ) : (
           <>
-            <div className="border border-wire bg-paper/[0.025] p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-signal">
-                    Agreement confirmed ✓
-                  </p>
-                  <p className="mt-2 text-xs uppercase tracking-wider text-paper/35">
-                    {acceptedAction.dealType ?? "Deal"}
-                  </p>
-                  <p className="mt-1 text-2xl text-paper">
-                    {acceptedAction.amount} {acceptedAction.asset}
-                  </p>
-                </div>
-                <span className="border border-signal/40 px-2 py-1 text-[9px] uppercase tracking-widest text-signal">
-                  Accepted
+            <div className="flex items-center justify-between gap-3 px-1 py-1">
+              <p className="min-w-0 truncate text-xs text-paper/40">
+                <span className="capitalize">
+                  {acceptedAction.dealType ?? "Deal"}
                 </span>
-              </div>
+                {" · "}
+                Accepted agreement
+              </p>
+
+              <span className="shrink-0 text-[10px] text-signal/65">
+                ✓ Confirmed
+              </span>
             </div>
 
             {!agreedCustodyCommitment ? (
@@ -652,21 +653,28 @@ export function EscrowPanel({
                 </button>
               </>
             ) : (
-              <div className="border border-signal/40 bg-signal/[0.025] p-4">
-                <p className="font-display text-xs uppercase tracking-widest text-signal">
-                  Payment secured ✓
-                </p>
-                <p className="mt-3 text-xl text-paper">
-                  {acceptedAction.amount} {acceptedAction.asset}
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-paper/40">
-                  The payment is locked in VINSS Escrow Rekber.
-                </p>
+              <div className="bg-signal/[0.025] px-4 py-5 ring-1 ring-signal/25">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-3xl font-light tracking-tight text-paper">
+                      {acceptedAction.amount} {acceptedAction.asset}
+                    </p>
+
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[11px] text-signal">
+                        ✓
+                      </span>
+                      <span className="text-xs text-paper/45">
+                        Funds locked in VINSS Rekber
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
                 {paymentProofTx && (
-                  <div className="mt-3 flex items-center justify-between border-t border-signal/15 pt-3">
-                    <span className="text-[10px] text-paper/35">
-                      Recorded on Starknet
+                  <div className="mt-4 flex items-center justify-between border-t border-signal/10 pt-3">
+                    <span className="text-[10px] text-paper/30">
+                      Starknet
                     </span>
 
                     <a
@@ -675,18 +683,24 @@ export function EscrowPanel({
                       )}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-display text-[9px] uppercase tracking-widest text-signal"
+                      className="font-display text-[9px] uppercase tracking-widest text-signal/80"
                     >
-                      Proof ↗
+                      Funding proof ↗
                     </a>
                   </div>
                 )}
               </div>
             )}
 
-            <details className="border-t border-wire pt-4">
-              <summary className="cursor-pointer list-none text-[10px] uppercase tracking-widest text-paper/25 hover:text-paper/45">
-                Technical details
+            <details className="group border-t border-wire/60 pt-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[9px] uppercase tracking-widest text-paper/25 hover:text-paper/45 [&::-webkit-details-marker]:hidden">
+                <span>Technical details</span>
+                <span
+                  aria-hidden="true"
+                  className="text-[8px] transition group-open:rotate-180"
+                >
+                  ▾
+                </span>
               </summary>
               <div className="mt-3 space-y-2 text-[10px] leading-relaxed text-paper/30">
                 <p className="break-all">
@@ -726,13 +740,13 @@ export function EscrowPanel({
       </div>
 
       {showInfo && (
-        <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-ink/85 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="rekber-info-title"
-        >
-          <div className="w-full max-w-sm border border-wire bg-vault p-4">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-ink/85 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rekber-info-title"
+            className="w-full max-w-sm border border-wire bg-vault p-4"
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p id="rekber-info-title" className="font-display text-xs uppercase tracking-widest text-signal">
@@ -746,7 +760,7 @@ export function EscrowPanel({
                 type="button"
                 onClick={() => setShowInfo(false)}
                 aria-label="Close"
-                className="text-paper/40 transition-colors hover:text-paper"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-wire/70 bg-transparent text-[11px] leading-none text-paper/40 transition hover:border-signal/40 hover:text-signal"
               >
                 ×
               </button>
@@ -772,7 +786,7 @@ export function EscrowPanel({
             >
               Got it
             </button>
-          </div>
+          </section>
         </div>
       )}
     </section>
