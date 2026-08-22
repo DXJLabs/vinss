@@ -1909,15 +1909,15 @@ export function OfferPanel({
           <div
             role="dialog"
             aria-modal="false"
-            className="fixed left-4 right-4 top-1/2 z-[90] mx-auto max-h-[70vh] max-w-md -translate-y-1/2 overflow-y-auto rounded-2xl border border-signal/20 bg-vault p-4 shadow-2xl"
+            className="fixed left-4 right-4 top-1/2 z-[90] mx-auto max-h-[70vh] max-w-md -translate-y-1/2 overflow-y-auto rounded-2xl border border-signal/20 bg-[#11161b]/95 p-4 shadow-2xl backdrop-blur-md"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="bg-transparent font-display text-[8px] uppercase tracking-[0.16em] text-signal/65">
+            <div className="flex items-start justify-between gap-4 bg-transparent">
+              <div className="min-w-0 bg-transparent">
+                <p className="font-display text-[8px] uppercase tracking-[0.16em] text-signal/65">
                   VINSS Guide
                 </p>
 
-                <h4 className="mt-1.5 bg-transparent text-[15px] font-medium text-paper/80">
+                <h4 className="mt-1.5 text-[15px] font-medium text-paper/80">
                   {OFFER_HELP[helpTopic].title}
                 </h4>
               </div>
@@ -1928,7 +1928,7 @@ export function OfferPanel({
                   setHelpTopic(null)
                 }
                 aria-label="Close explanation"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-wire/70 text-xs text-paper/40 transition hover:border-signal/35 hover:text-signal"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-wire/70 bg-transparent text-xs text-paper/40 transition hover:border-signal/35 hover:text-signal"
               >
                 ×
               </button>
