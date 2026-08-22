@@ -552,7 +552,7 @@ export function EscrowPanel({
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 px-1 py-1">
+            <div className="flex items-center justify-between gap-3 px-1">
               <p className="min-w-0 truncate text-xs text-paper/40">
                 <span className="capitalize">
                   {acceptedAction.dealType ?? "Deal"}
@@ -567,16 +567,26 @@ export function EscrowPanel({
             </div>
 
             {!agreedCustodyCommitment ? (
-              <div className="space-y-3">
-                <p className="text-xs leading-relaxed text-paper/40">
-                  VINSS connects this accepted agreement to Rekber privately.
-                  You do not need to enter an Offer reference or token contract.
-                </p>
+              <div className="space-y-4">
+                <div className="border-y border-wire/60 py-4">
+                  <p className="font-display text-[9px] uppercase tracking-widest text-paper/30">
+                    Payment to secure
+                  </p>
+
+                  <p className="mt-2 text-3xl font-light tracking-tight text-paper">
+                    {acceptedAction.amount} {acceptedAction.asset}
+                  </p>
+
+                  <p className="mt-2 text-xs leading-relaxed text-paper/38">
+                    Start Rekber to prepare this accepted agreement for secure funding.
+                  </p>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleCreateCoordination}
                   disabled={!canCoordinate}
-                  className="w-full border border-signal px-4 py-3 font-display text-xs uppercase tracking-widest text-signal transition-colors hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+                  className="w-full border border-signal px-4 py-3.5 font-display text-xs uppercase tracking-widest text-signal transition-colors hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   {busy ? (
                     <span className="inline-flex items-center justify-center gap-2">
@@ -584,16 +594,16 @@ export function EscrowPanel({
                         aria-hidden="true"
                         className="h-3 w-3 animate-spin rounded-full border border-signal/25 border-t-signal"
                       />
-                      <span>
-                        {prepareStage === "coordination"
-                          ? "Starting Rekber…"
-                          : "Starting Rekber…"}
-                      </span>
+                      <span>Starting Rekber…</span>
                     </span>
                   ) : (
                     "Start Rekber →"
                   )}
                 </button>
+
+                <p className="text-center text-[10px] leading-relaxed text-paper/28">
+                  This prepares Rekber only. No payment is moved yet.
+                </p>
               </div>
             ) : !paymentSecured ? (
               <>
@@ -692,7 +702,7 @@ export function EscrowPanel({
               </div>
             )}
 
-            <details className="group border-t border-wire/60 pt-3">
+            <details className="group mt-1 border-t border-wire/45 pt-3">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[9px] uppercase tracking-widest text-paper/25 hover:text-paper/45 [&::-webkit-details-marker]:hidden">
                 <span>Technical details</span>
                 <span

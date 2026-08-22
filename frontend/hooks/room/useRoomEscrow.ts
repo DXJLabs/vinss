@@ -14,8 +14,8 @@ import {
   sendEscrowCoordinationAction,
 } from "@/lib/deal-room/escrow";
 import {
-  startRekberBundle,
-} from "@/lib/deal-room/rekberStart";
+  prepareEscrowFromOffer,
+} from "@/lib/deal-room/offers";
 import type {
   EscrowActionPayload,
   OfferActionPayload,
@@ -753,11 +753,16 @@ export function useRoomEscrow({
           custodyCommitment.toString(),
       };
 
+    const {
+      kind: _kind,
+      ...preparePayload
+    } = prepareAction;
+
     const result =
-      await startRekberBundle(
+      await prepareEscrowFromOffer(
         session.account,
         channelKey,
-        prepareAction,
+        preparePayload,
         route,
       );
 
