@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
+import { LiveTxFeed } from "@/components/rooms/LiveTxFeed";
 
 /**
  * VINSS rooms are local bookkeeping only.
@@ -38,10 +39,6 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function shortId(id: string) {
-  return `${id.slice(0, 8)}…${id.slice(-6)}`;
 }
 
 export default function RoomsPage() {
@@ -209,11 +206,7 @@ export default function RoomsPage() {
                       </StatusBadge>
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between gap-4 border-t border-wire/70 pt-4">
-                      <span className="truncate font-display text-[10px] tracking-wider text-paper/20">
-                        {shortId(room.id)}
-                      </span>
-
+                    <div className="mt-6 flex items-end justify-end border-t border-wire/70 pt-4">
                       <span className="shrink-0 text-xs uppercase tracking-widest text-signal/60 transition group-hover:text-signal">
                         Open room →
                       </span>
@@ -292,7 +285,7 @@ export default function RoomsPage() {
                   </p>
 
                   <p className="mt-1 text-xs text-paper/25">
-                    Open a Chat or Group invitation shared with you
+                    Open a private invitation shared with you
                   </p>
                 </div>
 
