@@ -40,6 +40,15 @@ function testConfig(): AppConfig {
       feeBps: 25,
       defaultProvider: "groq",
     },
+    features: {
+      agent: true,
+      loyalty: false,
+    },
+    rateLimits: {
+      windowMs: 60_000,
+      discover: 120,
+      agent: 12,
+    },
   };
 }
 

@@ -54,58 +54,47 @@ export function ConversationActions({
       {open && (
         <div className="mt-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max snap-x snap-mandatory gap-2">
-            <button
-              type="button"
-              onClick={onSubmitWork}
-              disabled={
-                !connected ||
-                busy ||
-                !onSubmitWork
-              }
-              title={
-                onSubmitWork
-                  ? "Attach work file"
-                  : "File attachment is not available for this conversation yet"
-              }
-              className={actionClass}
-            >
-              <span className="text-signal/55">
-                📎
-              </span>
-              <span>File</span>
-            </button>
+            {onSubmitWork && (
+              <button
+                type="button"
+                onClick={onSubmitWork}
+                disabled={!connected || busy}
+                className={actionClass}
+              >
+                <span className="text-signal/55">
+                  📎
+                </span>
+                <span>File</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={onAddOffer}
-              disabled={
-                !connected ||
-                busy ||
-                !onAddOffer
-              }
-              className={actionClass}
-            >
-              <span className="text-signal/55">
-                ◇
-              </span>
-              <span>Offer</span>
-            </button>
+            {onAddOffer && (
+              <button
+                type="button"
+                onClick={onAddOffer}
+                disabled={!connected || busy}
+                className={actionClass}
+              >
+                <span className="text-signal/55">
+                  ◇
+                </span>
+                <span>Offer</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={onAddEscrow}
-              disabled={
-                !connected ||
-                busy ||
-                !onAddEscrow
-              }
-              className={actionClass}
-            >
-              <span className="text-signal/55">
-                ⬡
-              </span>
-              <span>Escrow</span>
-            </button>
+            {onAddEscrow && (
+              <button
+                type="button"
+                onClick={onAddEscrow}
+                disabled={!connected || busy}
+                className={actionClass}
+              >
+                <span className="text-signal/55">
+                  ⬡
+                </span>
+                <span>Escrow</span>
+              </button>
+            )}
 
             <button
               type="button"

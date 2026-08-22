@@ -9,7 +9,9 @@ import { HomeWorkspace } from "@/components/home/HomeWorkspace";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { NETWORK } from "@/lib/starknet/constants";
 
-const GITHUB_URL = "https://github.com/DXJLabs/vinss";
+const GITHUB_URL =
+  process.env.NEXT_PUBLIC_VINSS_GITHUB_URL ??
+  "https://github.com/DXJLabs/vinss";
 const TELEGRAM_URL = process.env.NEXT_PUBLIC_VINSS_TELEGRAM_URL ?? "";
 const X_URL = process.env.NEXT_PUBLIC_VINSS_X_URL ?? "";
 
@@ -31,15 +33,22 @@ const LIFECYCLE = [
   {
     number: "03",
     label: "REKBER",
-    title: "Settlement coordination",
-    status: "Integration",
+    title: "Two-party custody setup",
+    status: "Testnet gate",
     tone: "amber",
   },
   {
     number: "04",
-    label: "EVIDENCE",
-    title: "Portable proof",
-    status: "Pending",
+    label: "SETTLE",
+    title: "Release or timeout refund",
+    status: "Testnet gate",
+    tone: "amber",
+  },
+  {
+    number: "05",
+    label: "CERTIFICATE",
+    title: "Optional public NFT proof",
+    status: "Testnet gate",
     tone: "muted",
   },
 ] as const;
@@ -152,7 +161,9 @@ export default function HomePage() {
             <span className="hidden font-display text-[7px] uppercase tracking-[0.16em] text-paper/30 sm:inline">
               {NETWORK}
             </span>
-            <WalletConnectButton showCapability={false} />
+            <span data-guide="wallet">
+              <WalletConnectButton showCapability={false} />
+            </span>
           </div>
         </header>
 
@@ -174,8 +185,8 @@ export default function HomePage() {
 
               <p className="mt-6 max-w-2xl text-sm leading-6 text-paper/50 sm:text-base sm:leading-7">
                 VINSS keeps conversation, structured Offers, and deal context
-                inside a private room—then connects the agreement to Escrow
-                Rekber and verifiable settlement evidence.
+                inside a private room—and is built to carry an accepted
+                agreement through Rekber, settlement, and verifiable evidence.
               </p>
 
               <p className="mt-4 font-display text-[8px] uppercase leading-4 tracking-[0.13em] text-paper/26">
@@ -234,7 +245,7 @@ export default function HomePage() {
                     Visible
                   </p>
                   <p className="mt-3 text-xs leading-5 text-paper/50">
-                    Transaction timing, commitments, public proofs
+                    Transaction timing, commitments, public proofs, optional NFT owner
                   </p>
                 </div>
               </div>
@@ -258,11 +269,11 @@ export default function HomePage() {
             </p>
             <span className="h-px flex-1 bg-wire/70" />
             <p className="hidden font-display text-[7px] uppercase tracking-[0.15em] text-paper/22 sm:block">
-              Conversation → Agreement → Settlement → Evidence
+              Conversation → Agreement → Rekber → Settlement → Evidence
             </p>
           </div>
 
-          <div className="grid gap-px border border-wire/80 bg-wire/70 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-px border border-wire/80 bg-wire/70 sm:grid-cols-2 lg:grid-cols-5">
             {LIFECYCLE.map((item, index) => (
               <article className="relative bg-[#090c0f] p-4 sm:p-5" key={item.label}>
                 <div className="flex items-start justify-between gap-3">
@@ -317,8 +328,9 @@ export default function HomePage() {
             <ul className="mt-4 space-y-2 font-display text-[7px] uppercase leading-4 tracking-[0.1em] text-paper/35">
               <li><span className="text-signal">●</span> Message · Testnet verified</li>
               <li><span className="text-signal">●</span> Offer · Testnet verified</li>
-              <li><span className="text-amber">●</span> Rekber · Integration</li>
-              <li><span className="text-paper/20">●</span> Certificate · Pending</li>
+              <li><span className="text-amber">●</span> Rekber V2 · Testnet gate</li>
+              <li><span className="text-amber">●</span> Release/refund · Testnet gate</li>
+              <li><span className="text-paper/20">●</span> Certificate · Testnet gate</li>
               <li><span className="text-paper/20">●</span> Mainnet · Pending</li>
             </ul>
           </details>

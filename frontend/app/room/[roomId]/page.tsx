@@ -159,7 +159,6 @@ export default function DealRoomPage() {
 
   const {
     agentOfferDraft,
-    agentEscrowDraft,
     handleAgentProposal,
   } = useRoomAgent({
     setDraft,
@@ -688,6 +687,9 @@ export default function DealRoomPage() {
 
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
                 <EscrowPanel
+                  roomId={
+                    room?.id ?? params.roomId
+                  }
                   session={session}
                   channelKey={channelKey}
                   onSent={(entry) =>
@@ -699,11 +701,13 @@ export default function DealRoomPage() {
                   setBusy={setBusy}
                   setError={setError}
                   busy={busy}
-                  agentDraft={agentEscrowDraft}
                   acceptedOffer={escrowOfferSource}
                   offerEntries={offerEntries}
                   escrowActions={escrowActions}
                   onStartRekber={startDirectRekber}
+                  onSendCoordination={
+                    sendDirectEscrowCoordination
+                  }
                 />
               </div>
             </section>

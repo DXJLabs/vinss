@@ -9,58 +9,108 @@ interface GuideStep {
   title: string;
   body: string;
   truth: string;
-  target: "rooms" | "privacy" | "workflow" | "live-tx";
+  status: "AVAILABLE" | "OPTIONAL" | "TESTNET GATE" | "COMING LATER";
+  target: "wallet" | "rooms" | "privacy" | "workflow" | "live-tx";
 }
 
 const STEPS: GuideStep[] = [
   {
+    key: "wallet",
+    label: "WALLET",
+    eyebrow: "Step 1 · Identity and approval",
+    title: "Connect a STRK20-capable wallet.",
+    body:
+      "Connect Ready X before creating private on-chain actions. VINSS never receives your private key, and every wallet action still requires your approval.",
+    truth: "Wallet connection should persist across room navigation and refresh.",
+    status: "AVAILABLE",
+    target: "wallet",
+  },
+  {
     key: "room",
     label: "ROOM",
-    eyebrow: "Start with context",
-    title: "One room, one deal.",
+    eyebrow: "Step 2 · Create or join",
+    title: "Open one room for one deal.",
     body:
-      "Create a room for one agreement, then invite only the counterparty involved. Room labels and secrets stay on this device.",
+      "Create a room or open a one-time invitation. The Home and room registry stay on one page; the room workspace opens only when you enter a deal.",
     truth: "A room is local deal context, not a public Starknet identity.",
+    status: "AVAILABLE",
     target: "rooms",
   },
   {
-    key: "privacy",
-    label: "PRIVACY",
-    eyebrow: "Know the boundary",
-    title: "Private does not mean invisible metadata.",
+    key: "conversation",
+    label: "CHAT",
+    eyebrow: "Step 3 · Coordinate privately",
+    title: "Start a direct conversation.",
     body:
-      "Messages, Offer terms, and deal notes are encrypted on the client. Transaction timing, commitments, and public proofs remain observable.",
-    truth: "VINSS protects deal context from public observers.",
+      "Invite one counterparty and exchange encrypted messages. A Group is optional for coordination; Offers and Rekber remain direct two-party actions.",
+    truth: "Direct Message is testnet on-chain verified. Group is not a required deal step.",
+    status: "AVAILABLE",
     target: "privacy",
   },
   {
     key: "offer",
     label: "OFFER",
-    eyebrow: "Structure the agreement",
-    title: "Turn conversation into explicit terms.",
+    eyebrow: "Step 4 · Structure terms",
+    title: "Create a private Offer.",
     body:
-      "Create, counter, accept, or reject a structured Offer without publishing its business terms as plaintext helper state.",
-    truth: "Message and Offer are testnet on-chain verified.",
+      "Choose a deal type, asset, amount, payment terms, conditions and expiry. The business terms are encrypted before the STRK20 action is submitted.",
+    truth: "Structured Offer creation is testnet on-chain verified.",
+    status: "AVAILABLE",
+    target: "workflow",
+  },
+  {
+    key: "response",
+    label: "DECIDE",
+    eyebrow: "Step 5 · Reach agreement",
+    title: "Counter, accept, or reject.",
+    body:
+      "The counterparty reviews the structured Offer. Counter creates a new immutable version; accept becomes the exact agreement Rekber can reference.",
+    truth: "No funds move when an Offer is accepted.",
+    status: "AVAILABLE",
     target: "workflow",
   },
   {
     key: "rekber",
     label: "REKBER",
-    eyebrow: "Coordinate settlement",
-    title: "Connect payment to what was agreed.",
+    eyebrow: "Step 6 · Secure payment",
+    title: "Payer starts, payee accepts, payer funds.",
     body:
-      "An accepted Offer can prepare Escrow Rekber for funding, custody, release, or refund. Every wallet action still requires user approval.",
-    truth: "Escrow Rekber is in integration and E2E verification.",
+      "Rekber V2 creates separate private keys for payer authorization and payee claim. Both wallets sign the exact private terms before funding can start.",
+    truth: "Wallet signatures stay encrypted; token, amount, timeout and commitments remain public in the current custody design.",
+    status: "TESTNET GATE",
     target: "workflow",
   },
   {
-    key: "proof",
-    label: "PROOF",
-    eyebrow: "Keep verifiable evidence",
-    title: "Settlement should end with proof.",
+    key: "settlement",
+    label: "SETTLE",
+    eyebrow: "Step 7 · Complete or recover",
+    title: "Approve release, claim payment—or refund after timeout.",
     body:
-      "The Live TX ledger exposes public evidence without publishing room IDs or plaintext. Settlement certificates follow after the Rekber path is verified.",
-    truth: "Settlement Evidence and NFT Certificates are still pending.",
+      "The payer authorizes release inside encrypted coordination. The payee combines that authorization with its own claim key. Refund is available only to the payer after the agreed boundary.",
+    truth: "Do not enable mainnet value until release and refund both pass repeatable two-wallet E2E tests.",
+    status: "TESTNET GATE",
+    target: "live-tx",
+  },
+  {
+    key: "certificate",
+    label: "CERT",
+    eyebrow: "Step 8 · Optional public evidence",
+    title: "Each party may claim one NFT certificate.",
+    body:
+      "After a successful release, each wallet claims its own certificate. Claiming publicly links that wallet and role to the custody proof, so it is opt-in and never republishes private chat or Offer terms.",
+    truth: "A refunded Rekber produces refund evidence, not a successful-settlement certificate.",
+    status: "TESTNET GATE",
+    target: "live-tx",
+  },
+  {
+    key: "aftercare",
+    label: "NEXT",
+    eyebrow: "Step 9 · After settlement",
+    title: "Loyalty and feedback come after verified settlement.",
+    body:
+      "Points must be derived from authenticated, idempotent activity—not browser demo data. Feedback belongs after the settlement result, never before it.",
+    truth: "Loyalty redemption and feedback are not enabled in the core mainnet path.",
+    status: "COMING LATER",
     target: "live-tx",
   },
 ];
@@ -136,9 +186,14 @@ export function GuidedDeal({ open, onClose }: GuidedDealProps) {
             <p className="font-display text-[8px] uppercase tracking-[0.24em] text-signal">
               VINSS guided deal · {stepIndex + 1} of {STEPS.length}
             </p>
-            <p className="mt-2 font-display text-[8px] uppercase tracking-[0.18em] text-paper/30">
-              {step.eyebrow}
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <p className="font-display text-[8px] uppercase tracking-[0.18em] text-paper/30">
+                {step.eyebrow}
+              </p>
+              <span className="border border-wire/70 px-1.5 py-0.5 font-display text-[7px] uppercase tracking-[0.12em] text-paper/38">
+                {step.status}
+              </span>
+            </div>
           </div>
 
           <button
@@ -182,16 +237,8 @@ export function GuidedDeal({ open, onClose }: GuidedDealProps) {
             ))}
           </div>
 
-          <p className="font-display text-[8px] uppercase tracking-[0.15em] text-paper/38 sm:hidden">
-            {STEPS.map((item, index) => (
-              <span
-                className={index === stepIndex ? "text-signal" : ""}
-                key={item.key}
-              >
-                {index > 0 ? " · " : ""}
-                {item.label}
-              </span>
-            ))}
+          <p className="font-display text-[8px] uppercase tracking-[0.15em] text-signal sm:hidden">
+            {step.label} · {stepIndex + 1}/{STEPS.length}
           </p>
 
           <div className="flex shrink-0 items-center gap-2">

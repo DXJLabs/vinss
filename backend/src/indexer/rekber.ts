@@ -8,10 +8,19 @@ import type {
 } from "../types.js";
 import { RekberStore } from "./rekberStore.js";
 
-const EVENT_NAMES: Record<RekberEventKind, string> = {
-  funded: "EscrowRekberCustodyFunded",
-  released: "EscrowRekberCustodyReleased",
-  refunded: "EscrowRekberCustodyRefunded",
+const EVENT_NAMES: Record<RekberEventKind, readonly string[]> = {
+  funded: [
+    "EscrowRekberCustodyFunded",
+    "EscrowRekberV2CustodyFunded",
+  ],
+  released: [
+    "EscrowRekberCustodyReleased",
+    "EscrowRekberV2CustodyReleased",
+  ],
+  refunded: [
+    "EscrowRekberCustodyRefunded",
+    "EscrowRekberV2CustodyRefunded",
+  ],
 };
 
 function sleep(milliseconds: number): Promise<void> {
@@ -33,7 +42,7 @@ export function createRekberIndexerIdentity(
 
 export class RekberEventSource {
   private readonly provider: RpcProvider;
-  private readonly selectors: Record<RekberEventKind, string>;
+  private readonly selectors: Record<RekberEventKind, string[]>;
   private readonly selectorToKind: Map<string, RekberEventKind>;
 
   constructor(
@@ -43,14 +52,20 @@ export class RekberEventSource {
     this.provider = new RpcProvider({ nodeUrl: rpcUrl });
 
     this.selectors = {
-      funded: hash.getSelectorFromName(EVENT_NAMES.funded),
-      released: hash.getSelectorFromName(EVENT_NAMES.released),
-      refunded: hash.getSelectorFromName(EVENT_NAMES.refunded),
+      funded: EVENT_NAMES.funded.map(hash.getSelectorFromName),
+      released: EVENT_NAMES.released.map(hash.getSelectorFromName),
+      refunded: EVENT_NAMES.refunded.map(hash.getSelectorFromName),
     };
 
     this.selectorToKind = new Map(
-      (Object.entries(this.selectors) as Array<[RekberEventKind, string]>).map(
-        ([kind, selector]) => [BigInt(selector).toString(), kind],
+      (
+        Object.entries(this.selectors) as Array<
+          [RekberEventKind, string[]]
+        >
+      ).flatMap(([kind, selectors]) =>
+        selectors.map(
+          (selector) => [BigInt(selector).toString(), kind] as const,
+        ),
       ),
     );
   }
@@ -74,9 +89,9 @@ export class RekberEventSource {
         to_block: { block_number: toBlock },
         keys: [
           [
-            this.selectors.funded,
-            this.selectors.released,
-            this.selectors.refunded,
+            ...this.selectors.funded,
+            ...this.selectors.released,
+            ...this.selectors.refunded,
           ],
         ],
         chunk_size: this.eventPageSize,

@@ -49,6 +49,16 @@ export const CONTRACTS = {
   escrowRekber: normalizeAddress(
     process.env.NEXT_PUBLIC_ESCROW_REKBER_ADDRESS ?? "",
   ),
+  // Secure two-party settlement path. V2 requires both the payer's release
+  // authorization and the payee's private claim secret before principal can
+  // leave custody. Do not fall back to the V1 address: the calldata and
+  // security model are intentionally different.
+  escrowRekberV2: normalizeAddress(
+    process.env.NEXT_PUBLIC_ESCROW_REKBER_V2_ADDRESS ?? "",
+  ),
+  settlementCertificate: normalizeAddress(
+    process.env.NEXT_PUBLIC_SETTLEMENT_CERTIFICATE_ADDRESS ?? "",
+  ),
 };
 
 export const RPC_URL =

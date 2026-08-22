@@ -14,6 +14,7 @@ import { RekberStore } from "./indexer/rekberStore.js";
 import { DiscoveryIndexer } from "./indexer/service.js";
 import { DiscoveryStore } from "./indexer/store.js";
 import { loyaltyRouter } from "./loyalty/routes.js";
+import { createFixedWindowRateLimit } from "./middleware/rateLimit.js";
 import { openApiDocument } from "./openapi.js";
 import { agentRouter } from "./routes/agent.js";
 import { createActivityRouter } from "./routes/activity.js";
@@ -33,6 +34,12 @@ interface AppDependencies {
 
 export function createApp(dependencies: AppDependencies): Express {
   const app = express();
+
+  if (dependencies.config.network === "mainnet") {
+    // VINSS is deployed behind one managed reverse proxy. This makes req.ip
+    // use that proxy's verified forwarded address for endpoint throttling.
+    app.set("trust proxy", 1);
+  }
 
   app.use(
     cors({
@@ -68,6 +75,14 @@ export function createApp(dependencies: AppDependencies): Express {
     }),
   );
 
+  app.use(
+    "/discover",
+    createFixedWindowRateLimit({
+      limit: dependencies.config.rateLimits.discover,
+      windowMs: dependencies.config.rateLimits.windowMs,
+      scope: "discover",
+    }),
+  );
   app.use(createDiscoverRouter(dependencies.store, dependencies.definitions));
 
   app.use(createRekberRouter(dependencies.rekberStore, dependencies.config));
@@ -81,8 +96,23 @@ export function createApp(dependencies: AppDependencies): Express {
     ),
   );
 
-  app.use(agentRouter);
-  app.use(loyaltyRouter);
+  if (dependencies.config.features.agent) {
+    app.use(
+      "/agent",
+      createFixedWindowRateLimit({
+        limit: dependencies.config.rateLimits.agent,
+        windowMs: dependencies.config.rateLimits.windowMs,
+        scope: "agent",
+      }),
+    );
+    app.use(agentRouter);
+  }
+
+  // Loyalty writes are unauthenticated/in-memory today. They stay fail-closed
+  // unless an operator deliberately enables this non-valuable preview.
+  if (dependencies.config.features.loyalty) {
+    app.use(loyaltyRouter);
+  }
   app.use(presenceRouter);
 
   return app;

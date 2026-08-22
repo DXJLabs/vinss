@@ -48,9 +48,6 @@ interface GroupConversationPanelProps {
   ) => void;
   onSendMessage:
     () => void | Promise<void>;
-  onSubmitWork: () => void;
-  onCreateOffer: () => void;
-  onAddEscrow: () => void;
 }
 
 export function GroupConversationPanel({
@@ -66,9 +63,6 @@ export function GroupConversationPanel({
   onBack,
   onDraftChange,
   onSendMessage,
-  onSubmitWork,
-  onCreateOffer,
-  onAddEscrow,
 }: GroupConversationPanelProps) {
   const [
     proofEntry,
@@ -300,9 +294,6 @@ export function GroupConversationPanel({
           channelReady
         }
         busy={busy}
-        onSubmitWork={onSubmitWork}
-        onAddOffer={onCreateOffer}
-        onAddEscrow={onAddEscrow}
       />
 
       <div className="border-x border-b border-wire/60 bg-vault/12 p-2">

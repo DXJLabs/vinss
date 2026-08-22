@@ -43,6 +43,23 @@ pub mod escrow_rekber {
     pub mod vinss_escrow_rekber;
 }
 
+pub mod escrow_rekber_v2 {
+    pub mod commitments;
+    pub mod errors;
+    pub mod events;
+    pub mod interfaces;
+    pub mod types;
+    pub mod vinss_escrow_rekber_v2;
+}
+
+pub mod settlement_certificate {
+    pub mod commitments;
+    pub mod events;
+    pub mod interfaces;
+    pub mod types;
+    pub mod vinss_settlement_certificate;
+}
+
 #[cfg(test)]
 mod tests;
 

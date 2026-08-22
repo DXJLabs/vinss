@@ -9,7 +9,7 @@ export function LoyaltyPanel() {
             VINSS Loyalty
           </p>
           <p className="mt-1 max-w-sm text-[10px] leading-relaxed text-paper/30">
-            Rewards will be tied to verified deal activity. Point accounting is not enabled in this MVP yet.
+            Rewards must be tied to authenticated settlement evidence. Point accounting and redemption are not enabled.
           </p>
         </div>
 

@@ -991,10 +991,30 @@ html {
 .vinss-home-grid {
   opacity: .68;
   background-image:
+    radial-gradient(circle, rgba(94, 234, 212, .2) 0 1px, transparent 1.5px),
     linear-gradient(rgba(94, 234, 212, .018) 1px, transparent 1px),
     linear-gradient(90deg, rgba(94, 234, 212, .016) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-position: 17px 11px, 0 0, 0 0;
+  background-size: 137px 137px, 48px 48px, 48px 48px;
   mask-image: linear-gradient(to bottom, black, rgba(0, 0, 0, .32) 68%, transparent 96%);
+  animation: vinss-home-grid-drift 28s linear infinite;
+  will-change: background-position, opacity;
+}
+
+.vinss-home-grid::after {
+  position: absolute;
+  inset: -30% 0 auto;
+  height: 32%;
+  content: "";
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(94, 234, 212, .025),
+    rgba(94, 234, 212, .09),
+    transparent
+  );
+  animation: vinss-home-scan 11s ease-in-out infinite;
+  will-change: transform;
 }
 
 .vinss-guide-sheet {
@@ -1054,6 +1074,23 @@ html {
   to { opacity: 1; }
 }
 
+@keyframes vinss-home-grid-drift {
+  0% {
+    opacity: .54;
+    background-position: 17px 11px, 0 0, 0 0;
+  }
+  50% { opacity: .74; }
+  100% {
+    opacity: .54;
+    background-position: 65px -37px, 48px 48px, 48px 48px;
+  }
+}
+
+@keyframes vinss-home-scan {
+  0%, 8% { transform: translateY(-20vh); }
+  72%, 100% { transform: translateY(135vh); }
+}
+
 @media (max-width: 380px) {
   .vinss-guide-sheet {
     padding-right: 1rem;
@@ -1067,7 +1104,9 @@ html {
   }
 
   .vinss-guide-sheet,
-  .vinss-guide-shade {
+  .vinss-guide-shade,
+  .vinss-home-grid,
+  .vinss-home-grid::after {
     animation: none !important;
   }
 }

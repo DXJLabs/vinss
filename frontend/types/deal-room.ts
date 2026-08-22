@@ -142,8 +142,18 @@ export interface EscrowOfferSnapshot {
 export interface EscrowActionPayload {
   kind: EscrowActionKind;
 
+  // Pairwise encryption provides confidentiality, while these SNIP-12 fields
+  // prove which wallet authored the Rekber setup or acceptance. Signatures are
+  // themselves encrypted inside the direct coordination payload.
+  coordinationVersion?: 2;
+  coordinationSignature?: string[];
+
   // Exact create/counter action whose terms became the accepted agreement.
   dealOfferLocator: string;
+
+  // Hash of the exact private Offer fields shown during Rekber review. It is
+  // signed by both wallets and stays inside encrypted coordination payloads.
+  dealTermsCommitment?: string;
 
   // Direct Escrow coordination follows the same encrypted participant model
   // as Direct Chat and Offer. These values are never public helper fields.
@@ -158,6 +168,26 @@ export interface EscrowActionPayload {
   rootEscrowLocator?: string;
   parentEscrowLocator?: string;
   custodyCommitment?: string;
+  // Rekber V2 uses two independent settlement preimages. The payer keeps the
+  // release authorization secret; the payee keeps the claim secret. Only the
+  // commitments are shared before funding.
+  releaseAuthorizationCommitment?: string;
+  payeeClaimCommitment?: string;
+  refundCommitment?: string;
+
+  // Each party prepares an address-bound certificate claim before funding.
+  // Claiming later is optional because ERC-721 ownership is public.
+  payerCertificateCommitment?: string;
+  payeeCertificateCommitment?: string;
+
+  // This secret is only ever present inside an encrypted direct coordination
+  // payload after the payer approves release. It must never enter logs,
+  // analytics, Agent context, or plaintext backend storage.
+  releaseAuthorizationSecret?: string;
+
+  fundingTransactionHash?: string;
+  settlementTransactionHash?: string;
+  settlementOutcome?: "released" | "refunded";
   releaseSecretHint?: string;
   refundAfter?: string;
   reason?: string;

@@ -1,56 +1,87 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 import {
-  generateEscrowSecrets,
-  generateCustodyCommitment,
-  computeReleaseCommitment,
-  computeRefundCommitment,
-  depositEscrow,
-  escrowCustodyExists,
-  getEscrowFundedProof,
-  parseSettlementAmount,
-  resolveSettlementAsset,
-} from "@/lib/deal-room/escrow";
-import type { AgentProposal } from "@/lib/agent";
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type {
+  VinssWalletSession,
+} from "@/lib/starknet/walletClient";
+import type {
+  EscrowActionPayload,
   SendActionResult,
 } from "@/types/deal-room";
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
+import type {
+  ConversationEntry,
+} from "@/components/room/conversation/ConversationPanel";
 import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
-import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
-import { humanizeError } from "@/lib/errors/uiError";
+import {
+  parseSettlementAmount,
+  resolveSettlementAsset,
+} from "@/lib/deal-room/escrow";
+import {
+  claimSettlementCertificate,
+  computeCertificateClaimCommitment,
+  computeCertificateTokenId,
+  computePayeeClaimCommitment,
+  computeRekberV2RefundCommitment,
+  computeReleaseAuthorizationCommitment,
+  depositEscrowV2,
+  generatePayeeSettlementSecrets,
+  generatePayerSettlementSecrets,
+  generateRekberV2CustodyCommitment,
+  getRekberV2Custody,
+  getRekberV2Proof,
+  isSettlementCertificateClaimed,
+  refundEscrowV2,
+  releaseEscrowV2,
+  type RekberV2CustodyState,
+  type SettlementRole,
+} from "@/lib/deal-room/settlementV2";
+import {
+  loadRekberSecrets,
+  saveRekberSecrets,
+  type StoredRekberSecrets,
+} from "@/lib/deal-room/rekberSecrets";
+import {
+  computeDealTermsCommitment,
+  REKBER_COORDINATION_VERSION,
+  signRekberAcceptance,
+  signRekberSetup,
+  verifyRekberAcceptance,
+  verifyRekberSetup,
+} from "@/lib/deal-room/rekberAuthorization";
+import {
+  CONTRACTS,
+} from "@/lib/starknet/constants";
+import {
+  humanizeError,
+} from "@/lib/errors/uiError";
 import { FeeBreakdown } from "@/components/FeeBreakdown";
-import { explorerUrl } from "@/components/room/conversation/chatFormat";
+import {
+  explorerUrl,
+} from "@/components/room/conversation/chatFormat";
 
-export function EscrowPanel({
-  session,
-  channelKey,
-  onSent,
-  busy,
-  setBusy,
-  setError,
-  agentDraft,
-  acceptedOffer,
-  offerEntries,
-  escrowActions,
-  onStartRekber,
-}: {
+interface LocalCoordination {
+  actionLocator: string;
+  transactionHash: string;
+  action: EscrowActionPayload;
+}
+
+interface EscrowPanelProps {
+  roomId: string;
   session: VinssWalletSession | null;
   channelKey: Uint8Array | null;
   onSent: (entry: ConversationEntry) => void;
   busy: boolean;
-  setBusy: (v: boolean) => void;
-  setError: (v: string | null) => void;
-  agentDraft?: Extract<
-    AgentProposal,
-    { type: "prepare_escrow" }
-  > | null;
+  setBusy: (value: boolean) => void;
+  setError: (value: string | null) => void;
   acceptedOffer?: ConversationEntry | null;
   offerEntries: ConversationEntry[];
   escrowActions: DiscoveredEscrowAction[];
@@ -58,341 +89,897 @@ export function EscrowPanel({
     source: ConversationEntry,
     custodyCommitment: bigint,
   ) => Promise<SendActionResult>;
-}) {
-  const [dealOfferLocator, setDealOfferLocator] = useState("");
-  const [token, setToken] = useState("");
-  const [amount, setAmount] = useState("");
-  const [refundHours, setRefundHours] = useState("24");
-  const [showInfo, setShowInfo] = useState(false);
-  const [prepareStage, setPrepareStage] = useState<
-    "idle" | "agreement" | "coordination"
-  >("idle");
+  onSendCoordination: (
+    peerAddress: string,
+    payload: EscrowActionPayload,
+  ) => Promise<SendActionResult>;
+}
 
-  useEffect(() => {
+function canonicalLocator(
+  value: string | undefined,
+): string {
+  if (!value) return "";
+  return value
+    .replace(/^0x/, "")
+    .toLowerCase();
+}
+
+function toBigInt(
+  value: string | undefined,
+): bigint | null {
+  if (!value) return null;
+
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function formatDeadline(
+  unixSeconds: number,
+): string {
+  if (!unixSeconds) return "—";
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  ).format(
+    new Date(unixSeconds * 1000),
+  );
+}
+
+function hasCustody(
+  action: EscrowActionPayload,
+  custody: bigint | null,
+): boolean {
+  if (!custody) return false;
+  const parsed = toBigInt(
+    action.custodyCommitment,
+  );
+  return parsed === custody;
+}
+
+export function EscrowPanel({
+  roomId,
+  session,
+  channelKey,
+  onSent,
+  busy,
+  setBusy,
+  setError,
+  acceptedOffer,
+  offerEntries,
+  escrowActions,
+  onStartRekber,
+  onSendCoordination,
+}: EscrowPanelProps) {
+  const [refundHours, setRefundHours] =
+    useState("24");
+  const [custodyCommitment, setCustodyCommitment] =
+    useState<bigint | null>(null);
+  const [localSecrets, setLocalSecrets] =
+    useState<StoredRekberSecrets | null>(null);
+  const [localCreate, setLocalCreate] =
+    useState<LocalCoordination | null>(null);
+  const [localAccept, setLocalAccept] =
+    useState<LocalCoordination | null>(null);
+  const [localRelease, setLocalRelease] =
+    useState<LocalCoordination | null>(null);
+  const [custodyState, setCustodyState] =
+    useState<RekberV2CustodyState | null>(null);
+  const [fundingProofTx, setFundingProofTx] =
+    useState("");
+  const [settlementProofTx, setSettlementProofTx] =
+    useState("");
+  const [certificateClaimed, setCertificateClaimed] =
+    useState(false);
+  const [certificateTx, setCertificateTx] =
+    useState("");
+  const [backupCopied, setBackupCopied] =
+    useState(false);
+  const [coordinationAuthorized, setCoordinationAuthorized] =
+    useState<boolean | null>(null);
+
+  const acceptedAction =
+    acceptedOffer?.offerAction;
+  const accepted =
+    acceptedAction?.kind === "accept"
+      ? acceptedAction
+      : null;
+  const walletAddress =
+    session?.account.address ?? "";
+
+  const peerAddress = useMemo(() => {
+    if (!accepted || !walletAddress) {
+      return "";
+    }
+
     if (
-      !agentDraft ||
-      acceptedOffer?.offerAction?.kind === "accept"
+      accepted.senderAddress &&
+      sameStarknetAddress(
+        accepted.senderAddress,
+        walletAddress,
+      )
     ) {
-      return;
+      return accepted.recipientAddress ?? "";
     }
-
-    if (agentDraft.payload.dealOfferLocator) {
-      setDealOfferLocator(
-        agentDraft.payload.dealOfferLocator,
-      );
-    }
-
-    if (agentDraft.payload.amount) {
-      setAmount(agentDraft.payload.amount);
-    }
-
-    if (agentDraft.payload.token) {
-      setToken(agentDraft.payload.token);
-    }
-
-    if (agentDraft.payload.refundHours) {
-      setRefundHours(agentDraft.payload.refundHours);
-    }
-  }, [agentDraft]);
-  const [agreedCustodyCommitment, setAgreedCustodyCommitment] = useState<bigint | null>(null);
-  const [lastSecrets, setLastSecrets] = useState<{
-    custodyCommitment: bigint;
-    releaseSecret: bigint;
-    refundSecret: bigint;
-  } | null>(null);
-  const [
-    paymentSecured,
-    setPaymentSecured,
-  ] = useState(false);
-  const [
-    paymentProofTx,
-    setPaymentProofTx,
-  ] = useState("");
-
-  useEffect(() => {
-    const acceptedAction =
-      acceptedOffer?.offerAction;
 
     if (
-      !acceptedOffer ||
-      !acceptedAction ||
-      acceptedAction.kind !== "accept"
+      accepted.recipientAddress &&
+      sameStarknetAddress(
+        accepted.recipientAddress,
+        walletAddress,
+      )
     ) {
-      return;
+      return accepted.senderAddress ?? "";
     }
 
-    // The parent locator identifies the exact create/counter action whose
-    // encrypted terms were accepted. The accept action remains the proof.
-    setDealOfferLocator(
-      acceptedAction.parentOfferLocator ??
-        acceptedOffer.actionLocator,
+    return "";
+  }, [
+    accepted?.senderAddress,
+    accepted?.recipientAddress,
+    walletAddress,
+  ]);
+
+  const dealOfferLocator =
+    accepted?.parentOfferLocator ??
+    acceptedOffer?.actionLocator ??
+    "";
+
+  const discoveredCreate = useMemo(
+    () =>
+      [...escrowActions]
+        .reverse()
+        .find((item) => {
+          if (item.action.kind !== "create") {
+            return false;
+          }
+
+          if (
+            custodyCommitment &&
+            hasCustody(
+              item.action,
+              custodyCommitment,
+            )
+          ) {
+            return true;
+          }
+
+          return (
+            canonicalLocator(
+              item.action
+                .dealOfferLocator,
+            ) ===
+            canonicalLocator(
+              dealOfferLocator,
+            )
+          );
+        }) ?? null,
+    [
+      escrowActions,
+      custodyCommitment,
+      dealOfferLocator,
+    ],
+  );
+
+  const createRecord =
+    localCreate ?? discoveredCreate;
+  const createAction =
+    createRecord?.action ?? null;
+
+  const discoveredAccept = useMemo(
+    () =>
+      [...escrowActions]
+        .reverse()
+        .find(
+          (item) =>
+            item.action.kind ===
+              "accept" &&
+            hasCustody(
+              item.action,
+              custodyCommitment,
+            ),
+        ) ?? null,
+    [
+      escrowActions,
+      custodyCommitment,
+    ],
+  );
+
+  const acceptRecord =
+    localAccept ?? discoveredAccept;
+  const acceptAction =
+    acceptRecord?.action ?? null;
+
+  const discoveredRelease = useMemo(
+    () =>
+      [...escrowActions]
+        .reverse()
+        .find(
+          (item) =>
+            item.action.kind ===
+              "resolve" &&
+            hasCustody(
+              item.action,
+              custodyCommitment,
+            ) &&
+            Boolean(
+              item.action
+                .releaseAuthorizationSecret,
+            ),
+        ) ?? null,
+    [
+      escrowActions,
+      custodyCommitment,
+    ],
+  );
+
+  const releaseRecord =
+    localRelease ?? discoveredRelease;
+  const releaseAuthorizationSecret =
+    toBigInt(
+      releaseRecord?.action
+        .releaseAuthorizationSecret,
     );
-    setAmount(acceptedAction.amount);
+
+  const role: SettlementRole | null =
+    createAction?.senderAddress &&
+    walletAddress &&
+    sameStarknetAddress(
+      createAction.senderAddress,
+      walletAddress,
+    )
+      ? "payer"
+      : createAction?.recipientAddress &&
+          walletAddress &&
+          sameStarknetAddress(
+            createAction.recipientAddress,
+            walletAddress,
+          )
+        ? "payee"
+        : localSecrets?.role ?? null;
+
+  const refundAfter = Number(
+    createAction?.refundAfter ??
+      custodyState?.refundAfter ??
+      0,
+  );
+  const refundAvailable =
+    Boolean(refundAfter) &&
+    Math.floor(Date.now() / 1000) >=
+      refundAfter;
+
+  useEffect(() => {
+    if (
+      !accepted ||
+      !createAction ||
+      !acceptAction
+    ) {
+      setCoordinationAuthorized(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const termsCommitment =
+        await computeDealTermsCommitment(
+          accepted,
+        );
+      const termsMatch =
+        createAction.dealTermsCommitment ===
+          termsCommitment &&
+        acceptAction.dealTermsCommitment ===
+          termsCommitment;
+      const [setupValid, acceptanceValid] =
+        await Promise.all([
+          verifyRekberSetup(createAction),
+          verifyRekberAcceptance(
+            createAction,
+            acceptAction,
+          ),
+        ]);
+
+      if (!cancelled) {
+        setCoordinationAuthorized(
+          termsMatch &&
+            setupValid &&
+            acceptanceValid,
+        );
+      }
+    })().catch(() => {
+      if (!cancelled) {
+        setCoordinationAuthorized(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accepted,
+    createAction,
+    acceptAction,
+  ]);
+
+  const custodyVerification = useMemo(() => {
+    if (!custodyState) {
+      return {
+        verified: false,
+        reason: "",
+      };
+    }
+
+    if (
+      !accepted ||
+      !createAction ||
+      !acceptAction
+    ) {
+      return {
+        verified: false,
+        reason:
+          "Encrypted Rekber coordination is incomplete.",
+      };
+    }
+
+    if (coordinationAuthorized !== true) {
+      return {
+        verified: false,
+        reason:
+          coordinationAuthorized === null
+            ? "Wallet approvals are still being verified."
+            : "The payer setup, payee acceptance, or private Offer terms do not have matching wallet authorization.",
+      };
+    }
 
     const settlementAsset =
       resolveSettlementAsset(
-        acceptedAction.asset,
+        accepted.asset,
+      );
+    const expected = {
+      releaseAuthorizationCommitment:
+        toBigInt(
+          createAction
+            .releaseAuthorizationCommitment,
+        ),
+      refundCommitment: toBigInt(
+        createAction.refundCommitment,
+      ),
+      payerCertificateCommitment:
+        toBigInt(
+          createAction
+            .payerCertificateCommitment,
+        ),
+      payeeClaimCommitment:
+        toBigInt(
+          acceptAction
+            .payeeClaimCommitment,
+        ),
+      payeeCertificateCommitment:
+        toBigInt(
+          acceptAction
+            .payeeCertificateCommitment,
+        ),
+    };
+
+    if (
+      !settlementAsset?.address ||
+      !expected.releaseAuthorizationCommitment ||
+      !expected.refundCommitment ||
+      !expected.payerCertificateCommitment ||
+      !expected.payeeClaimCommitment ||
+      !expected.payeeCertificateCommitment ||
+      !refundAfter
+    ) {
+      return {
+        verified: false,
+        reason:
+          "The expected Rekber commitments cannot be reconstructed.",
+      };
+    }
+
+    let expectedAmount: bigint;
+
+    try {
+      expectedAmount =
+        parseSettlementAmount(
+          accepted.amount,
+          settlementAsset.decimals,
+        );
+    } catch {
+      return {
+        verified: false,
+        reason:
+          "The accepted Offer amount cannot be verified.",
+      };
+    }
+
+    const matches =
+      custodyState.releaseAuthorizationCommitment ===
+        expected.releaseAuthorizationCommitment &&
+      custodyState.payeeClaimCommitment ===
+        expected.payeeClaimCommitment &&
+      custodyState.refundCommitment ===
+        expected.refundCommitment &&
+      custodyState.payerCertificateCommitment ===
+        expected.payerCertificateCommitment &&
+      custodyState.payeeCertificateCommitment ===
+        expected.payeeCertificateCommitment &&
+      custodyState.refundAfter ===
+        refundAfter &&
+      custodyState.amount ===
+        expectedAmount &&
+      sameStarknetAddress(
+        custodyState.token,
+        settlementAsset.address,
       );
 
-    setToken(
-      settlementAsset?.address ?? "",
+    return matches
+      ? {
+          verified: true,
+          reason: "",
+        }
+      : {
+          verified: false,
+          reason:
+            "The on-chain token, amount, timeout, or settlement commitments do not match the encrypted agreement.",
+        };
+  }, [
+    custodyState,
+    accepted,
+    createAction,
+    acceptAction,
+    refundAfter,
+    coordinationAuthorized,
+  ]);
+  const custodyMismatch = Boolean(
+    custodyState &&
+      coordinationAuthorized !== null &&
+      !custodyVerification.verified,
+  );
+  const funded = Boolean(
+    custodyState &&
+      custodyVerification.verified,
+  );
+  const localRefundSecret =
+    toBigInt(
+      localSecrets?.refundSecret,
     );
-
-    // Loading a different accepted deal starts a fresh local coordination view.
-    setAgreedCustodyCommitment(null);
-    setLastSecrets(null);
-    setPaymentSecured(false);
-    setPaymentProofTx("");
-  }, [acceptedOffer?.actionLocator]);
+  const canRecoverMismatchedCustody =
+    Boolean(
+      custodyMismatch &&
+        custodyCommitment &&
+        localRefundSecret &&
+        custodyState &&
+        !custodyState.consumed &&
+        computeRekberV2RefundCommitment(
+          custodyCommitment,
+          localRefundSecret,
+        ) ===
+          custodyState.refundCommitment,
+    );
+  const custodyConsumed = Boolean(
+    custodyState?.consumed,
+  );
+  const settled = Boolean(
+    funded && custodyConsumed,
+  );
+  const released =
+    settled && !custodyState?.refunded;
+  const v2Configured = Boolean(
+    CONTRACTS.escrowRekberV2,
+  );
+  const certificateConfigured =
+    Boolean(
+      CONTRACTS.settlementCertificate,
+    );
+  const certificateTokenId =
+    custodyCommitment && role
+      ? computeCertificateTokenId(
+          custodyCommitment,
+          role,
+        )
+      : null;
 
   useEffect(() => {
-    if (
-      !acceptedOffer ||
-      acceptedOffer.offerAction?.kind !==
-        "accept"
-    ) {
+    if (!acceptedOffer || !accepted) {
+      setCustodyCommitment(null);
+      setLocalSecrets(null);
+      setLocalCreate(null);
+      setLocalAccept(null);
+      setLocalRelease(null);
+      setCustodyState(null);
       return;
     }
 
     const acceptedLocator =
-      acceptedOffer.actionLocator
-        .replace(/^0x/, "")
-        .toLowerCase();
-
-    // New Rekber flow: START REKBER is represented by one encrypted
-    // prepare_escrow Offer action containing the custody commitment.
-    const preparedOffer =
+      canonicalLocator(
+        acceptedOffer.actionLocator,
+      );
+    const prepared =
       [...offerEntries]
         .reverse()
         .find((entry) => {
           const action =
             entry.offerAction;
 
-          if (
-            action?.kind !==
-              "prepare_escrow" ||
-            !action.custodyCommitment
-          ) {
-            return false;
-          }
-
-          const parentLocator =
-            action.parentOfferLocator
-              ?.replace(/^0x/, "")
-              .toLowerCase();
-
           return (
-            parentLocator ===
-            acceptedLocator
+            action?.kind ===
+              "prepare_escrow" &&
+            Boolean(
+              action.custodyCommitment,
+            ) &&
+            canonicalLocator(
+              action.parentOfferLocator,
+            ) === acceptedLocator
           );
         });
+    const fromPrepared = toBigInt(
+      prepared?.offerAction
+        ?.custodyCommitment,
+    );
+    const fromCreate = toBigInt(
+      discoveredCreate?.action
+        .custodyCommitment,
+    );
 
-    const preparedCommitment =
-      preparedOffer?.offerAction
-        ?.custodyCommitment;
-
-    if (preparedCommitment) {
-      try {
-        setAgreedCustodyCommitment(
-          BigInt(preparedCommitment),
-        );
-        return;
-      } catch {
-        // Fall through to legacy recovery.
-      }
-    }
-
-    // Backward compatibility for Rekber setups created before the
-    // single-helper START REKBER flow.
-    const legacy =
-      [...escrowActions]
-        .reverse()
-        .find((item) => {
-          if (
-            item.action.kind !==
-              "create" ||
-            !item.action
-              .custodyCommitment
-          ) {
-            return false;
-          }
-
-          const snapshotLocator =
-            item.action
-              .offerSnapshot
-              ?.acceptedOfferLocator
-              ?.replace(
-                /^0x/,
-                "",
-              )
-              .toLowerCase();
-
-          return (
-            snapshotLocator ===
-            acceptedLocator
-          );
-        });
-
-    if (
-      legacy?.action
-        .custodyCommitment
-    ) {
-      try {
-        setAgreedCustodyCommitment(
-          BigInt(
-            legacy.action
-              .custodyCommitment,
-          ),
-        );
-      } catch {
-        // Ignore malformed unrelated ciphertext.
-      }
+    if (fromPrepared || fromCreate) {
+      setCustodyCommitment(
+        fromPrepared ?? fromCreate,
+      );
     }
   }, [
     acceptedOffer?.actionLocator,
     offerEntries,
-    escrowActions,
+    discoveredCreate?.actionLocator,
   ]);
 
-  // Rekber custody is public contract state.
-  // Recover the funded state after reload and synchronize it across wallets.
   useEffect(() => {
     if (
-      !agreedCustodyCommitment ||
-      paymentSecured
+      !custodyCommitment ||
+      !session ||
+      !channelKey
     ) {
+      setLocalSecrets(null);
       return;
     }
 
     let cancelled = false;
 
-    const check = async () => {
-      try {
-        const exists =
-          await escrowCustodyExists(
-            agreedCustodyCommitment,
+    void loadRekberSecrets(
+      roomId,
+      session.account.address,
+      custodyCommitment,
+      channelKey,
+    ).then((stored) => {
+      if (!cancelled) {
+        setLocalSecrets(stored);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    roomId,
+    session?.account.address,
+    channelKey,
+    custodyCommitment,
+  ]);
+
+  useEffect(() => {
+    if (
+      !custodyCommitment ||
+      !v2Configured
+    ) {
+      setCustodyState(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const sync = async () => {
+      const next =
+        await getRekberV2Custody(
+          custodyCommitment,
+        );
+
+      if (cancelled) return;
+      setCustodyState(next);
+
+      if (next) {
+        const funding =
+          await getRekberV2Proof(
+            custodyCommitment,
+            "funded",
           );
 
         if (
           !cancelled &&
-          exists
+          funding?.transactionHash
         ) {
-          setPaymentSecured(true);
-
-          const proof =
-            await getEscrowFundedProof(
-              agreedCustodyCommitment,
-            );
-
-          if (
-            !cancelled &&
-            proof?.transactionHash
-          ) {
-            setPaymentProofTx(
-              proof.transactionHash,
-            );
-          }
+          setFundingProofTx(
+            funding.transactionHash,
+          );
         }
-      } catch (err) {
-        console.debug(
-          "[VINSS ESCROW STATUS CHECK]",
-          err,
-        );
+      }
+
+      if (next?.consumed) {
+        const outcome = next.refunded
+          ? "refunded"
+          : "released";
+        const proof =
+          await getRekberV2Proof(
+            custodyCommitment,
+            outcome,
+          );
+
+        if (
+          !cancelled &&
+          proof?.transactionHash
+        ) {
+          setSettlementProofTx(
+            proof.transactionHash,
+          );
+        }
       }
     };
 
-    void check();
-
-    const timer =
-      window.setInterval(
-        () => void check(),
-        5000,
-      );
+    void sync();
+    const timer = window.setInterval(
+      () => void sync(),
+      5000,
+    );
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   }, [
-    agreedCustodyCommitment,
-    paymentSecured,
+    custodyCommitment,
+    v2Configured,
   ]);
 
-  async function handleCreateCoordination() {
-    const acceptedAction =
-      acceptedOffer?.offerAction;
+  useEffect(() => {
+    if (
+      !released ||
+      !custodyCommitment ||
+      !role ||
+      !certificateConfigured
+    ) {
+      setCertificateClaimed(false);
+      return;
+    }
 
+    let cancelled = false;
+
+    const sync = async () => {
+      try {
+        const claimed =
+          await isSettlementCertificateClaimed(
+            custodyCommitment,
+            role,
+          );
+
+        if (!cancelled) {
+          setCertificateClaimed(
+            claimed,
+          );
+        }
+      } catch {
+        // RPC can lag while the claim transaction is being accepted.
+      }
+    };
+
+    void sync();
+    const timer = window.setInterval(
+      () => void sync(),
+      5000,
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    released,
+    custodyCommitment,
+    role,
+    certificateConfigured,
+  ]);
+
+  async function persistSecrets(
+    custody: bigint,
+    secrets: StoredRekberSecrets,
+  ) {
+    if (!session || !channelKey) {
+      throw new Error(
+        "Private room key is not ready.",
+      );
+    }
+
+    await saveRekberSecrets(
+      roomId,
+      session.account.address,
+      custody,
+      channelKey,
+      secrets,
+    );
+    setLocalSecrets(secrets);
+  }
+
+  async function handleStartRekber() {
     if (
       !session ||
       !channelKey ||
       !acceptedOffer ||
-      !acceptedAction ||
-      acceptedAction.kind !== "accept"
+      !accepted ||
+      !peerAddress ||
+      createAction
     ) {
-      setError(
-        "Escrow Rekber must start from an accepted Offer.",
-      );
       return;
     }
 
-    if (agreedCustodyCommitment) {
+    const hours = Number(
+      refundHours,
+    );
+
+    if (
+      !Number.isFinite(hours) ||
+      hours < 1 ||
+      hours > 24 * 30
+    ) {
+      setError(
+        "Choose a refund window between 1 hour and 30 days.",
+      );
       return;
     }
 
     setBusy(true);
     setError(null);
-    setPrepareStage("coordination");
 
     try {
-      const custodyCommitment =
-        generateCustodyCommitment();
-
-      const result =
-        await onStartRekber(
-          acceptedOffer,
-          custodyCommitment,
+      const custody =
+        generateRekberV2CustodyCommitment();
+      const secrets =
+        generatePayerSettlementSecrets();
+      const refundAt =
+        Math.floor(Date.now() / 1000) +
+        hours * 3600;
+      const termsCommitment =
+        await computeDealTermsCommitment(
+          accepted,
         );
+      const stored: StoredRekberSecrets = {
+        version: 2,
+        custodyCommitment:
+          custody.toString(),
+        role: "payer",
+        releaseAuthorizationSecret:
+          secrets.releaseAuthorizationSecret.toString(),
+        refundSecret:
+          secrets.refundSecret.toString(),
+        certificateSecret:
+          secrets.certificateSecret.toString(),
+        savedAt:
+          new Date().toISOString(),
+      };
 
-      setAgreedCustodyCommitment(
-        custodyCommitment,
+      const unsignedPayload: EscrowActionPayload = {
+        kind: "create",
+        coordinationVersion:
+          REKBER_COORDINATION_VERSION,
+        dealOfferLocator,
+        dealTermsCommitment:
+          termsCommitment,
+        senderAddress:
+          session.account.address,
+        recipientAddress:
+          peerAddress,
+        custodyCommitment:
+          custody.toString(),
+        releaseAuthorizationCommitment:
+          computeReleaseAuthorizationCommitment(
+            custody,
+            secrets.releaseAuthorizationSecret,
+          ).toString(),
+        refundCommitment:
+          computeRekberV2RefundCommitment(
+            custody,
+            secrets.refundSecret,
+          ).toString(),
+        payerCertificateCommitment:
+          computeCertificateClaimCommitment(
+            custody,
+            "payer",
+            session.account.address,
+            secrets.certificateSecret,
+          ).toString(),
+        refundAfter:
+          String(refundAt),
+      };
+      const payload: EscrowActionPayload = {
+        ...unsignedPayload,
+        coordinationSignature:
+          await signRekberSetup(
+            session.account,
+            unsignedPayload,
+          ),
+      };
+
+      await persistSecrets(
+        custody,
+        stored,
+      );
+      await onStartRekber(
+        acceptedOffer,
+        custody,
       );
 
+      const result =
+        await onSendCoordination(
+          peerAddress,
+          payload,
+        );
+      const local: LocalCoordination = {
+        actionLocator:
+          result.actionLocator.toString(
+            16,
+          ),
+        transactionHash:
+          result.transactionHash,
+        action: {
+          ...payload,
+          senderAddress:
+            session.account.address,
+          recipientAddress:
+            peerAddress,
+          sentAt:
+            new Date().toISOString(),
+        },
+      };
+
+      setCustodyCommitment(custody);
+      setLocalCreate(local);
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          `Rekber ready — ${acceptedAction.dealType ?? "deal"} · ${acceptedAction.amount} ${acceptedAction.asset}`,
+          `Rekber request — ${accepted.amount} ${accepted.asset}`,
         transactionHash:
           result.transactionHash,
         actionLocator:
-          result.actionLocator
-            .toString(16),
+          local.actionLocator,
         sentAt:
           new Date().toISOString(),
       });
-    } catch (err) {
+    } catch (error) {
       setError(
         humanizeError(
-          err,
-          "We couldn't start Rekber. Please try again.",
+          error,
+          "We couldn't start secure Rekber.",
         ),
       );
     } finally {
-      setPrepareStage("idle");
       setBusy(false);
     }
   }
 
-  async function handleDeposit() {
-    const acceptedAction =
-      acceptedOffer?.offerAction;
-
+  async function handleAcceptRekber() {
     if (
       !session ||
-      !agreedCustodyCommitment ||
-      paymentSecured ||
-      !acceptedAction ||
-      acceptedAction.kind !== "accept"
+      !channelKey ||
+      !accepted ||
+      !peerAddress ||
+      !custodyCommitment ||
+      !createRecord ||
+      !createAction ||
+      acceptAction ||
+      role !== "payee"
     ) {
       return;
     }
@@ -401,78 +988,125 @@ export function EscrowPanel({
     setError(null);
 
     try {
-      const settlementAsset =
-        resolveSettlementAsset(
-          acceptedAction.asset,
+      const termsCommitment =
+        await computeDealTermsCommitment(
+          accepted,
         );
 
       if (
-        !settlementAsset ||
-        !settlementAsset.address
+        createAction.dealTermsCommitment !==
+          termsCommitment ||
+        !(await verifyRekberSetup(
+          createAction,
+        ))
       ) {
         throw new Error(
-          `Settlement token ${acceptedAction.asset} is not configured for this network.`,
+          "The payer's wallet authorization does not match the Rekber terms shown here.",
         );
       }
 
-      const principal =
-        parseSettlementAmount(
-          acceptedAction.amount,
-          settlementAsset.decimals,
-        );
-
       const secrets =
-        generateEscrowSecrets();
-      const custodyCommitment =
-        agreedCustodyCommitment;
-      const releaseCommitment = computeReleaseCommitment(
-        custodyCommitment,
-        secrets.releaseSecret
-      );
-      const refundCommitment = computeRefundCommitment(
-        custodyCommitment,
-        secrets.refundSecret
-      );
-      const refundAfter =
-        Math.floor(Date.now() / 1000) + Number(refundHours || "24") * 3600;
+        generatePayeeSettlementSecrets();
+      const stored: StoredRekberSecrets = {
+        version: 2,
+        custodyCommitment:
+          custodyCommitment.toString(),
+        role: "payee",
+        payeeClaimSecret:
+          secrets.payeeClaimSecret.toString(),
+        certificateSecret:
+          secrets.certificateSecret.toString(),
+        savedAt:
+          new Date().toISOString(),
+      };
 
-      const result = await depositEscrow(session.account, {
-        custodyCommitment,
-        releaseCommitment,
-        refundCommitment,
-        refundAfter,
-        token:
-          settlementAsset.address,
-        amount: principal,
-      });
+      const unsignedPayload: EscrowActionPayload = {
+        kind: "accept",
+        coordinationVersion:
+          REKBER_COORDINATION_VERSION,
+        dealOfferLocator,
+        dealTermsCommitment:
+          termsCommitment,
+        senderAddress:
+          session.account.address,
+        recipientAddress:
+          peerAddress,
+        rootEscrowLocator:
+          createRecord.actionLocator,
+        parentEscrowLocator:
+          createRecord.actionLocator,
+        custodyCommitment:
+          custodyCommitment.toString(),
+        payeeClaimCommitment:
+          computePayeeClaimCommitment(
+            custodyCommitment,
+            secrets.payeeClaimSecret,
+          ).toString(),
+        payeeCertificateCommitment:
+          computeCertificateClaimCommitment(
+            custodyCommitment,
+            "payee",
+            session.account.address,
+            secrets.certificateSecret,
+          ).toString(),
+        refundAfter:
+          createAction?.refundAfter,
+      };
+      const payload: EscrowActionPayload = {
+        ...unsignedPayload,
+        coordinationSignature:
+          await signRekberAcceptance(
+            session.account,
+            createAction,
+            unsignedPayload,
+          ),
+      };
 
-      setLastSecrets({
+      await persistSecrets(
         custodyCommitment,
-        ...secrets,
-      });
-      setPaymentSecured(true);
-      setPaymentProofTx(
-        result.transactionHash,
+        stored,
       );
 
+      const result =
+        await onSendCoordination(
+          peerAddress,
+          payload,
+        );
+      const local: LocalCoordination = {
+        actionLocator:
+          result.actionLocator.toString(
+            16,
+          ),
+        transactionHash:
+          result.transactionHash,
+        action: {
+          ...payload,
+          senderAddress:
+            session.account.address,
+          recipientAddress:
+            peerAddress,
+          sentAt:
+            new Date().toISOString(),
+        },
+      };
+
+      setLocalAccept(local);
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
-        summary:
-          `Escrow deposit — ${acceptedAction.amount} ${acceptedAction.asset}`,
-        transactionHash: result.transactionHash,
-        actionLocator: custodyCommitment.toString(16),
-        sentAt: new Date().toISOString(),
+        summary: "Rekber accepted — payment can now be secured",
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          local.actionLocator,
+        sentAt:
+          new Date().toISOString(),
       });
-    } catch (err) {
-      console.error(
-        "[VINSS ESCROW DEPOSIT FAILED]",
-        err,
-      );
+    } catch (error) {
       setError(
         humanizeError(
-          err,
-          "We couldn't fund the escrow. Please try again.",
+          error,
+          "We couldn't accept the Rekber request.",
         ),
       );
     } finally {
@@ -480,589 +1114,1021 @@ export function EscrowPanel({
     }
   }
 
-  const acceptedAction =
-    acceptedOffer?.offerAction;
+  async function handleFund() {
+    if (
+      !session ||
+      !accepted ||
+      !peerAddress ||
+      !custodyCommitment ||
+      !createAction ||
+      !acceptAction ||
+      !localSecrets ||
+      role !== "payer" ||
+      funded
+    ) {
+      return;
+    }
 
-  const acceptedSettlement =
-    acceptedAction?.kind === "accept"
-      ? resolveSettlementAsset(
-          acceptedAction.asset,
-        )
-      : null;
+    const releaseAuthorizationCommitment =
+      toBigInt(
+        createAction
+          .releaseAuthorizationCommitment,
+      );
+    const refundCommitment = toBigInt(
+      createAction.refundCommitment,
+    );
+    const payerCertificateCommitment =
+      toBigInt(
+        createAction
+          .payerCertificateCommitment,
+      );
+    const payeeClaimCommitment =
+      toBigInt(
+        acceptAction
+          .payeeClaimCommitment,
+      );
+    const payeeCertificateCommitment =
+      toBigInt(
+        acceptAction
+          .payeeCertificateCommitment,
+      );
+    const settlementAsset =
+      resolveSettlementAsset(
+        accepted.asset,
+      );
 
-  const canCoordinate =
-    Boolean(session) &&
-    Boolean(channelKey) &&
-    !busy &&
-    acceptedAction?.kind ===
-      "accept" &&
-    Boolean(dealOfferLocator.trim());
+    if (
+      !releaseAuthorizationCommitment ||
+      !refundCommitment ||
+      !payerCertificateCommitment ||
+      !payeeClaimCommitment ||
+      !payeeCertificateCommitment ||
+      !refundAfter ||
+      !settlementAsset?.address
+    ) {
+      setError(
+        "Secure Rekber commitments are incomplete. Sync the room and try again.",
+      );
+      return;
+    }
 
-  const canDeposit =
-    Boolean(session) &&
-    !busy &&
-    !paymentSecured &&
-    Boolean(
-      agreedCustodyCommitment,
-    ) &&
-    acceptedAction?.kind ===
-      "accept" &&
-    Boolean(
-      acceptedSettlement?.address,
-    ) &&
-    Boolean(amount.trim());
+    setBusy(true);
+    setError(null);
 
-  const rekberReady =
-    Boolean(agreedCustodyCommitment);
+    try {
+      const termsCommitment =
+        await computeDealTermsCommitment(
+          accepted,
+        );
+      const [setupValid, acceptanceValid] =
+        await Promise.all([
+          verifyRekberSetup(createAction),
+          verifyRekberAcceptance(
+            createAction,
+            acceptAction,
+          ),
+        ]);
+
+      if (
+        createAction.dealTermsCommitment !==
+          termsCommitment ||
+        acceptAction.dealTermsCommitment !==
+          termsCommitment ||
+        !setupValid ||
+        !acceptanceValid
+      ) {
+        throw new Error(
+          "Funding blocked: both wallet approvals must match the exact private Offer terms.",
+        );
+      }
+
+      const amount =
+        parseSettlementAmount(
+          accepted.amount,
+          settlementAsset.decimals,
+        );
+      const result =
+        await depositEscrowV2(
+          session.account,
+          {
+            custodyCommitment,
+            releaseAuthorizationCommitment,
+            payeeClaimCommitment,
+            refundCommitment,
+            payerCertificateCommitment,
+            payeeCertificateCommitment,
+            refundAfter,
+            token:
+              settlementAsset.address,
+            amount,
+          },
+        );
+
+      setFundingProofTx(
+        result.transactionHash,
+      );
+      setCustodyState(
+        await getRekberV2Custody(
+          custodyCommitment,
+        ),
+      );
+      onSent({
+        id: crypto.randomUUID(),
+        kind: "offer",
+        summary:
+          `Rekber funded — ${accepted.amount} ${accepted.asset}`,
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          custodyCommitment.toString(16),
+        sentAt:
+          new Date().toISOString(),
+      });
+
+      void onSendCoordination(
+        peerAddress,
+        {
+          kind: "fund_confirm",
+          dealOfferLocator,
+          custodyCommitment:
+            custodyCommitment.toString(),
+          parentEscrowLocator:
+            acceptRecord?.actionLocator,
+          fundingTransactionHash:
+            result.transactionHash,
+        },
+      ).catch((error) => {
+        console.error(
+          "[VINSS REKBER FUND CONFIRM]",
+          error,
+        );
+      });
+    } catch (error) {
+      setError(
+        humanizeError(
+          error,
+          "We couldn't secure the payment.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAuthorizeRelease() {
+    if (
+      !session ||
+      !peerAddress ||
+      !custodyCommitment ||
+      !localSecrets
+        ?.releaseAuthorizationSecret ||
+      role !== "payer" ||
+      !custodyState ||
+      settled ||
+      releaseRecord
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const payload: EscrowActionPayload = {
+        kind: "resolve",
+        dealOfferLocator,
+        custodyCommitment:
+          custodyCommitment.toString(),
+        releaseAuthorizationSecret:
+          localSecrets
+            .releaseAuthorizationSecret,
+        reason:
+          "Payer approved settlement release.",
+      };
+      const result =
+        await onSendCoordination(
+          peerAddress,
+          payload,
+        );
+      const local: LocalCoordination = {
+        actionLocator:
+          result.actionLocator.toString(
+            16,
+          ),
+        transactionHash:
+          result.transactionHash,
+        action: {
+          ...payload,
+          senderAddress:
+            session.account.address,
+          recipientAddress:
+            peerAddress,
+          sentAt:
+            new Date().toISOString(),
+        },
+      };
+
+      setLocalRelease(local);
+      onSent({
+        id: crypto.randomUUID(),
+        kind: "offer",
+        summary:
+          "Settlement approved — payee can claim payment",
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          local.actionLocator,
+        sentAt:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      setError(
+        humanizeError(
+          error,
+          "We couldn't authorize release.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClaimPayment() {
+    if (
+      !session ||
+      !custodyCommitment ||
+      !releaseAuthorizationSecret ||
+      !localSecrets?.payeeClaimSecret ||
+      role !== "payee" ||
+      !funded ||
+      settled
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const result =
+        await releaseEscrowV2(
+          session.account,
+          {
+            custodyCommitment,
+            releaseAuthorizationSecret,
+            payeeClaimSecret: BigInt(
+              localSecrets
+                .payeeClaimSecret,
+            ),
+          },
+        );
+
+      setSettlementProofTx(
+        result.transactionHash,
+      );
+      setCustodyState(
+        await getRekberV2Custody(
+          custodyCommitment,
+        ),
+      );
+      onSent({
+        id: crypto.randomUUID(),
+        kind: "offer",
+        summary:
+          "Settlement released — payment claimed privately",
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          custodyCommitment.toString(16),
+        sentAt:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      setError(
+        humanizeError(
+          error,
+          "We couldn't claim the settlement.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefund() {
+    if (
+      !session ||
+      !custodyCommitment ||
+      !localSecrets?.refundSecret ||
+      role !== "payer" ||
+      !custodyState ||
+      custodyConsumed ||
+      !refundAvailable
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const result =
+        await refundEscrowV2(
+          session.account,
+          {
+            custodyCommitment,
+            refundSecret: BigInt(
+              localSecrets.refundSecret,
+            ),
+          },
+        );
+
+      setSettlementProofTx(
+        result.transactionHash,
+      );
+      setCustodyState(
+        await getRekberV2Custody(
+          custodyCommitment,
+        ),
+      );
+      onSent({
+        id: crypto.randomUUID(),
+        kind: "offer",
+        summary:
+          "Rekber refunded after the protection window",
+        transactionHash:
+          result.transactionHash,
+        actionLocator:
+          custodyCommitment.toString(16),
+        sentAt:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      setError(
+        humanizeError(
+          error,
+          "We couldn't refund the Rekber payment.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClaimCertificate() {
+    if (
+      !session ||
+      !custodyCommitment ||
+      !role ||
+      !localSecrets
+        ?.certificateSecret ||
+      !released ||
+      certificateClaimed
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const result =
+        await claimSettlementCertificate(
+          session.account,
+          {
+            custodyCommitment,
+            role,
+            certificateSecret: BigInt(
+              localSecrets
+                .certificateSecret,
+            ),
+          },
+        );
+
+      setCertificateTx(
+        result.transactionHash,
+      );
+    } catch (error) {
+      setError(
+        humanizeError(
+          error,
+          "We couldn't claim the settlement certificate.",
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCopyBackup() {
+    if (!localSecrets) return;
+
+    await navigator.clipboard.writeText(
+      JSON.stringify(
+        localSecrets,
+        null,
+        2,
+      ),
+    );
+    setBackupCopied(true);
+    window.setTimeout(
+      () => setBackupCopied(false),
+      1800,
+    );
+  }
+
+  const stage = !accepted
+    ? 0
+    : !createAction
+      ? 1
+      : !acceptAction
+        ? 2
+        : !funded
+          ? 3
+          : !settled
+            ? 4
+            : 5;
+
+  const steps = [
+    "Agreement",
+    "Rekber",
+    "Funding",
+    "Settlement",
+    "Evidence",
+  ];
 
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-vault/70">
-      <div className="px-4 pb-4 pt-5">
+    <section className="overflow-hidden rounded-2xl bg-vault/70 ring-1 ring-wire/60">
+      <header className="border-b border-wire/50 px-4 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <p className="text-[11px] font-medium text-signal">
-                VINSS Rekber
-              </p>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowInfo(true)
-                }
-                aria-label="What is VINSS Escrow Rekber?"
-                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[8px] leading-none text-paper/35 transition hover:border-signal/50 hover:text-signal"
-              >
-                i
-              </button>
-            </div>
-
-            <h3 className="mt-2 text-xl font-medium tracking-tight text-paper">
-              {paymentSecured
-                ? "Payment secured"
-                : rekberReady
-                  ? "Secure the payment"
-                  : "Protect this deal"}
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-signal/75">
+              Private settlement via STRK20
+            </p>
+            <h3 className="mt-1 text-xl font-medium text-paper">
+              Escrow Rekber
             </h3>
-
-            <p className="mt-1 text-xs leading-relaxed text-paper/38">
-              {paymentSecured
-                ? "The agreed funds are locked in Rekber."
-                : rekberReady
-                  ? "Rekber is ready. Secure the agreed payment to continue."
-                  : "Prepare the accepted agreement before moving any funds."}
+            <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/38">
+              Two-party settlement: payer approval and payee claim are both required.
             </p>
           </div>
 
-          {paymentSecured && (
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-sm text-signal">
-              ✓
-            </span>
-          )}
+          <span className="rounded-full bg-signal/[0.08] px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-signal">
+            V2
+          </span>
         </div>
 
-        <div className="mt-5 grid grid-cols-4 gap-1">
-          {[
-            {
-              label: "Agreement",
-              done:
-                Boolean(
-                  acceptedAction &&
-                    acceptedAction.kind ===
-                      "accept",
-                ),
-              active:
-                !rekberReady &&
-                !paymentSecured,
-            },
-            {
-              label: "Rekber",
-              done:
-                rekberReady,
-              active:
-                Boolean(
-                  acceptedAction &&
-                    acceptedAction.kind ===
-                      "accept",
-                ) &&
-                !rekberReady,
-            },
-            {
-              label: "Payment",
-              done:
-                paymentSecured,
-              active:
-                rekberReady &&
-                !paymentSecured,
-            },
-            {
-              label: "Complete",
-              done: false,
-              active:
-                paymentSecured,
-            },
-          ].map((step, index) => (
-            <div
-              key={step.label}
-              className="min-w-0"
-            >
-              <div
-                className={
-                  step.done
-                    ? "h-1 rounded-full bg-signal"
-                    : step.active
-                      ? "h-1 rounded-full bg-signal/45"
-                      : "h-1 rounded-full bg-paper/8"
-                }
-              />
+        <div className="mt-4 grid grid-cols-5 gap-1">
+          {steps.map((label, index) => {
+            const position = index + 1;
+            const done = stage > position;
+            const active = stage === position;
 
-              <div className="mt-2 flex items-center gap-1">
-                <span
+            return (
+              <div key={label} className="min-w-0">
+                <div
                   className={
-                    step.done
-                      ? "text-[9px] text-signal"
-                      : step.active
-                        ? "text-[9px] text-paper/65"
-                        : "text-[9px] text-paper/25"
+                    done
+                      ? "h-1 rounded-full bg-signal"
+                      : active
+                        ? "h-1 rounded-full bg-signal/45"
+                        : "h-1 rounded-full bg-paper/8"
+                  }
+                />
+                <p
+                  className={
+                    done || active
+                      ? "mt-1.5 truncate text-[8px] text-paper/55"
+                      : "mt-1.5 truncate text-[8px] text-paper/22"
                   }
                 >
-                  {step.done
-                    ? "✓"
-                    : index + 1}
-                </span>
-
-                <span
-                  className={
-                    step.done ||
-                    step.active
-                      ? "truncate text-[9px] text-paper/55"
-                      : "truncate text-[9px] text-paper/25"
-                  }
-                >
-                  {step.label}
-                </span>
+                  {done ? "✓ " : ""}
+                  {label}
+                </p>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      </div>
+      </header>
 
-      <div className="border-t border-wire/45 px-4 py-4">
-        {!acceptedAction ||
-        acceptedAction.kind !==
-          "accept" ? (
-          <div className="rounded-xl bg-paper/[0.025] px-4 py-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-paper/[0.05] text-paper/35">
-              ◇
-            </div>
-
-            <p className="mt-4 text-sm font-medium text-paper/75">
-              No accepted agreement yet
+      <div className="space-y-4 p-4">
+        {!accepted ? (
+          <div className="rounded-xl bg-paper/[0.025] p-4">
+            <p className="text-sm font-medium text-paper/70">
+              Accept an Offer first
             </p>
-
-            <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/35">
-              Accept an Offer first.
-              VINSS will automatically
-              bring the agreed payment
-              into Rekber.
+            <p className="mt-1 text-xs leading-relaxed text-paper/35">
+              Rekber starts only from an accepted direct Offer. Group conversations cannot create settlements.
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate text-xs text-paper/38">
-                <span className="capitalize">
-                  {acceptedAction.dealType ??
-                    "Deal"}
-                </span>
-                {" · "}
-                Accepted agreement
-              </p>
-
-              <span className="shrink-0 text-[10px] text-signal/75">
+          <div className="rounded-xl bg-paper/[0.025] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.13em] text-paper/28">
+                  Accepted agreement
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-paper">
+                  {accepted.amount}
+                  <span className="ml-2 text-sm font-medium text-paper/45">
+                    {accepted.asset}
+                  </span>
+                </p>
+              </div>
+              <span className="text-[10px] text-signal">
                 ✓ Confirmed
               </span>
             </div>
-
-            {!rekberReady ? (
-              <>
-                <div className="relative overflow-hidden rounded-2xl bg-paper/[0.035] px-5 py-5">
-                  <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-signal/[0.055]" />
-
-                  <p className="relative text-[10px] font-medium uppercase tracking-[0.14em] text-paper/30">
-                    Payment to protect
-                  </p>
-
-                  <p className="relative mt-2 text-[32px] font-semibold tracking-tight text-paper">
-                    {acceptedAction.amount}
-                    <span className="ml-2 text-lg font-medium text-paper/55">
-                      {acceptedAction.asset}
-                    </span>
-                  </p>
-
-                  <div className="relative mt-4 flex items-start gap-2">
-                    <span className="mt-0.5 text-xs text-signal">
-                      🛡
-                    </span>
-
-                    <p className="text-xs leading-relaxed text-paper/42">
-                      Start Rekber to link
-                      this accepted agreement
-                      to secure funding.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={
-                    handleCreateCoordination
-                  }
-                  disabled={
-                    !canCoordinate
-                  }
-                  className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  {busy ? (
-                    <span className="inline-flex items-center justify-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="h-3.5 w-3.5 animate-spin rounded-full border border-ink/25 border-t-ink"
-                      />
-                      Starting Rekber…
-                    </span>
-                  ) : (
-                    "Start Rekber"
-                  )}
-                </button>
-
-                <div className="flex items-center justify-center gap-2 text-[10px] text-paper/28">
-                  <span>🔒</span>
-                  <span>
-                    No payment moves at
-                    this step
-                  </span>
-                </div>
-              </>
-            ) : !paymentSecured ? (
-              <>
-                <div className="rounded-2xl bg-paper/[0.035] p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-signal/70">
-                        Rekber ready
-                      </p>
-
-                      <p className="mt-1 text-xs text-paper/38">
-                        Ready for secure
-                        funding
-                      </p>
-                    </div>
-
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-signal/10 text-sm text-signal">
-                      ✓
-                    </span>
-                  </div>
-
-                  <div className="mt-5">
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-paper/28">
-                      Payment
-                    </p>
-
-                    <p className="mt-1 text-[28px] font-semibold tracking-tight text-paper">
-                      {acceptedAction.amount}
-                      <span className="ml-2 text-base font-medium text-paper/50">
-                        {acceptedAction.asset}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="mt-4 border-t border-wire/45 pt-4">
-                    <FeeBreakdown
-                      amount={
-                        acceptedAction.amount
-                      }
-                      unit={
-                        acceptedAction.asset
-                      }
-                      label="VINSS fee"
-                      feeBps={100}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-paper/[0.025] px-4 py-3.5">
-                  <label
-                    htmlFor="escrow-refund"
-                    className="flex items-center justify-between gap-4"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-xs font-medium text-paper/60">
-                        Refund protection
-                      </span>
-
-                      <span className="mt-1 block text-[10px] leading-relaxed text-paper/30">
-                        Refund eligibility
-                        begins after this
-                        window.
-                      </span>
-                    </span>
-
-                    <span className="flex shrink-0 items-center rounded-lg bg-paper/[0.035] px-2">
-                      <input
-                        id="escrow-refund"
-                        value={refundHours}
-                        onChange={(e) =>
-                          setRefundHours(
-                            e.target.value,
-                          )
-                        }
-                        inputMode="numeric"
-                        disabled={
-                          !session || busy
-                        }
-                        className="w-10 bg-transparent py-2 text-right text-sm font-medium text-paper outline-none disabled:opacity-40"
-                      />
-
-                      <span className="ml-1 text-[10px] text-paper/30">
-                        h
-                      </span>
-                    </span>
-                  </label>
-                </div>
-
-                <div className="flex items-start gap-2 px-1">
-                  <span className="mt-0.5 text-[10px] text-amber">
-                    ◉
-                  </span>
-
-                  <p className="text-[10px] leading-relaxed text-paper/30">
-                    Amount and token are
-                    public on Starknet.
-                    Messages and negotiated
-                    terms stay encrypted.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleDeposit}
-                  disabled={!canDeposit}
-                  className="w-full rounded-xl bg-amber px-4 py-3.5 text-sm font-medium text-ink transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  {busy
-                    ? "Waiting for Ready X…"
-                    : `Secure ${acceptedAction.amount} ${acceptedAction.asset}`}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="relative overflow-hidden rounded-2xl bg-signal/[0.07] p-5 ring-1 ring-signal/20">
-                  <div className="absolute -right-10 -top-14 h-36 w-36 rounded-full bg-signal/[0.07]" />
-
-                  <div className="relative flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-signal">
-                        Payment secured
-                      </p>
-
-                      <p className="mt-2 text-[34px] font-semibold tracking-tight text-paper">
-                        {acceptedAction.amount}
-                        <span className="ml-2 text-lg font-medium text-paper/55">
-                          {acceptedAction.asset}
-                        </span>
-                      </p>
-
-                      <p className="mt-2 text-xs text-paper/40">
-                        Funds are locked in
-                        VINSS Rekber.
-                      </p>
-                    </div>
-
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-signal text-sm font-semibold text-ink">
-                      ✓
-                    </span>
-                  </div>
-
-                  {paymentProofTx && (
-                    <div className="relative mt-5 flex items-center justify-between border-t border-signal/15 pt-4">
-                      <span className="text-[10px] text-paper/30">
-                        Starknet
-                      </span>
-
-                      <a
-                        href={explorerUrl(
-                          paymentProofTx,
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] font-medium text-signal"
-                      >
-                        Funding proof ↗
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl bg-paper/[0.025] px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-signal">
-                      🛡
-                    </span>
-
-                    <p className="text-xs text-paper/45">
-                      Protected until
-                      settlement or eligible
-                      refund.
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <details className="group rounded-xl bg-paper/[0.018] px-3 py-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-[10px] text-paper/28 hover:text-paper/45 [&::-webkit-details-marker]:hidden">
-                <span>
-                  Technical details
-                </span>
-
-                <span
-                  aria-hidden="true"
-                  className="text-[9px] transition group-open:rotate-180"
-                >
-                  ▾
-                </span>
-              </summary>
-
-              <div className="mt-3 space-y-2 border-t border-wire/40 pt-3 text-[10px] leading-relaxed text-paper/28">
-                <p className="break-all">
-                  <span className="text-paper/42">
-                    Offer locator:
-                  </span>{" "}
-                  {dealOfferLocator || "—"}
-                </p>
-
-                <p className="break-all">
-                  <span className="text-paper/42">
-                    Custody commitment:
-                  </span>{" "}
-                  {agreedCustodyCommitment
-                    ? `0x${agreedCustodyCommitment.toString(
-                        16,
-                      )}`
-                    : "Not established"}
-                </p>
-
-                <p className="break-all">
-                  <span className="text-paper/42">
-                    Token contract:
-                  </span>{" "}
-                  {token || "—"}
-                </p>
-              </div>
-            </details>
-
-            {lastSecrets && (
-              <details className="group rounded-xl bg-danger/[0.025] px-3 py-3 ring-1 ring-danger/20">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-[10px] text-danger/75 [&::-webkit-details-marker]:hidden">
-                  <span>
-                    Recovery & settlement
-                  </span>
-
-                  <span
-                    aria-hidden="true"
-                    className="text-[9px] transition group-open:rotate-180"
-                  >
-                    ▾
-                  </span>
-                </summary>
-
-                <div className="mt-3 border-t border-danger/15 pt-3">
-                  <p className="mb-3 text-[10px] leading-relaxed text-paper/35">
-                    Keep these private.
-                    They are required for
-                    settlement and recovery.
-                  </p>
-
-                  <div className="space-y-1.5 font-mono text-[9px] text-paper/35">
-                    <p className="break-all">
-                      custody: 0x
-                      {lastSecrets.custodyCommitment.toString(
-                        16,
-                      )}
-                    </p>
-
-                    <p className="break-all">
-                      releaseSecret: 0x
-                      {lastSecrets.releaseSecret.toString(
-                        16,
-                      )}
-                    </p>
-
-                    <p className="break-all">
-                      refundSecret: 0x
-                      {lastSecrets.refundSecret.toString(
-                        16,
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </details>
-            )}
           </div>
         )}
-      </div>
 
-      {showInfo && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-ink/85 p-4">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rekber-info-title"
-            className="w-full max-w-sm border border-wire bg-vault p-4"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p id="rekber-info-title" className="font-display text-xs uppercase tracking-widest text-signal">
-                  What is Escrow Rekber?
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-paper/65">
-                  VINSS locks the agreed payment until the deal is completed.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowInfo(false)}
-                aria-label="Close"
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-wire/70 bg-transparent text-[11px] leading-none text-paper/40 transition hover:border-signal/40 hover:text-signal"
-              >
-                ×
-              </button>
-            </div>
+        {accepted && !v2Configured && (
+          <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
+            <p className="text-xs font-medium text-amber">
+              Secure settlement is not deployed on this network
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
+              Configure NEXT_PUBLIC_ESCROW_REKBER_V2_ADDRESS after the V2 contract passes testnet release and refund verification.
+            </p>
+          </div>
+        )}
 
-            <div className="mt-4 space-y-2 text-xs leading-relaxed text-paper/45">
-              <p>• Payment is secured on Starknet.</p>
-              <p>• Deal terms and messages remain private.</p>
-              <p>• Settlement releases the locked payment.</p>
-              <p>• Refund becomes available after the agreed window.</p>
-            </div>
+        {accepted && custodyMismatch && (
+          <div className="rounded-xl border border-danger/35 bg-danger/[0.055] p-4">
+            <p className="text-xs font-medium text-danger">
+              Settlement verification failed
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
+              {custodyVerification.reason} Do not authorize or claim this settlement. Verify the public custody on an explorer and use the timeout recovery path only if its refund commitment is yours.
+            </p>
+            {role === "payer" &&
+              canRecoverMismatchedCustody && (
+                <button
+                  type="button"
+                  onClick={handleRefund}
+                  disabled={
+                    busy ||
+                    !refundAvailable
+                  }
+                  className="mt-3 w-full rounded-xl border border-danger/40 px-4 py-3 text-xs text-danger disabled:opacity-30"
+                >
+                  {refundAvailable
+                    ? "Recover matched refund after timeout"
+                    : `Recovery unlocks ${formatDeadline(refundAfter)}`}
+                </button>
+              )}
+          </div>
+        )}
 
-            <div className="mt-4 border-t border-wire pt-3">
-              <p className="text-[10px] leading-relaxed text-paper/35">
-                Need help with this specific deal? VINSS Agent can review the agreement and explain the next action.
+        {accepted && v2Configured && !createAction && (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-signal/[0.045] p-4">
+              <p className="text-sm font-medium text-paper/75">
+                Will you secure this payment?
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-paper/38">
+                The wallet that starts Rekber becomes the payer. The counterparty must accept before funds can move.
               </p>
             </div>
 
+            <label className="flex items-center justify-between gap-4 rounded-xl bg-paper/[0.025] p-3">
+              <span>
+                <span className="block text-xs text-paper/60">
+                  Refund protection
+                </span>
+                <span className="mt-1 block text-[9px] text-paper/28">
+                  Payer can refund after this window.
+                </span>
+              </span>
+              <span className="flex items-center rounded-lg bg-paper/[0.04] px-2">
+                <input
+                  value={refundHours}
+                  onChange={(event) =>
+                    setRefundHours(
+                      event.target.value,
+                    )
+                  }
+                  inputMode="numeric"
+                  className="w-12 bg-transparent py-2 text-right text-sm text-paper outline-none"
+                />
+                <span className="ml-1 text-[9px] text-paper/30">
+                  h
+                </span>
+              </span>
+            </label>
+
             <button
               type="button"
-              onClick={() => setShowInfo(false)}
-              className="mt-4 w-full border border-signal px-4 py-3 font-display text-[10px] uppercase tracking-widest text-signal transition-colors hover:bg-signal hover:text-ink"
+              onClick={handleStartRekber}
+              disabled={
+                busy ||
+                !session ||
+                !channelKey ||
+                !peerAddress
+              }
+              className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
             >
-              Got it
+              {busy
+                ? "Preparing secure Rekber…"
+                : "I will secure the payment →"}
             </button>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+
+        {accepted &&
+          v2Configured &&
+          createAction &&
+          !acceptAction &&
+          role === "payee" && (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-signal/[0.045] p-4">
+                <p className="text-sm font-medium text-paper/75">
+                  Review Rekber request
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-paper/38">
+                  The payer will secure {accepted.amount} {accepted.asset}. Your private claim key is generated only on this device.
+                </p>
+                <p className="mt-3 text-[9px] text-paper/28">
+                  Refund becomes eligible {formatDeadline(refundAfter)}.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAcceptRekber}
+                disabled={busy || !session}
+                className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
+              >
+                {busy
+                  ? "Accepting Rekber…"
+                  : "Accept Rekber →"}
+              </button>
+            </div>
+          )}
+
+        {accepted &&
+          v2Configured &&
+          createAction &&
+          !acceptAction &&
+          role === "payer" && (
+            <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border border-signal/25 border-t-signal" />
+              <p className="mt-3 text-sm text-paper/65">
+                Waiting for counterparty
+              </p>
+              <p className="mt-1 text-[10px] text-paper/30">
+                No funds move until they accept the Rekber terms.
+              </p>
+            </div>
+          )}
+
+        {accepted &&
+          v2Configured &&
+          acceptAction &&
+          !funded &&
+          role === "payer" && (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-paper/[0.03] p-4">
+                <p className="text-[9px] uppercase tracking-[0.13em] text-signal/70">
+                  Counterparty accepted
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-paper">
+                  {accepted.amount}
+                  <span className="ml-2 text-base text-paper/45">
+                    {accepted.asset}
+                  </span>
+                </p>
+                <div className="mt-4 border-t border-wire/45 pt-3">
+                  <FeeBreakdown
+                    amount={accepted.amount}
+                    unit={accepted.asset}
+                    label="VINSS fee"
+                    feeBps={100}
+                  />
+                </div>
+              </div>
+              <p className="px-1 text-[9px] leading-relaxed text-paper/30">
+                Token, amount, timeout and commitments are public. Deal terms and participant coordination remain encrypted.
+              </p>
+              <button
+                type="button"
+                onClick={handleFund}
+                disabled={
+                  busy ||
+                  !localSecrets ||
+                  coordinationAuthorized !== true
+                }
+                className="w-full rounded-xl bg-amber px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
+              >
+                {busy
+                  ? "Waiting for Ready X…"
+                  : coordinationAuthorized === null
+                    ? "Verifying wallet approvals…"
+                    : coordinationAuthorized === false
+                      ? "Wallet approval mismatch"
+                      : `Secure ${accepted.amount} ${accepted.asset}`}
+              </button>
+            </div>
+          )}
+
+        {accepted &&
+          v2Configured &&
+          acceptAction &&
+          !funded &&
+          role === "payee" && (
+            <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
+              <p className="text-sm text-paper/65">
+                Rekber accepted
+              </p>
+              <p className="mt-1 text-[10px] text-paper/30">
+                Waiting for the payer to secure the agreed amount.
+              </p>
+            </div>
+          )}
+
+        {accepted && funded && !settled && (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-signal/[0.065] p-4 ring-1 ring-signal/15">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.13em] text-signal">
+                    Payment secured
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold text-paper">
+                    {accepted.amount}
+                    <span className="ml-2 text-base text-paper/45">
+                      {accepted.asset}
+                    </span>
+                  </p>
+                  <p className="mt-2 text-[10px] text-paper/35">
+                    Refund boundary: {formatDeadline(refundAfter)}
+                  </p>
+                </div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-signal text-sm text-ink">
+                  ✓
+                </span>
+              </div>
+              {fundingProofTx && (
+                <a
+                  href={explorerUrl(
+                    fundingProofTx,
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-block text-[10px] text-signal"
+                >
+                  Funding proof ↗
+                </a>
+              )}
+            </div>
+
+            {role === "payer" && !releaseRecord && (
+              <button
+                type="button"
+                onClick={handleAuthorizeRelease}
+                disabled={busy || !localSecrets}
+                className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
+              >
+                {busy
+                  ? "Authorizing release…"
+                  : "Approve settlement release →"}
+              </button>
+            )}
+
+            {role === "payer" && releaseRecord && (
+              <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
+                <p className="text-sm text-paper/65">
+                  Release approved
+                </p>
+                <p className="mt-1 text-[10px] text-paper/30">
+                  Waiting for the payee to combine both private keys and claim payment.
+                </p>
+              </div>
+            )}
+
+            {role === "payee" && !releaseAuthorizationSecret && (
+              <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
+                <p className="text-sm text-paper/65">
+                  Waiting for payer approval
+                </p>
+                <p className="mt-1 text-[10px] text-paper/30">
+                  Your claim key alone cannot release the funds.
+                </p>
+              </div>
+            )}
+
+            {role === "payee" && releaseAuthorizationSecret && (
+              <button
+                type="button"
+                onClick={handleClaimPayment}
+                disabled={busy || !localSecrets?.payeeClaimSecret}
+                className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
+              >
+                {busy
+                  ? "Claiming private payment…"
+                  : "Claim settlement payment →"}
+              </button>
+            )}
+
+            {role === "payer" && (
+              <button
+                type="button"
+                onClick={handleRefund}
+                disabled={
+                  busy ||
+                  !refundAvailable ||
+                  !localSecrets?.refundSecret
+                }
+                className="w-full rounded-xl border border-wire/70 px-4 py-3 text-xs text-paper/55 disabled:opacity-25"
+              >
+                {refundAvailable
+                  ? "Refund after timeout"
+                  : `Refund unlocks ${formatDeadline(refundAfter)}`}
+              </button>
+            )}
+          </div>
+        )}
+
+        {accepted && settled && (
+          <div className="space-y-3">
+            <div
+              className={
+                released
+                  ? "rounded-xl bg-signal/[0.07] p-4 ring-1 ring-signal/20"
+                  : "rounded-xl bg-amber/[0.055] p-4 ring-1 ring-amber/20"
+              }
+            >
+              <p
+                className={
+                  released
+                    ? "text-[9px] uppercase tracking-[0.13em] text-signal"
+                    : "text-[9px] uppercase tracking-[0.13em] text-amber"
+                }
+              >
+                {released
+                  ? "Settlement released"
+                  : "Rekber refunded"}
+              </p>
+              <p className="mt-2 text-sm text-paper/70">
+                {released
+                  ? "The payee claimed the secured payment."
+                  : "The payer recovered the payment after the timeout."}
+              </p>
+              <p className="mt-2 text-[9px] text-paper/28">
+                Settled {formatDeadline(custodyState?.settledAt ?? 0)}
+              </p>
+              {settlementProofTx && (
+                <a
+                  href={explorerUrl(
+                    settlementProofTx,
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-block text-[10px] text-signal"
+                >
+                  Settlement evidence ↗
+                </a>
+              )}
+            </div>
+
+            {released && (
+              <div className="rounded-xl bg-paper/[0.025] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-paper/65">
+                      NFT Settlement Certificate
+                    </p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-paper/32">
+                      Optional public evidence claimed by this wallet itself. Claiming links this wallet and role to the custody proof; public token, amount, and timing can be correlated. Private messages and Offer terms stay hidden.
+                    </p>
+                    {role === "payee" && (
+                      <p className="mt-2 text-[9px] leading-relaxed text-amber/70">
+                        Confirm the payment appears in your private wallet balance before claiming your certificate.
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-lg text-signal">
+                    ◇
+                  </span>
+                </div>
+
+                {!certificateConfigured ? (
+                  <p className="mt-3 rounded-lg bg-amber/[0.04] px-3 py-2 text-[9px] text-amber/75">
+                    Certificate contract is not deployed on this network yet.
+                  </p>
+                ) : certificateClaimed ? (
+                  <div className="mt-3 rounded-lg bg-signal/[0.055] px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-signal">
+                        ✓ Certificate claimed
+                      </span>
+                      <span className="flex items-center gap-3">
+                        {certificateTokenId && (
+                          <a
+                            href={`/certificate/${certificateTokenId.toString()}`}
+                            className="text-[9px] text-signal"
+                          >
+                            Certificate ↗
+                          </a>
+                        )}
+                        {certificateTx && (
+                          <a
+                            href={explorerUrl(
+                              certificateTx,
+                            )}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[9px] text-signal"
+                          >
+                            Tx ↗
+                          </a>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ) : certificateTx ? (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-paper/[0.025] px-3 py-2.5">
+                    <span className="text-[10px] text-paper/45">
+                      Confirming certificate…
+                    </span>
+                    <a
+                      href={explorerUrl(certificateTx)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[9px] text-signal"
+                    >
+                      Tx ↗
+                    </a>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClaimCertificate}
+                    disabled={
+                      busy ||
+                      !localSecrets?.certificateSecret
+                    }
+                    className="mt-3 w-full rounded-xl border border-signal/35 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
+                  >
+                    {busy
+                      ? "Claiming certificate…"
+                      : role === "payee"
+                        ? "I confirmed payment — claim certificate →"
+                        : "Claim my public certificate →"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {localSecrets && custodyCommitment && (
+          <details className="group rounded-xl border border-wire/45 bg-paper/[0.015] p-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-[9px] text-paper/32 [&::-webkit-details-marker]:hidden">
+              <span>Recovery backup</span>
+              <span className="group-open:rotate-180">
+                ▾
+              </span>
+            </summary>
+            <div className="mt-3 border-t border-wire/40 pt-3">
+              <p className="text-[9px] leading-relaxed text-danger/70">
+                These one-time secrets control settlement or recovery. Keep the backup private and offline.
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyBackup}
+                className="mt-3 rounded-lg border border-wire/70 px-3 py-2 text-[9px] text-paper/55"
+              >
+                {backupCopied
+                  ? "Copied ✓"
+                  : "Copy recovery JSON"}
+              </button>
+            </div>
+          </details>
+        )}
+
+        {custodyCommitment && (
+          <details className="group rounded-xl bg-paper/[0.015] p-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-[9px] text-paper/28 [&::-webkit-details-marker]:hidden">
+              <span>Technical details</span>
+              <span className="group-open:rotate-180">
+                ▾
+              </span>
+            </summary>
+            <div className="mt-3 space-y-2 border-t border-wire/40 pt-3 font-mono text-[8px] text-paper/30">
+              <p className="break-all">
+                custody: 0x{custodyCommitment.toString(16)}
+              </p>
+              <p>
+                role: {role ?? "unknown"}
+              </p>
+              <p>
+                state: {settled ? (released ? "released" : "refunded") : funded ? "funded" : "coordinating"}
+              </p>
+            </div>
+          </details>
+        )}
+      </div>
     </section>
   );
 }

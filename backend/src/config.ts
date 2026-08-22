@@ -36,6 +36,15 @@ export interface AppConfig {
     feeBps: number;
     defaultProvider: VinssLlmSelection;
   };
+  features: {
+    agent: boolean;
+    loyalty: boolean;
+  };
+  rateLimits: {
+    windowMs: number;
+    discover: number;
+    agent: number;
+  };
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
@@ -182,6 +191,22 @@ function parseLlmSelection(value: string | undefined): VinssLlmSelection {
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const network = parseNetwork(requireEnv(env, "STARKNET_NETWORK"));
+  const corsOrigin = env.CORS_ORIGIN?.trim() || "http://localhost:3000";
+  const rpcUrl = parseUrl(requireEnv(env, "RPC_URL"), "RPC_URL");
+
+  if (network === "mainnet") {
+    const rpc = new URL(rpcUrl);
+    const rpcIdentity = `${rpc.hostname}${rpc.pathname}`.toLowerCase();
+    const origin = new URL(corsOrigin);
+
+    if (origin.protocol !== "https:") {
+      throw new Error("Mainnet CORS_ORIGIN must use https.");
+    }
+
+    if (/sepolia|goerli|testnet/.test(rpcIdentity)) {
+      throw new Error("Mainnet RPC_URL appears to reference a test network.");
+    }
+  }
 
   return {
     port: parseInteger(env.PORT, "PORT", {
@@ -189,8 +214,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       min: 1,
       max: 65_535,
     }),
-    corsOrigin: env.CORS_ORIGIN?.trim() || "http://localhost:3000",
-    rpcUrl: parseUrl(requireEnv(env, "RPC_URL"), "RPC_URL"),
+    corsOrigin,
+    rpcUrl,
     network,
     database: {
       url: parseDatabaseUrl(requireEnv(env, "DATABASE_URL")),
@@ -269,6 +294,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         max: 10_000,
       }),
       defaultProvider: parseLlmSelection(env.VINSS_LLM_PROVIDER),
+    },
+    features: {
+      agent: parseBoolean(
+        env.AGENT_ENABLED,
+        network !== "mainnet",
+      ),
+      loyalty: parseBoolean(env.LOYALTY_ENABLED, false),
+    },
+    rateLimits: {
+      windowMs: parseInteger(
+        env.RATE_LIMIT_WINDOW_MS,
+        "RATE_LIMIT_WINDOW_MS",
+        { fallback: 60_000, min: 1_000, max: 3_600_000 },
+      ),
+      discover: parseInteger(
+        env.DISCOVER_RATE_LIMIT,
+        "DISCOVER_RATE_LIMIT",
+        { fallback: 120, min: 1, max: 10_000 },
+      ),
+      agent: parseInteger(
+        env.AGENT_RATE_LIMIT,
+        "AGENT_RATE_LIMIT",
+        { fallback: 12, min: 1, max: 1_000 },
+      ),
     },
   };
 }
