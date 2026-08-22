@@ -148,13 +148,14 @@ export default function DealRoomPage() {
   const {
     escrowActions,
     sendDirectEscrowCoordination,
-    startDirectRekber,
   } = useRoomEscrow({
     roomId: room?.id ?? null,
     session,
     channelKey,
     participants,
-    active: tab === "escrow",
+    active:
+      tab === "timeline" ||
+      tab === "escrow",
   });
 
   const {
@@ -537,6 +538,7 @@ export default function DealRoomPage() {
           roomId={room?.id ?? params.roomId}
           entries={entries}
           offerEntries={offerEntries}
+          escrowActions={escrowActions}
           walletAddress={session?.account.address}
           connected={Boolean(session)}
           channelReady={Boolean(channelKey)}
@@ -704,7 +706,6 @@ export default function DealRoomPage() {
                   acceptedOffer={escrowOfferSource}
                   offerEntries={offerEntries}
                   escrowActions={escrowActions}
-                  onStartRekber={startDirectRekber}
                   onSendCoordination={
                     sendDirectEscrowCoordination
                   }

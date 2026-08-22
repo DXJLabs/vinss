@@ -219,6 +219,20 @@ const escrowFrontend = await readFile(
   ),
   "utf8",
 );
+const roomEscrowHook = await readFile(
+  new URL(
+    "../frontend/hooks/room/useRoomEscrow.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const escrowPanel = await readFile(
+  new URL(
+    "../frontend/components/room/escrow/EscrowPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const escrowCommitments = await readFile(
   new URL(
     "../contracts/src/escrow_rekber/escrow_rekber_commitments.cairo",
@@ -247,6 +261,32 @@ assert.match(
   escrowFrontend,
   /parseSettlementAmount/,
   "accepted Offer decimal amount must be converted to token base units",
+);
+
+assert.equal(
+  roomEscrowHook.includes("prepareEscrowFromOffer"),
+  false,
+  "Rekber V2 setup must not create a paid OfferHelper prepare action",
+);
+assert.equal(
+  roomEscrowHook.includes("startDirectRekber"),
+  false,
+  "Rekber V2 setup must use only the private escrow coordination channel",
+);
+assert.equal(
+  escrowPanel.includes("onStartRekber"),
+  false,
+  "Rekber setup UI must not invoke the legacy paid preparation callback",
+);
+assert.match(
+  escrowPanel,
+  /coordinationLockRef/,
+  "Rekber setup UI must synchronously block duplicate wallet requests",
+);
+assert.match(
+  escrowPanel,
+  /pendingPayerSetup/,
+  "Rekber setup retry must reuse the pending payer authorization",
 );
 
 console.log(

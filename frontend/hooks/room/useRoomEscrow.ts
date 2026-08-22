@@ -9,16 +9,11 @@ import type {
   VinssWalletSession,
 } from "@/lib/starknet/walletClient";
 import {
-  buildEscrowOfferSnapshot,
   discoverEscrowActions,
   sendEscrowCoordinationAction,
 } from "@/lib/deal-room/escrow";
-import {
-  prepareEscrowFromOffer,
-} from "@/lib/deal-room/offers";
 import type {
   EscrowActionPayload,
-  OfferActionPayload,
   SendActionResult,
 } from "@/types/deal-room";
 import {
@@ -35,9 +30,6 @@ import type {
 import {
   BACKEND_URL,
 } from "@/lib/starknet/constants";
-import type {
-  ConversationEntry,
-} from "@/components/room/conversation/ConversationPanel";
 
 export interface DiscoveredEscrowAction {
   actionLocator: string;
@@ -666,110 +658,6 @@ export function useRoomEscrow({
 
     return result;
   }
-
-
-  async function startDirectRekber(
-    source: ConversationEntry,
-    custodyCommitment: bigint,
-  ): Promise<SendActionResult> {
-    if (
-      !session ||
-      !channelKey ||
-      !source.offerAction ||
-      source.offerAction.kind !== "accept"
-    ) {
-      throw new Error(
-        "Escrow Rekber must start from an accepted Offer.",
-      );
-    }
-
-    const accepted =
-      source.offerAction;
-    const self =
-      session.account.address;
-
-    const peerAddress =
-      sameStarknetAddress(
-        accepted.senderAddress,
-        self,
-      )
-        ? accepted.recipientAddress
-        : sameStarknetAddress(
-              accepted.recipientAddress,
-              self,
-            )
-          ? accepted.senderAddress
-          : undefined;
-
-    if (!peerAddress) {
-      throw new Error(
-        "The accepted Offer counterparty could not be resolved.",
-      );
-    }
-
-    const { peer, route } =
-      await resolveDirectRoute(
-        peerAddress,
-      );
-
-    const canonicalLocator = (
-      locator: string,
-    ) =>
-      `0x${locator
-        .replace(/^0x/, "")
-        .toLowerCase()}`;
-
-    const sentAt =
-      new Date().toISOString();
-
-    const prepareAction:
-      OfferActionPayload = {
-        kind: "prepare_escrow",
-        rekberVersion: 2,
-        dealType:
-          accepted.dealType,
-        rootOfferLocator:
-          accepted.rootOfferLocator ??
-          accepted.parentOfferLocator ??
-          canonicalLocator(
-            source.actionLocator,
-          ),
-        parentOfferLocator:
-          canonicalLocator(
-            source.actionLocator,
-          ),
-        asset: accepted.asset,
-        amount: accepted.amount,
-        paymentTerms:
-          accepted.paymentTerms,
-        conditions:
-          accepted.conditions,
-        expiresAt:
-          accepted.expiresAt,
-        senderAddress: self,
-        recipientAddress:
-          peer.address,
-        sentAt,
-        custodyCommitment:
-          custodyCommitment.toString(),
-      };
-
-    const {
-      kind: _kind,
-      ...preparePayload
-    } = prepareAction;
-
-    const result =
-      await prepareEscrowFromOffer(
-        session.account,
-        channelKey,
-        preparePayload,
-        route,
-      );
-
-    return result;
-  }
-
   return {
     escrowIdentityReady:
       Boolean(
@@ -778,6 +666,5 @@ export function useRoomEscrow({
     escrowActions,
     refreshEscrowActions,
     sendDirectEscrowCoordination,
-    startDirectRekber,
   };
 }

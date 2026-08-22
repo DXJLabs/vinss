@@ -22,6 +22,9 @@ import type {
 import type {
   LocalRoomGroup,
 } from "@/lib/groups/localGroups";
+import type {
+  DiscoveredEscrowAction,
+} from "@/hooks/room/useRoomEscrow";
 
 export type {
   ConversationEntry,
@@ -32,6 +35,7 @@ interface ConversationPanelProps {
   roomId: string;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
+  escrowActions: DiscoveredEscrowAction[];
   walletAddress?: string;
   connected: boolean;
   channelReady: boolean;
@@ -87,6 +91,7 @@ export function ConversationPanel({
   roomId,
   entries,
   offerEntries,
+  escrowActions,
   walletAddress,
   connected,
   channelReady,
@@ -216,6 +221,9 @@ export function ConversationPanel({
           entries={entries}
           offerEntries={
             offerEntries
+          }
+          escrowActions={
+            escrowActions
           }
           walletAddress={
             walletAddress

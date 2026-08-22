@@ -20,10 +20,17 @@ import {
   escrowCustodyExists,
   getEscrowFundedProof,
 } from "@/lib/deal-room/escrow";
+import {
+  getRekberV2Custody,
+} from "@/lib/deal-room/settlementV2";
+import type {
+  DiscoveredEscrowAction,
+} from "@/hooks/room/useRoomEscrow";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
+  escrowActions: DiscoveredEscrowAction[];
   walletAddress?: string;
   peerAddress: string;
   connected: boolean;
@@ -85,6 +92,7 @@ async function sha256LocalFile(
 export function DirectConversationPanel({
   entries,
   offerEntries,
+  escrowActions,
   walletAddress,
   peerAddress,
   connected,
@@ -149,6 +157,17 @@ export function DirectConversationPanel({
     ...offerEntries,
   ]
     .filter((entry) => {
+      // V2 setup is carried by the private escrow channel. Older builds also
+      // emitted a paid OfferHelper `prepare_escrow` action; hide that duplicate
+      // artifact so it cannot look like a new Offer in the conversation.
+      if (
+        entry.offerAction?.kind ===
+          "prepare_escrow" &&
+        entry.offerAction.rekberVersion === 2
+      ) {
+        return false;
+      }
+
       if (
         (entry.scope ?? "group") !==
         "direct"
@@ -215,12 +234,44 @@ export function DirectConversationPanel({
       : "";
   }
 
-  const preparedCustodies =
-    pairEntries
+  const v2CreateActions =
+    escrowActions.filter((item) => {
+      if (
+        item.action.kind !== "create" ||
+        item.action.coordinationVersion !== 2
+      ) {
+        return false;
+      }
+
+      const incoming =
+        sameStarknetAddress(
+          item.action.senderAddress,
+          peerAddress,
+        ) &&
+        sameStarknetAddress(
+          item.action.recipientAddress,
+          walletAddress,
+        );
+      const outgoing =
+        sameStarknetAddress(
+          item.action.senderAddress,
+          walletAddress,
+        ) &&
+        sameStarknetAddress(
+          item.action.recipientAddress,
+          peerAddress,
+        );
+
+      return incoming || outgoing;
+    });
+
+  const preparedCustodies = [
+    ...pairEntries
       .filter(
         (entry) =>
           entry.offerAction?.kind ===
             "prepare_escrow" &&
+          entry.offerAction.rekberVersion !== 2 &&
           Boolean(
             entry.offerAction
               .custodyCommitment,
@@ -235,15 +286,37 @@ export function DirectConversationPanel({
         custodyCommitment:
           entry.offerAction!
             .custodyCommitment!,
-      }));
+        version: 1 as const,
+      })),
+    ...v2CreateActions
+      .filter((item) =>
+        Boolean(
+          item.action
+            .custodyCommitment,
+        ),
+      )
+      .map((item) => ({
+        key: canonicalCustodyKey(
+          item.action
+            .custodyCommitment,
+        ),
+        custodyCommitment:
+          item.action
+            .custodyCommitment!,
+        version: 2 as const,
+      })),
+  ];
 
   const preparedCustodyFingerprint =
     preparedCustodies
-      .map((item) => item.key)
+      .map(
+        (item) =>
+          `${item.version}:${item.key}`,
+      )
       .sort()
       .join("|");
 
-  const fundedFreelanceEntry =
+  const legacyFundedFreelanceEntry =
     [...pairEntries]
       .reverse()
       .find((entry) => {
@@ -268,6 +341,73 @@ export function DirectConversationPanel({
           ],
         );
       });
+
+  const v2FundedFreelanceEntry =
+    (():
+      | ConversationEntry
+      | null => {
+      for (
+        const item of [
+          ...v2CreateActions,
+        ].reverse()
+      ) {
+        const custody =
+          item.action
+            .custodyCommitment;
+
+        if (
+          !custody ||
+          !fundedCustodies[
+            canonicalCustodyKey(
+              custody,
+            )
+          ]
+        ) {
+          continue;
+        }
+
+        const termsEntry =
+          pairEntries.find(
+            (entry) =>
+              normalizeLocator(
+                entry.actionLocator,
+              ) ===
+              normalizeLocator(
+                item.action
+                  .dealOfferLocator,
+              ),
+          );
+
+        if (
+          termsEntry
+            ?.offerAction
+            ?.dealType !== "freelance"
+        ) {
+          continue;
+        }
+
+        return {
+          ...termsEntry,
+          offerAction: {
+            ...termsEntry.offerAction,
+            custodyCommitment:
+              custody,
+            senderAddress:
+              item.action
+                .senderAddress,
+            recipientAddress:
+              item.action
+                .recipientAddress,
+          },
+        };
+      }
+
+      return null;
+    })();
+
+  const fundedFreelanceEntry =
+    legacyFundedFreelanceEntry ??
+    v2FundedFreelanceEntry;
 
   // Current freelance flow: the wallet that starts Rekber is the payer.
   // The counterparty becomes the work submitter after funding is confirmed.
@@ -325,11 +465,19 @@ export function DirectConversationPanel({
             }
 
             const exists =
-              await escrowCustodyExists(
-                BigInt(
-                  item.custodyCommitment,
-                ),
-              );
+              item.version === 2
+                ? Boolean(
+                    await getRekberV2Custody(
+                      BigInt(
+                        item.custodyCommitment,
+                      ),
+                    ),
+                  )
+                : await escrowCustodyExists(
+                    BigInt(
+                      item.custodyCommitment,
+                    ),
+                  );
 
             if (
               stopped ||
@@ -420,8 +568,8 @@ export function DirectConversationPanel({
   ]);
 
   const preparedAgreementLocators =
-    new Set(
-      pairEntries
+    new Set([
+      ...pairEntries
         .filter(
           (entry) =>
             entry.offerAction?.kind ===
@@ -437,7 +585,14 @@ export function DirectConversationPanel({
               ?.parentOfferLocator,
           ),
         ),
-    );
+      ...v2CreateActions.map(
+        (item) =>
+          normalizeLocator(
+            item.action
+              .dealOfferLocator,
+          ),
+      ),
+    ]);
 
   const supersededOfferLocators =
     new Set(
@@ -883,11 +1038,17 @@ export function DirectConversationPanel({
                     rekberStarted={
                       entry.offerAction
                         ?.kind === "accept" &&
-                      preparedAgreementLocators.has(
+                      (preparedAgreementLocators.has(
                         normalizeLocator(
                           entry.actionLocator,
                         ),
-                      )
+                      ) ||
+                        preparedAgreementLocators.has(
+                          normalizeLocator(
+                            entry.offerAction
+                              .parentOfferLocator,
+                          ),
+                        ))
                     }
                     onAccept={
                       onAcceptOffer
