@@ -62,15 +62,10 @@ export function DirectConversationList({
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-4 border-b border-wire/50 px-4 py-3">
-            <div>
-              <p className="text-[13px] font-medium text-paper/65">
-                Private chats
-              </p>
-              <p className="mt-0.5 text-[10px] text-paper/28">
-                {participants.length} conversation{participants.length === 1 ? "" : "s"}
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-4 border-b border-wire/50 px-4 py-2.5">
+            <p className="text-[10px] text-paper/30">
+              {participants.length} conversation{participants.length === 1 ? "" : "s"}
+            </p>
 
             {canInvite && (
               <Link
@@ -97,9 +92,6 @@ export function DirectConversationList({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-paper/72">
                     {shortAddress(participant.address)}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[8px] text-paper/22">
-                    {participant.address}
                   </p>
                 </div>
 

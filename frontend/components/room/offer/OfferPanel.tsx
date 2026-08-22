@@ -21,6 +21,52 @@ type OfferTemplateId =
   | "nft_deal"
   | "custom_deal";
 
+type OfferHelpTopic =
+  | "offer"
+  | "deal_type"
+  | "fee";
+
+const OFFER_HELP: Record<
+  OfferHelpTopic,
+  {
+    title: string;
+    paragraphs: string[];
+  }
+> = {
+  offer: {
+    title: "What is an Offer?",
+    paragraphs: [
+      "An Offer is a private proposal you send to the other participant. It records what both sides are being asked to agree on, such as the work, item, payment amount, token, deadline and completion terms.",
+      "After you send it, the other participant can accept the Offer or send a counter offer with different terms.",
+      "Creating an Offer does not move money into Rekber or escrow. Funding happens separately after an Offer has been accepted.",
+    ],
+  },
+
+  deal_type: {
+    title: "Which deal type should I choose?",
+    paragraphs: [
+      "Choose the option that best matches the agreement you are making. This only changes the fields VINSS asks you to complete.",
+      "Freelance — work or services with payment, deliverables, deadlines and revision terms.",
+      "Token Trade — a private crypto trade that may include an off-chain fiat payment.",
+      "Physical Goods — products that need quantity, delivery or inspection terms.",
+      "Digital Goods — files, software, licenses or other digital assets.",
+      "Bounty — a reward for completing a clearly defined task or result.",
+      "NFT Deal — a negotiated NFT purchase with price and transfer conditions.",
+      "Custom Deal — use this when none of the other structures fit your agreement.",
+      "Choosing a deal type does not send anything, move funds or create escrow.",
+    ],
+  },
+
+  fee: {
+    title: "What is the 1 STRK fee?",
+    paragraphs: [
+      "The 1 STRK fee pays for submitting the wallet-backed private Offer action.",
+      "It is separate from the amount you are negotiating with the other participant.",
+      "This fee does not fund Rekber or escrow. Escrow funding is a separate action later in the deal flow.",
+    ],
+  },
+};
+
 type TemplateFieldType =
   | "text"
   | "number"
@@ -585,6 +631,14 @@ export function OfferPanel({
     showMoreTerms,
     setShowMoreTerms,
   ] = useState(false);
+
+  const [
+    helpTopic,
+    setHelpTopic,
+  ] =
+    useState<OfferHelpTopic | null>(
+      null,
+    );
 
   const counterAction =
     counterSource?.offerAction;
@@ -1298,9 +1352,6 @@ export function OfferPanel({
               {field.label}
             </span>
 
-            <span className="text-[10px] text-paper/20">
-              Settlement token
-            </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1449,19 +1500,33 @@ export function OfferPanel({
   }
 
   return (
-    <section className="border border-wire bg-vault/40">
+    <section className="relative border border-wire bg-vault/40">
       <div className="border-b border-wire px-4 py-4">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="font-display text-xs uppercase tracking-widest text-signal">
-              Offer
-            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <h3 className="text-sm text-paper">
+                {counterSource
+                  ? "Counter this offer"
+                  : "Create an offer"}
+              </h3>
 
-            <h3 className="mt-1 text-sm text-paper">
-              {counterSource
-                ? "Counter this offer"
-                : "Create an offer"}
-            </h3>
+              <button
+                type="button"
+                onClick={() =>
+                  setHelpTopic(
+                    (current) =>
+                      current === "offer"
+                        ? null
+                        : "offer",
+                  )
+                }
+                aria-label="What is an Offer?"
+                className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
+              >
+                ?
+              </button>
+            </div>
 
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
               {targetAddress
@@ -1470,6 +1535,7 @@ export function OfferPanel({
                   )}`
                 : "Open a private Chat and choose a participant before creating an offer."}
             </p>
+
           </div>
 
           <span className="shrink-0 text-[10px] uppercase tracking-wider text-paper/30">
@@ -1552,9 +1618,27 @@ export function OfferPanel({
           <div className="border border-wire bg-paper/[0.015] p-3">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="font-display text-[9px] uppercase tracking-widest text-paper/35">
-                  Private Offer action fee
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-display text-[9px] uppercase tracking-widest text-paper/35">
+                    Private Offer action fee
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHelpTopic(
+                        (current) =>
+                          current === "fee"
+                            ? null
+                            : "fee",
+                      )
+                    }
+                    aria-label="What is the Offer action fee?"
+                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
+                  >
+                    ?
+                  </button>
+                </div>
 
                 <p className="mt-1 text-[10px] text-paper/30">
                   Wallet-backed private Offer action
@@ -1565,6 +1649,7 @@ export function OfferPanel({
                 1 STRK
               </span>
             </div>
+
           </div>
 
           <div className="border border-signal/20 bg-signal/[0.03] p-3">
@@ -1607,13 +1692,28 @@ export function OfferPanel({
         <div className="space-y-5 p-4">
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="font-display text-[10px] uppercase tracking-widest text-paper/40">
-                Deal type
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="font-display text-[10px] uppercase tracking-widest text-paper/40">
+                  Deal type
+                </label>
 
-              <span className="text-[10px] text-paper/25">
-                Choose the agreement structure
-              </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHelpTopic(
+                      (current) =>
+                        current === "deal_type"
+                          ? null
+                          : "deal_type",
+                    )
+                  }
+                  aria-label="What does Deal type mean?"
+                  className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
+                >
+                  ?
+                </button>
+              </div>
+
             </div>
 
             <button
@@ -1627,17 +1727,14 @@ export function OfferPanel({
               aria-expanded={
                 choosingTemplate
               }
-              className="w-full border border-wire bg-vault/30 px-3 py-3 text-left transition hover:border-signal/35 disabled:opacity-40"
+              className="w-full rounded-xl border border-wire/80 bg-black/10 px-4 py-3 text-left transition hover:border-signal/35 disabled:opacity-40"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 bg-transparent">
                 <div>
                   <p className="text-sm text-paper/75">
                     {selectedTemplate.label}
                   </p>
 
-                  <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
-                    {selectedTemplate.description}
-                  </p>
                 </div>
 
                 <span className="mt-0.5 font-display text-[9px] uppercase tracking-widest text-signal/60">
@@ -1649,7 +1746,7 @@ export function OfferPanel({
             </button>
 
             {choosingTemplate && (
-              <div className="mt-2 max-h-[48vh] overflow-y-auto border border-wire bg-vault p-2">
+              <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-wire/70 bg-black/10 p-2">
                 {OFFER_TEMPLATES.map(
                   (template) => {
                     const selected =
@@ -1658,17 +1755,13 @@ export function OfferPanel({
 
                     return (
                       <button
-                        key={
-                          template.id
-                        }
+                        key={template.id}
                         type="button"
                         onClick={() => {
                           setSelectedTemplateId(
                             template.id,
                           );
-                          setReviewing(
-                            false,
-                          );
+                          setReviewing(false);
                           setChoosingTemplate(
                             false,
                           );
@@ -1678,33 +1771,28 @@ export function OfferPanel({
                         }}
                         className={
                           selected
-                            ? "mb-1 w-full border border-signal/30 bg-signal/[0.045] px-3 py-3 text-left last:mb-0"
-                            : "mb-1 w-full border border-wire/60 px-3 py-3 text-left transition hover:border-signal/25 hover:bg-signal/[0.025] last:mb-0"
+                            ? "flex min-h-14 items-center justify-between gap-2 rounded-lg border border-signal/45 bg-signal/[0.055] px-3 py-2.5 text-left"
+                            : "flex min-h-14 items-center justify-between gap-2 rounded-lg border border-wire/60 bg-vault/10 px-3 py-2.5 text-left transition hover:border-signal/25 hover:bg-signal/[0.025]"
                         }
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p
-                              className={
-                                selected
-                                  ? "text-sm text-signal/80"
-                                  : "text-sm text-paper/65"
-                              }
-                            >
-                              {template.label}
-                            </p>
+                        <span
+                          className={
+                            selected
+                              ? "text-[11px] font-medium text-signal/85"
+                              : "text-[11px] text-paper/60"
+                          }
+                        >
+                          {template.label}
+                        </span>
 
-                            <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
-                              {template.description}
-                            </p>
-                          </div>
-
-                          {selected && (
-                            <span className="font-display text-[8px] uppercase tracking-widest text-signal/65">
-                              Selected
-                            </span>
-                          )}
-                        </div>
+                        {selected && (
+                          <span
+                            className="shrink-0 text-[10px] text-signal/70"
+                            aria-hidden="true"
+                          >
+                            ✓
+                          </span>
+                        )}
                       </button>
                     );
                   },
@@ -1713,17 +1801,7 @@ export function OfferPanel({
             )}
           </div>
 
-          <div className="border-t border-wire/70 pt-5">
-            <div className="mb-4">
-              <p className="font-display text-[9px] uppercase tracking-[0.14em] text-signal/65">
-                {selectedTemplate.label} agreement
-              </p>
-
-              <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
-                Start with the essentials. Add more terms only when the deal needs them.
-              </p>
-            </div>
-
+          <div className="border-t border-wire/70 pt-4">
             <div className="space-y-4">
               {coreTemplateFields.map(
                 renderField,
@@ -1745,14 +1823,9 @@ export function OfferPanel({
                     }
                     className="flex w-full items-center justify-between border border-wire/70 bg-paper/[0.012] px-3 py-3 text-left transition hover:border-signal/25 disabled:opacity-40"
                   >
-                    <div>
-                      <p className="font-display text-[9px] uppercase tracking-[0.13em] text-paper/45">
-                        More terms
-                      </p>
-                      <p className="mt-1 text-[10px] text-paper/25">
-                        Add optional protection and completion details
-                      </p>
-                    </div>
+                    <p className="font-display text-[9px] uppercase tracking-[0.13em] text-paper/45">
+                      More terms
+                    </p>
 
                     <span className="font-display text-[9px] uppercase tracking-widest text-signal/60">
                       {showMoreTerms
@@ -1789,26 +1862,11 @@ export function OfferPanel({
                   Private Offer action fee
                 </p>
 
-                <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
-                  Paid in STRK when the wallet-backed Offer action is submitted.
-                </p>
               </div>
 
               <span className="shrink-0 text-sm text-signal/75">
                 1 STRK
               </span>
-            </div>
-          </div>
-
-          <div className="border border-wire bg-paper/[0.015] p-3">
-            <div className="flex gap-2">
-              <span className="mt-0.5 text-signal">
-                ◆
-              </span>
-
-              <p className="text-[10px] leading-relaxed text-paper/40">
-                Review the structured agreement before creating the Offer. The 1 STRK action fee is separate from the negotiated deal value.
-              </p>
             </div>
           </div>
 
@@ -1838,6 +1896,60 @@ export function OfferPanel({
             </button>
           )}
         </div>
+      )}
+
+      {helpTopic && (
+        <>
+          <div
+            aria-hidden="true"
+            onClick={() => setHelpTopic(null)}
+            className="fixed inset-0 z-[80] bg-transparent"
+          />
+
+          <div
+            role="dialog"
+            aria-modal="false"
+            className="fixed left-4 right-4 top-1/2 z-[90] mx-auto max-h-[70vh] max-w-md -translate-y-1/2 overflow-y-auto rounded-2xl border border-signal/20 bg-vault p-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="bg-transparent font-display text-[8px] uppercase tracking-[0.16em] text-signal/65">
+                  VINSS Guide
+                </p>
+
+                <h4 className="mt-1.5 bg-transparent text-[15px] font-medium text-paper/80">
+                  {OFFER_HELP[helpTopic].title}
+                </h4>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setHelpTopic(null)
+                }
+                aria-label="Close explanation"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-wire/70 text-xs text-paper/40 transition hover:border-signal/35 hover:text-signal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {OFFER_HELP[
+                helpTopic
+              ].paragraphs.map(
+                (paragraph) => (
+                  <p
+                    key={paragraph}
+                    className="text-[11px] leading-relaxed text-paper/42"
+                  >
+                    {paragraph}
+                  </p>
+                ),
+              )}
+            </div>
+          </div>
+        </>
       )}
     </section>
   );

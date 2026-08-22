@@ -3,6 +3,7 @@
 import { useParams, useSearchParams } from "next/navigation";
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
@@ -71,6 +72,20 @@ export default function DealRoomPage() {
   const { room, channelKey } = useRoom(params.roomId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const offerScrollRef =
+    useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (tab !== "offer") return;
+
+    requestAnimationFrame(() => {
+      offerScrollRef.current?.scrollTo({
+        top: 0,
+        behavior: "auto",
+      });
+    });
+  }, [tab]);
 
   // Counter mode points to one immutable Offer action selected from direct chat.
   const [counterSource, setCounterSource] =
@@ -588,7 +603,7 @@ export default function DealRoomPage() {
             aria-modal="true"
             aria-label="Add Offer"
           >
-            <section className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:bottom-5 sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
+            <section className="absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:inset-x-auto sm:top-auto sm:right-5 sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/75">
@@ -612,7 +627,10 @@ export default function DealRoomPage() {
                 </button>
               </header>
 
-              <div className="max-h-[calc(88vh-58px)] overflow-y-auto p-3 sm:p-4">
+              <div
+                ref={offerScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4"
+              >
                 <OfferPanel
                   session={session}
                   channelKey={channelKey}
@@ -644,7 +662,7 @@ export default function DealRoomPage() {
             aria-modal="true"
             aria-label="Add Escrow"
           >
-            <section className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:bottom-5 sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
+            <section className="absolute inset-x-0 top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border-t border-wire bg-ink shadow-2xl sm:inset-x-auto sm:top-auto sm:right-5 sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl sm:border">
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/75">
@@ -668,7 +686,7 @@ export default function DealRoomPage() {
                 </button>
               </header>
 
-              <div className="max-h-[calc(88vh-58px)] overflow-y-auto p-3 sm:p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
                 <EscrowPanel
                   session={session}
                   channelKey={channelKey}

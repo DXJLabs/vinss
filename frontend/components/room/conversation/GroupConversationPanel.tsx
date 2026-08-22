@@ -5,6 +5,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
+
 import type {
   ConversationEntry,
 } from "@/components/room/conversation/types";
@@ -47,6 +48,9 @@ interface GroupConversationPanelProps {
   ) => void;
   onSendMessage:
     () => void | Promise<void>;
+  onSubmitWork: () => void;
+  onCreateOffer: () => void;
+  onAddEscrow: () => void;
 }
 
 export function GroupConversationPanel({
@@ -62,6 +66,9 @@ export function GroupConversationPanel({
   onBack,
   onDraftChange,
   onSendMessage,
+  onSubmitWork,
+  onCreateOffer,
+  onAddEscrow,
 }: GroupConversationPanelProps) {
   const [
     proofEntry,
@@ -70,6 +77,9 @@ export function GroupConversationPanel({
     useState<ConversationEntry | null>(
       null,
     );
+
+  const [membersOpen, setMembersOpen] =
+    useState(false);
 
   const visibleEntries =
     entries
@@ -116,107 +126,142 @@ export function GroupConversationPanel({
             {group.name}
           </p>
 
-          <p className="mt-0.5 text-[9px] text-paper/30">
-            {group.members.length} participant
-            {group.members.length === 1 ? "" : "s"}
-            <span aria-hidden="true"> · </span>
-            <span className="text-signal/60">Encrypted</span>
-          </p>
+          <div className="mt-0.5 flex items-center gap-1.5 text-[9px] text-paper/30">
+            <span>
+              {group.members.length}{" "}
+              {group.members.length === 1
+                ? "member"
+                : "members"}
+            </span>
+
+            <span
+              className="text-paper/15"
+              aria-hidden="true"
+            >
+              ·
+            </span>
+
+            <span className="inline-flex items-center gap-1 text-signal/55">
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-signal/70"
+                aria-hidden="true"
+              />
+              Encrypted
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="border-x border-b border-wire bg-vault/15 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
+      <div className="border-x border-b border-wire/60 bg-vault/[0.08]">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() =>
+              setMembersOpen(
+                (value) => !value,
+              )
+            }
+            aria-expanded={membersOpen}
+            className="flex min-w-0 items-center gap-2 text-left"
+          >
+            <span className="text-[10px] font-medium text-paper/45">
               Members
-            </p>
+            </span>
 
-            <p className="mt-1 text-[10px] text-paper/25">
-              {group.members.length} member
-              {group.members.length === 1
-                ? ""
-                : "s"}
-            </p>
-          </div>
+            <span className="rounded-full bg-vault/60 px-2 py-0.5 text-[9px] text-paper/35">
+              {group.members.length}
+            </span>
 
-          {admin && (
+            <span
+              className="text-[10px] text-paper/25"
+              aria-hidden="true"
+            >
+              {membersOpen
+                ? "⌃"
+                : "⌄"}
+            </span>
+          </button>
+
+          {admin && connected && (
             <Link
               href={`/room/${roomId}?access=group&group=${encodeURIComponent(
                 group.id,
               )}`}
-              className="border border-signal/25 px-3 py-2 font-display text-[8px] uppercase tracking-[0.13em] text-signal/70 transition hover:bg-signal hover:text-ink"
+              className="rounded-lg border border-signal/20 px-2.5 py-1.5 text-[9px] font-medium text-signal/65 transition hover:bg-signal/[0.06] hover:text-signal"
             >
-              + Invite member
+              + Invite
             </Link>
           )}
         </div>
 
-        <div className="mt-3 space-y-2">
-          {group.members.map(
-            (member) => {
-              const own =
-                sameStarknetAddress(
-                  member.address,
-                  walletAddress,
-                );
+        {membersOpen && (
+          <div className="space-y-1 border-t border-wire/50 px-3 py-2">
+            {group.members.map(
+              (member) => {
+                const own =
+                  sameStarknetAddress(
+                    member.address,
+                    walletAddress,
+                  );
 
-              return (
-                <div
-                  key={
-                    member.address
-                  }
-                  className="flex items-center justify-between gap-3 rounded-lg border border-wire/70 px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-paper/60">
+                return (
+                  <div
+                    key={
+                      member.address
+                    }
+                    className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition hover:bg-vault/25"
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-wire/70 bg-vault/45 text-[9px] text-signal/55">
+                        {member.address
+                          .slice(2, 4)
+                          .toUpperCase()}
+                      </div>
+
+                      <p className="truncate text-[11px] text-paper/55">
                         {own
                           ? "You"
                           : shortAddress(
                               member.address,
                             )}
                       </p>
-
-                      <span
-                        className={
-                          member.role ===
-                          "admin"
-                            ? "font-display text-[7px] uppercase tracking-[0.12em] text-signal/55"
-                            : "font-display text-[7px] uppercase tracking-[0.12em] text-paper/25"
-                        }
-                      >
-                        {member.role}
-                      </span>
                     </div>
 
-                    <p className="mt-0.5 truncate font-mono text-[9px] text-paper/20">
-                      {member.address}
-                    </p>
+                    <span
+                      className={
+                        member.role ===
+                        "admin"
+                          ? "shrink-0 text-[7px] uppercase tracking-[0.12em] text-signal/55"
+                          : "shrink-0 text-[7px] uppercase tracking-[0.12em] text-paper/25"
+                      }
+                    >
+                      {member.role}
+                    </span>
                   </div>
-                </div>
-              );
-            },
-          )}
-        </div>
+                );
+              },
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="min-h-[320px] max-h-[52vh] overflow-y-auto border-x border-wire/60 bg-black/10">
+      <div className="min-h-[320px] max-h-[55vh] overflow-y-auto border-x border-wire/60 bg-black/10">
         {visibleEntries.length ===
         0 ? (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-8 text-center">
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
-              <span className="text-base text-signal">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-signal/15 bg-signal/[0.04]">
+              <span className="text-base text-signal/75">
                 ✦
               </span>
             </div>
 
-            <h3 className="font-display text-sm text-paper/70">
-              Start {group.name}
+            <h3 className="text-sm font-medium text-paper/65">
+              Start the conversation
             </h3>
 
-            <p className="mt-2 max-w-xs text-xs leading-relaxed text-paper/35">
-              Only members with this Group key can read new messages here.
+            <p className="mt-2 max-w-[260px] text-xs leading-relaxed text-paper/30">
+              Messages are encrypted for
+              members of {group.name}.
             </p>
           </div>
         ) : (
@@ -255,9 +300,12 @@ export function GroupConversationPanel({
           channelReady
         }
         busy={busy}
+        onSubmitWork={onSubmitWork}
+        onAddOffer={onCreateOffer}
+        onAddEscrow={onAddEscrow}
       />
 
-      <div className="bg-vault/12 p-2">
+      <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
         <div className="flex items-end gap-2">
           <textarea
             value={draft}
@@ -276,7 +324,11 @@ export function GroupConversationPanel({
                 void onSendMessage();
               }
             }}
-            placeholder={`Write to ${group.name}…`}
+            placeholder={
+              connected
+                ? `Message ${group.name}…`
+                : "Connect wallet to message…"
+            }
             rows={1}
             disabled={
               !connected ||
@@ -297,7 +349,7 @@ export function GroupConversationPanel({
               busy ||
               !draft.trim()
             }
-            className="h-11 border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+            className="h-11 rounded-lg border border-signal/30 px-4 text-[9px] font-medium uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
           >
             Send
           </button>

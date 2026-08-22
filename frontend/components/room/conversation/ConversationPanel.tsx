@@ -188,6 +188,18 @@ export function ConversationPanel({
           onSendMessage={
             onSendMessage
           }
+          onSubmitWork={() => {
+            void onSubmitWork({
+              custodyCommitment: "",
+              note: "",
+            });
+          }}
+          onCreateOffer={
+            onCreateOffer
+          }
+          onAddEscrow={
+            onAddEscrow
+          }
         />
       ) : messageTarget.startsWith(
         "group:",
