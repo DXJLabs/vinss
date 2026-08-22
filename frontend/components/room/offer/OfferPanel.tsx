@@ -21,10 +21,7 @@ type OfferTemplateId =
   | "nft_deal"
   | "custom_deal";
 
-type OfferHelpTopic =
-  | "offer"
-  | "deal_type"
-  | "fee";
+type OfferHelpTopic = "terms";
 
 const OFFER_HELP: Record<
   OfferHelpTopic,
@@ -33,36 +30,18 @@ const OFFER_HELP: Record<
     paragraphs: string[];
   }
 > = {
-  offer: {
-    title: "What is an Offer?",
+  terms: {
+    title: "How does this Offer work?",
     paragraphs: [
-      "An Offer is a private proposal you send to the other participant. It records what both sides are being asked to agree on, such as the work, item, payment amount, token, deadline and completion terms.",
-      "After you send it, the other participant can accept the Offer or send a counter offer with different terms.",
-      "Creating an Offer does not move money into Rekber or escrow. Funding happens separately after an Offer has been accepted.",
-    ],
-  },
-
-  deal_type: {
-    title: "Which deal type should I choose?",
-    paragraphs: [
-      "Choose the option that best matches the agreement you are making. This only changes the fields VINSS asks you to complete.",
-      "Freelance — work or services with payment, deliverables, deadlines and revision terms.",
-      "Token Trade — a private crypto trade that may include an off-chain fiat payment.",
-      "Physical Goods — products that need quantity, delivery or inspection terms.",
-      "Digital Goods — files, software, licenses or other digital assets.",
-      "Bounty — a reward for completing a clearly defined task or result.",
-      "NFT Deal — a negotiated NFT purchase with price and transfer conditions.",
-      "Custom Deal — use this when none of the other structures fit your agreement.",
-      "Choosing a deal type does not send anything, move funds or create escrow.",
-    ],
-  },
-
-  fee: {
-    title: "What is the 1 STRK fee?",
-    paragraphs: [
-      "The 1 STRK fee pays for submitting the wallet-backed private Offer action.",
-      "It is separate from the amount you are negotiating with the other participant.",
-      "This fee does not fund Rekber or escrow. Escrow funding is a separate action later in the deal flow.",
+      "An Offer is a private proposal between you and the other participant. Use it to record the deal terms both sides should understand before agreeing.",
+      "Choose the Deal Type that best matches the agreement. VINSS adapts the form so you only enter terms relevant to that kind of deal.",
+      "Complete the main terms first. Optional fields can be left empty when they are not important to your agreement.",
+      "More Terms is for additional conditions that can make the agreement clearer, such as deadlines, acceptance requirements, revisions, delivery conditions or inspection periods.",
+      "Before anything is sent, Review Offer lets you check the complete proposal. The other participant can then Accept, Reject or Counter it.",
+      "The 1 STRK Private Offer action fee is separate from the value of the deal. It does not fund Rekber.",
+      "When an Offer or Counter is accepted, it becomes the agreed basis for the deal. Accepting it still does not move funds.",
+      "Rekber is a separate step after agreement. Funds are only secured when Rekber is started from the accepted agreement and the funding action is completed.",
+      "VINSS keeps the deal terms private while recording proof of the private action on Starknet.",
     ],
   },
 };
@@ -1342,6 +1321,39 @@ export function OfferPanel({
     const value =
       valueOf(field.id);
 
+    const fieldIndex =
+      selectedTemplate.fields.findIndex(
+        (candidate) =>
+          candidate.id === field.id,
+      );
+
+    const previousField =
+      fieldIndex > 0
+        ? selectedTemplate.fields[
+            fieldIndex - 1
+          ]
+        : null;
+
+    const nextField =
+      fieldIndex >= 0
+        ? selectedTemplate.fields[
+            fieldIndex + 1
+          ] ?? null
+        : null;
+
+    const pairedAssetField =
+      field.type === "number" &&
+      nextField?.type === "payment_asset"
+        ? nextField
+        : null;
+
+    if (
+      field.type === "payment_asset" &&
+      previousField?.type === "number"
+    ) {
+      return null;
+    }
+
     if (
       field.type === "payment_asset"
     ) {
@@ -1351,7 +1363,6 @@ export function OfferPanel({
             <span className="font-display text-[10px] uppercase tracking-widest text-paper/40">
               {field.label}
             </span>
-
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1460,6 +1471,92 @@ export function OfferPanel({
             disabled={busy}
             className="min-h-24 w-full resize-y border border-wire bg-transparent px-3 py-3 text-sm leading-relaxed text-paper outline-none placeholder:text-paper/25 focus:border-signal disabled:opacity-40"
           />
+        ) : pairedAssetField ? (
+          <div className="relative flex w-full items-stretch border border-wire bg-transparent focus-within:border-signal">
+            <input
+              id={field.id}
+              value={value}
+              onChange={(event) =>
+                setTemplateValue(
+                  field.id,
+                  event.target.value,
+                )
+              }
+              inputMode="decimal"
+              placeholder={
+                field.placeholder
+              }
+              disabled={busy}
+              autoComplete="off"
+              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/25 disabled:opacity-40"
+            />
+
+            <details className="group relative shrink-0 border-l border-wire">
+              <summary className="flex h-full min-w-[86px] cursor-pointer list-none items-center justify-center gap-2 px-3 font-display text-[9px] uppercase tracking-widest text-signal/75 [&::-webkit-details-marker]:hidden">
+                {valueOf(
+                  pairedAssetField.id,
+                ) || "Token"}
+                <span
+                  aria-hidden="true"
+                  className="text-[8px] text-paper/30 transition group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[110px] overflow-hidden rounded-xl border border-wire bg-vault shadow-2xl">
+                {["STRK", "USDC"].map(
+                  (asset) => {
+                    const selected =
+                      valueOf(
+                        pairedAssetField.id,
+                      ) === asset;
+
+                    return (
+                      <button
+                        key={asset}
+                        type="button"
+                        onClick={(event) => {
+                          setTemplateValue(
+                            pairedAssetField.id,
+                            asset,
+                          );
+
+                          const details =
+                            event.currentTarget.closest(
+                              "details",
+                            );
+
+                          if (details) {
+                            details.open = false;
+                          }
+                        }}
+                        disabled={busy}
+                        className={
+                          selected
+                            ? "flex w-full items-center justify-between px-3 py-2.5 text-left font-display text-[9px] uppercase tracking-widest text-signal"
+                            : "flex w-full items-center justify-between px-3 py-2.5 text-left font-display text-[9px] uppercase tracking-widest text-paper/55 transition hover:bg-paper/[0.04] hover:text-paper"
+                        }
+                      >
+                        <span>
+                          {asset}
+                        </span>
+
+                        {selected && (
+                          <span
+                            aria-hidden="true"
+                            className="text-signal/70"
+                          >
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </details>
+          </div>
         ) : (
           <input
             id={field.id}
@@ -1511,21 +1608,7 @@ export function OfferPanel({
                   : "Create an offer"}
               </h3>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setHelpTopic(
-                    (current) =>
-                      current === "offer"
-                        ? null
-                        : "offer",
-                  )
-                }
-                aria-label="What is an Offer?"
-                className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
-              >
-                ?
-              </button>
+              
             </div>
 
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
@@ -1538,11 +1621,31 @@ export function OfferPanel({
 
           </div>
 
-          <span className="shrink-0 text-[10px] uppercase tracking-wider text-paper/30">
-            {reviewing
-              ? "Step 2 · Review"
-              : "Step 1 · Terms"}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-paper/30">
+              {reviewing
+                ? "Step 2 · Review"
+                : "Step 1 · Terms"}
+            </span>
+
+            {!reviewing && (
+              <button
+                type="button"
+                onClick={() =>
+                  setHelpTopic(
+                    (current) =>
+                      current === "terms"
+                        ? null
+                        : "terms",
+                  )
+                }
+                aria-label="How do I fill this Offer?"
+                className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
+              >
+                ?
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1623,21 +1726,7 @@ export function OfferPanel({
                     Private Offer action fee
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHelpTopic(
-                        (current) =>
-                          current === "fee"
-                            ? null
-                            : "fee",
-                      )
-                    }
-                    aria-label="What is the Offer action fee?"
-                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
-                  >
-                    ?
-                  </button>
+                  
                 </div>
 
                 <p className="mt-1 text-[10px] text-paper/30">
@@ -1697,21 +1786,7 @@ export function OfferPanel({
                   Deal type
                 </label>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    setHelpTopic(
-                      (current) =>
-                        current === "deal_type"
-                          ? null
-                          : "deal_type",
-                    )
-                  }
-                  aria-label="What does Deal type mean?"
-                  className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
-                >
-                  ?
-                </button>
+                
               </div>
 
             </div>

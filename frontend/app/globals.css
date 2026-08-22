@@ -88,8 +88,7 @@ div[aria-modal="true"] button:hover {
 }
 
 /* Layar transparan (backdrop) di belakang modal */
-div[id*="headlessui-dialog-overlay"],
-div[role="dialog"] > div:first-child {
+div[id*="headlessui-dialog-overlay"] {
    background-color: rgba(11, 13, 16, 0.8) !important;
    backdrop-filter: blur(4px) !important;
 }
@@ -126,8 +125,7 @@ div[aria-modal="true"] button:hover {
   border-color: var(--color-signal) !important;
 }
 
-div[id*="headlessui-dialog-overlay"],
-div[role="dialog"] > div:first-child {
+div[id*="headlessui-dialog-overlay"] {
    background-color: rgba(11, 13, 16, 0.8) !important;
    backdrop-filter: blur(4px) !important;
 }
