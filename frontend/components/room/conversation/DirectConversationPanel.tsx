@@ -896,11 +896,11 @@ export function DirectConversationPanel({
                 const statusLabel =
                   funded
                     ? "Payment secured"
-                    : "Rekber ready";
+                    : "Escrow ready";
 
                 const statusDetail =
                   funded
-                    ? "Funds locked in VINSS Rekber"
+                    ? "Funds locked in VINSS Escrow"
                     : "Ready to secure payment";
 
                 return (

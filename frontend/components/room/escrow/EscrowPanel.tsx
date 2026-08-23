@@ -88,10 +88,6 @@ interface PendingPayeeAcceptance {
   payload: EscrowActionPayload;
 }
 
-type RoleChoice =
-  | "payer"
-  | "payee";
-
 type CoordinationPhase =
   | "idle"
   | "payer-signature"
@@ -203,8 +199,6 @@ export function EscrowPanel({
     useState(false);
   const [coordinationAuthorized, setCoordinationAuthorized] =
     useState<boolean | null>(null);
-  const [roleChoice, setRoleChoice] =
-    useState<RoleChoice | null>(null);
   const [coordinationPhase, setCoordinationPhase] =
     useState<CoordinationPhase>("idle");
   const [pendingPayerSetup, setPendingPayerSetup] =
@@ -259,6 +253,48 @@ export function EscrowPanel({
     accepted?.parentOfferLocator ??
     acceptedOffer?.actionLocator ??
     "";
+
+  // The original Offer fixes settlement roles for the whole lifecycle.
+  // Counters may change terms, but must never silently swap who funds Rekber.
+  const rootOffer = useMemo(() => {
+    const rootLocator = canonicalLocator(
+      accepted?.rootOfferLocator,
+    );
+
+    if (!rootLocator) return null;
+
+    return (
+      offerEntries.find(
+        (entry) =>
+          entry.offerAction?.kind === "create" &&
+          canonicalLocator(entry.actionLocator) === rootLocator,
+      ) ?? null
+    );
+  }, [
+    accepted?.rootOfferLocator,
+    offerEntries,
+  ]);
+
+  const agreedPayerAddress =
+    rootOffer?.offerAction?.senderAddress ?? "";
+  const agreedPayeeAddress =
+    rootOffer?.offerAction?.recipientAddress ?? "";
+  const agreedRole: SettlementRole | null =
+    walletAddress &&
+    agreedPayerAddress &&
+    sameStarknetAddress(
+      walletAddress,
+      agreedPayerAddress,
+    )
+      ? "payer"
+      : walletAddress &&
+          agreedPayeeAddress &&
+          sameStarknetAddress(
+            walletAddress,
+            agreedPayeeAddress,
+          )
+        ? "payee"
+        : null;
 
   const legacyPrepared = useMemo(
     () =>
@@ -411,7 +447,7 @@ export function EscrowPanel({
             walletAddress,
           )
         ? "payee"
-        : localSecrets?.role ?? null;
+        : localSecrets?.role ?? agreedRole;
 
   const refundAfter = Number(
     createAction?.refundAfter ??
@@ -492,7 +528,7 @@ export function EscrowPanel({
       return {
         verified: false,
         reason:
-          "Encrypted Rekber coordination is incomplete.",
+          "Encrypted Escrow coordination is incomplete.",
       };
     }
 
@@ -548,7 +584,7 @@ export function EscrowPanel({
       return {
         verified: false,
         reason:
-          "The expected Rekber commitments cannot be reconstructed.",
+          "The expected Escrow commitments cannot be reconstructed.",
       };
     }
 
@@ -667,7 +703,6 @@ export function EscrowPanel({
     setCertificateClaimed(false);
     setCertificateTx("");
     setCoordinationAuthorized(null);
-    setRoleChoice(null);
     setCoordinationPhase("idle");
     setPendingPayerSetup(null);
     setPendingPayeeAcceptance(null);
@@ -880,7 +915,7 @@ export function EscrowPanel({
       !peerAddress ||
       legacyDeal ||
       createAction ||
-      roleChoice !== "payer"
+      role !== "payer"
     ) {
       return;
     }
@@ -895,7 +930,7 @@ export function EscrowPanel({
       hours > 24 * 30
     ) {
       setError(
-        "Pilih waktu refund antara 1 jam dan 30 hari.",
+        "Choose a refund window between 1 hour and 30 days.",
       );
       return;
     }
@@ -1026,7 +1061,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          `Rekber request — ${accepted.amount} ${accepted.asset}`,
+          `Escrow request — ${accepted.amount} ${accepted.asset}`,
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1043,7 +1078,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "Setup Rekber belum selesai. Tekan lanjutkan untuk memakai persetujuan yang sama.",
+          "Escrow setup is not complete. Tap Continue setup to reuse the same approval.",
         ),
       );
     } finally {
@@ -1090,7 +1125,7 @@ export function EscrowPanel({
         ))
       ) {
         throw new Error(
-          "The payer's wallet authorization does not match the Rekber terms shown here.",
+          "The Payer's wallet authorization does not match the Escrow terms shown here.",
         );
       }
 
@@ -1199,7 +1234,7 @@ export function EscrowPanel({
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
-        summary: "Rekber accepted — payment can now be secured",
+        summary: "Escrow approved — payment can now be secured",
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1216,7 +1251,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "Persetujuan Rekber belum selesai. Tekan lanjutkan untuk memakai persetujuan yang sama.",
+          "Escrow approval is not complete. Tap continue to reuse the same approval.",
         ),
       );
     } finally {
@@ -1279,7 +1314,7 @@ export function EscrowPanel({
       !settlementAsset?.address
     ) {
       setError(
-        "Secure Rekber commitments are incomplete. Sync the room and try again.",
+        "Secure Escrow commitments are incomplete. Sync the room and try again.",
       );
       return;
     }
@@ -1348,7 +1383,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          `Rekber funded — ${accepted.amount} ${accepted.asset}`,
+          `Escrow funded — ${accepted.amount} ${accepted.asset}`,
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1491,8 +1526,7 @@ export function EscrowPanel({
             custodyCommitment,
             releaseAuthorizationSecret,
             payeeClaimSecret: BigInt(
-              localSecrets
-                .payeeClaimSecret,
+              localSecrets.payeeClaimSecret,
             ),
           },
         );
@@ -1500,22 +1534,23 @@ export function EscrowPanel({
       setSettlementProofTx(
         result.transactionHash,
       );
+
       setCustodyState(
         await getRekberV2Custody(
           custodyCommitment,
         ),
       );
+
       onSent({
-        id: crypto.randomUUID(),
+        id: `escrow-release-${Date.now()}`,
         kind: "offer",
         summary:
           "Settlement released — payment claimed privately",
+        sentAt: new Date().toISOString(),
         transactionHash:
           result.transactionHash,
         actionLocator:
           custodyCommitment.toString(16),
-        sentAt:
-          new Date().toISOString(),
       });
     } catch (error) {
       setError(
@@ -1569,7 +1604,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          "Rekber refunded after the protection window",
+          "Escrow refunded after the protection window",
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1581,7 +1616,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "We couldn't refund the Rekber payment.",
+          "We couldn't refund the Escrow payment.",
         ),
       );
     } finally {
@@ -1664,11 +1699,11 @@ export function EscrowPanel({
             : 5;
 
   const steps = [
-    "Peran",
-    "Konfirmasi",
-    "Dana",
-    "Selesai",
-    "Bukti",
+    "Role",
+    "Approval",
+    "Funds",
+    "Settlement",
+    "Proof",
   ];
 
   return (
@@ -1677,13 +1712,13 @@ export function EscrowPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-signal/75">
-              Pembayaran aman via STRK20
+              Secure payment via STRK20
             </p>
             <h3 className="mt-1 text-xl font-medium text-paper">
-              VINSS Rekber
+              VINSS Escrow
             </h3>
             <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/38">
-              Pembayar menyimpan dana. Penerima mengambil dana setelah pekerjaan disetujui.
+              The Payer secures the funds. The Payee claims them after the work is approved.
             </p>
           </div>
 
@@ -1738,10 +1773,10 @@ export function EscrowPanel({
         {!accepted ? (
           <div className="rounded-xl bg-paper/[0.025] p-4">
             <p className="text-sm font-medium text-paper/70">
-              Terima Offer terlebih dahulu
+              Accept an Offer first
             </p>
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
-              Rekber hanya bisa dibuat dari Offer di percakapan privat yang sudah disetujui kedua pihak.
+              Escrow can only start from a private Offer accepted by both parties.
             </p>
           </div>
         ) : (
@@ -1749,7 +1784,7 @@ export function EscrowPanel({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[9px] uppercase tracking-[0.13em] text-paper/28">
-                  Nilai yang disepakati
+                  Agreed amount
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-paper">
                   {accepted.amount}
@@ -1759,7 +1794,7 @@ export function EscrowPanel({
                 </p>
               </div>
               <span className="text-[10px] text-signal">
-                ✓ Disetujui
+                ✓ Approved
               </span>
             </div>
           </div>
@@ -1768,10 +1803,10 @@ export function EscrowPanel({
         {accepted && legacyDeal && (
           <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
             <p className="text-xs font-medium text-amber">
-              Existing Rekber V1 deal
+              Existing Escrow V1 deal
             </p>
             <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
-              This agreement may already hold funds in the legacy Rekber contract. It cannot be migrated into V2. Do not fund it again; create a new Offer when testing V2 settlement.
+              This agreement may already hold funds in the legacy Escrow contract. It cannot be migrated into V2. Do not fund it again; create a new Offer when testing V2 settlement.
             </p>
           </div>
         )}
@@ -1792,12 +1827,12 @@ export function EscrowPanel({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[9px] uppercase tracking-[0.12em] text-paper/28">
-                  Peran wallet ini · terkunci
+                  This wallet's role · locked
                 </p>
                 <p className="mt-1 text-sm font-medium text-paper/75">
                   {role === "payer"
-                    ? "Pembayar (Payer)"
-                    : "Penerima (Payee)"}
+                    ? "Payer"
+                    : "Payee"}
                 </p>
               </div>
               <span className="rounded-full bg-signal/[0.08] px-2.5 py-1 font-mono text-[9px] text-signal/80">
@@ -1807,8 +1842,8 @@ export function EscrowPanel({
             <div className="mt-2 flex justify-between gap-3 border-t border-wire/40 pt-2 text-[9px]">
               <span className="text-paper/28">
                 {role === "payer"
-                  ? "Dana tujuan"
-                  : "Dana dari"}
+                  ? "Pays to"
+                  : "Receives from"}
               </span>
               <span className="font-mono text-paper/50">
                 {shortAddress(peerAddress)}
@@ -1847,70 +1882,33 @@ export function EscrowPanel({
         {accepted && !legacyDeal && v2Configured && !createAction && (
           <div className="space-y-3">
             <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
-              <p className="text-sm font-medium text-paper/80">
-                Pilih peran wallet ini
+              <p className="text-[9px] uppercase tracking-[0.12em] text-signal/70">
+                Role set by the original Offer
+              </p>
+              <p className="mt-1 text-sm font-medium text-paper/80">
+                {role === "payer"
+                  ? "You are the Payer"
+                  : role === "payee"
+                    ? "You are the Payee"
+                    : "Syncing role…"}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-paper/40">
-                Peran akan dikunci setelah setup dikirim. Pastikan tidak terbalik.
+                {role === "payer"
+                  ? "The wallet that sent the original Offer prepares Escrow and deposits the funds."
+                  : role === "payee"
+                    ? "This wallet cannot deposit. Wait for the Payer to send the Escrow setup."
+                    : "The original Offer history is not available yet. Wait for sync to finish."}
               </p>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  aria-pressed={roleChoice === "payer"}
-                  onClick={() => setRoleChoice("payer")}
-                  disabled={busy}
-                  className={
-                    roleChoice === "payer"
-                      ? "rounded-xl bg-signal px-3 py-3 text-left text-ink"
-                      : "rounded-xl bg-paper/[0.035] px-3 py-3 text-left text-paper/60 ring-1 ring-wire/65"
-                  }
-                >
-                  <span className="block text-xs font-semibold">
-                    Saya membayar
-                  </span>
-                  <span className={
-                    roleChoice === "payer"
-                      ? "mt-1 block text-[9px] text-ink/65"
-                      : "mt-1 block text-[9px] text-paper/30"
-                  }>
-                    Payer · deposit dana
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  aria-pressed={roleChoice === "payee"}
-                  onClick={() => setRoleChoice("payee")}
-                  disabled={busy}
-                  className={
-                    roleChoice === "payee"
-                      ? "rounded-xl bg-signal px-3 py-3 text-left text-ink"
-                      : "rounded-xl bg-paper/[0.035] px-3 py-3 text-left text-paper/60 ring-1 ring-wire/65"
-                  }
-                >
-                  <span className="block text-xs font-semibold">
-                    Saya menerima
-                  </span>
-                  <span className={
-                    roleChoice === "payee"
-                      ? "mt-1 block text-[9px] text-ink/65"
-                      : "mt-1 block text-[9px] text-paper/30"
-                  }>
-                    Payee · terima dana
-                  </span>
-                </button>
-              </div>
 
               <div className="mt-3 space-y-1 border-t border-wire/45 pt-3 text-[10px]">
                 <div className="flex justify-between gap-3">
-                  <span className="text-paper/30">Wallet ini</span>
+                  <span className="text-paper/30">This wallet</span>
                   <span className="font-mono text-paper/60">
                     {shortAddress(walletAddress)}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <span className="text-paper/30">Lawan transaksi</span>
+                  <span className="text-paper/30">Counterparty</span>
                   <span className="font-mono text-paper/60">
                     {shortAddress(peerAddress)}
                   </span>
@@ -1918,35 +1916,35 @@ export function EscrowPanel({
               </div>
             </div>
 
-            {roleChoice === "payee" && (
+            {role === "payee" && (
               <div className="rounded-xl bg-paper/[0.025] p-4 text-center ring-1 ring-wire/50">
                 <p className="text-sm font-medium text-paper/70">
-                  Tunggu pembayar memulai
+                  Waiting for the Payer
                 </p>
                 <p className="mt-1 text-[10px] leading-relaxed text-paper/34">
-                  Jangan tekan setup dari wallet penerima. Setelah permintaan masuk, tombol “Terima Rekber” akan muncul otomatis.
+                  When the setup arrives, the “Approve Escrow” button will appear. This wallet never gets a deposit button.
                 </p>
               </div>
             )}
 
-            {roleChoice === "payer" && (
+            {role === "payer" && (
               <>
                 <div className="rounded-xl border border-amber/25 bg-amber/[0.045] p-3">
                   <p className="text-xs font-medium text-amber">
-                    Wallet ini menjadi Pembayar (Payer)
+                    Step 1 · Prepare Escrow
                   </p>
                   <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
-                    Setup tidak memotong biaya Offer 1 STRK. Dana kesepakatan belum berpindah; transaksi koordinasi hanya dapat terkena gas jaringan.
+                    After the Payee approves this setup, the deposit button for {accepted.amount} {accepted.asset} will appear on this wallet.
                   </p>
                 </div>
 
                 <label className="flex items-center justify-between gap-4 rounded-xl bg-paper/[0.025] p-3">
                   <span>
                     <span className="block text-xs text-paper/60">
-                      Batas waktu refund
+                      Refund window
                     </span>
                     <span className="mt-1 block text-[9px] text-paper/28">
-                      Pembayar bisa refund setelah waktu ini.
+                      The Payer can refund after this period.
                     </span>
                   </span>
                   <span className="flex items-center rounded-lg bg-paper/[0.04] px-2">
@@ -1964,13 +1962,13 @@ export function EscrowPanel({
                       className="w-12 bg-transparent py-2 text-right text-sm text-paper outline-none"
                     />
                     <span className="ml-1 text-[9px] text-paper/30">
-                      jam
+                      hours
                     </span>
                   </span>
                 </label>
 
                 <div className="rounded-xl bg-paper/[0.02] px-3 py-2.5 text-[9px] leading-relaxed text-paper/35">
-                  Ready X muncul 2 kali: <strong className="text-paper/60">(1) Sign</strong> persetujuan, lalu <strong className="text-paper/60">(2) kirim</strong> setup privat. Selesaikan keduanya satu kali.
+                  Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the approval, then <strong className="text-paper/60">(2) send</strong> the private setup. Complete both once.
                 </div>
 
                 <button
@@ -1985,12 +1983,12 @@ export function EscrowPanel({
                   className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
                 >
                   {coordinationPhase === "payer-signature"
-                    ? "1/2 · Tanda tangani di Ready X…"
+                    ? "1/2 · Sign in Ready X…"
                     : coordinationPhase === "payer-send"
-                      ? "2/2 · Kirim setup di Ready X…"
+                      ? "2/2 · Send setup in Ready X…"
                       : pendingPayerSetup
-                        ? "Lanjutkan pengiriman setup →"
-                        : "Mulai sebagai Pembayar →"}
+                        ? "Continue setup →"
+                        : "Prepare Escrow →"}
                 </button>
               </>
             )}
@@ -2005,18 +2003,18 @@ export function EscrowPanel({
             <div className="space-y-3">
               <div className="rounded-xl bg-signal/[0.045] p-4">
                 <p className="text-sm font-medium text-paper/75">
-                  Permintaan Rekber masuk
+                  Escrow request received
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-paper/38">
-                  Pembayar {shortAddress(createAction.senderAddress ?? "")} akan menyimpan {accepted.amount} {accepted.asset}. Wallet ini adalah Penerima (Payee).
+                  Payer {shortAddress(createAction.senderAddress ?? "")} will secure {accepted.amount} {accepted.asset}. This wallet is the Payee.
                 </p>
                 <p className="mt-3 text-[9px] text-paper/28">
-                  Batas refund: {formatDeadline(refundAfter)}.
+                  Refund unlocks: {formatDeadline(refundAfter)}.
                 </p>
               </div>
 
               <div className="rounded-xl bg-paper/[0.02] px-3 py-2.5 text-[9px] leading-relaxed text-paper/35">
-                Ready X muncul 2 kali: <strong className="text-paper/60">(1) Sign</strong> persetujuan penerima, lalu <strong className="text-paper/60">(2) kirim</strong> konfirmasi privat. Belum ada dana berpindah.
+                Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the Payee approval, then <strong className="text-paper/60">(2) send</strong> the private confirmation. No funds move yet.
               </div>
 
               <button
@@ -2026,12 +2024,12 @@ export function EscrowPanel({
                 className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
               >
                 {coordinationPhase === "payee-signature"
-                  ? "1/2 · Tanda tangani di Ready X…"
+                  ? "1/2 · Sign in Ready X…"
                   : coordinationPhase === "payee-send"
-                    ? "2/2 · Kirim konfirmasi di Ready X…"
+                    ? "2/2 · Send approval in Ready X…"
                     : pendingPayeeAcceptance
-                      ? "Lanjutkan konfirmasi →"
-                      : "Terima sebagai Penerima →"}
+                      ? "Continue approval →"
+                      : "Approve as Payee →"}
               </button>
             </div>
           )}
@@ -2044,10 +2042,10 @@ export function EscrowPanel({
             <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
               <span className="inline-block h-4 w-4 animate-spin rounded-full border border-signal/25 border-t-signal" />
               <p className="mt-3 text-sm text-paper/65">
-                Menunggu Penerima
+                Waiting for the Payee
               </p>
               <p className="mt-1 text-[10px] text-paper/30">
-                Belum ada dana berpindah. Penerima harus menyelesaikan 2 konfirmasi wallet.
+                No funds have moved. The Payee must complete both wallet confirmations.
               </p>
             </div>
           )}
@@ -2060,7 +2058,7 @@ export function EscrowPanel({
             <div className="space-y-3">
               <div className="rounded-xl bg-paper/[0.03] p-4">
                 <p className="text-[9px] uppercase tracking-[0.13em] text-signal/70">
-                  Penerima sudah menyetujui
+                  Payee approved
                 </p>
                 <p className="mt-2 text-3xl font-semibold text-paper">
                   {accepted.amount}
@@ -2072,13 +2070,13 @@ export function EscrowPanel({
                   <FeeBreakdown
                     amount={accepted.amount}
                     unit={accepted.asset}
-                    label="Biaya VINSS"
+                    label="VINSS fee"
                     feeBps={100}
                   />
                 </div>
               </div>
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Tahap dana:</strong> baru pada tombol ini nilai kesepakatan + biaya VINSS 1% akan didebit dan dikunci di kontrak Rekber.
+                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the 1% VINSS fee and locks it in the Escrow contract.
               </p>
               <button
                 type="button"
@@ -2091,12 +2089,12 @@ export function EscrowPanel({
                 className="w-full rounded-xl bg-amber px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
               >
                 {busy
-                  ? "Konfirmasi pembayaran di Ready X…"
+                  ? "Confirm payment in Ready X…"
                   : coordinationAuthorized === null
-                    ? "Memverifikasi persetujuan wallet…"
+                    ? "Verifying wallet approvals…"
                     : coordinationAuthorized === false
-                      ? "Persetujuan wallet tidak cocok"
-                      : "Bayar & kunci dana →"}
+                      ? "Wallet approvals do not match"
+                      : "Secure funds →"}
               </button>
             </div>
           )}
@@ -2108,10 +2106,10 @@ export function EscrowPanel({
           role === "payee" && (
             <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
               <p className="text-sm text-paper/65">
-                Rekber sudah disetujui
+                Escrow approved
               </p>
               <p className="mt-1 text-[10px] text-paper/30">
-                Menunggu Pembayar mendeposit nilai kesepakatan ke kontrak Rekber.
+                Waiting for the Payer to deposit the agreed amount into the Escrow contract.
               </p>
             </div>
           )}
@@ -2237,7 +2235,7 @@ export function EscrowPanel({
               >
                 {released
                   ? "Settlement released"
-                  : "Rekber refunded"}
+                  : "Escrow refunded"}
               </p>
               <p className="mt-2 text-sm text-paper/70">
                 {released

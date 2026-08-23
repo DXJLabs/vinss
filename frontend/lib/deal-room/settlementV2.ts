@@ -295,15 +295,49 @@ async function invokeSettlement(
   account: WalletAccountV6,
   payload: string[],
 ): Promise<{ transactionHash: string }> {
-  // openNoteIds placeholders only exist for transfer actions whose amount is
-  // "OPEN". Release/refund contain no such transfer, so generate the private
-  // output note ID locally, as the proven V1 settlement path does.
+  const custodyValue = payload[1];
+
+  if (!custodyValue) {
+    throw new Error(
+      "Settlement custody commitment is missing.",
+    );
+  }
+
+  const custodyCommitment = BigInt(
+    custodyValue,
+  );
+
+  const custody =
+    await getRekberV2Custody(
+      custodyCommitment,
+    );
+
+  if (!custody) {
+    throw new Error(
+      "Rekber V2 custody could not be loaded.",
+    );
+  }
+
+  const token = num.toHex(custody.token);
+
+  // The wallet must create the OPEN note itself.
+  // The helper then returns an OpenNoteDeposit that
+  // fills this exact wallet-generated note.
   const calldata = [
     ...payload,
-    toFelt(randomFelt()),
+    "${openNoteIds[0]}",
   ];
+
   const response =
     await account.strk20InvokeTransaction([
+      {
+        type: "transfer",
+        token,
+        amount: "OPEN",
+        recipient: num.toHex(
+          account.address,
+        ),
+      },
       {
         type: "invoke",
         contract:

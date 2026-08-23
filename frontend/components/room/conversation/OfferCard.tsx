@@ -347,8 +347,8 @@ export function OfferCard({
           <div className="mt-3 border-t border-signal/15 pt-2.5">
             <p className="text-[10px] text-signal/65">
               {rekberStarted
-                ? "✓ Rekber aktif untuk kesepakatan ini"
-                : "Kesepakatan siap · lanjut Rekber"}
+                ? "✓ Escrow is active for this agreement"
+                : "Agreement ready · continue to Escrow"}
             </p>
 
             {onOpenEscrow && (
@@ -361,8 +361,8 @@ export function OfferCard({
                 className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
               >
                 {rekberStarted
-                  ? "Buka Rekber →"
-                  : "Siapkan Rekber →"}
+                  ? "Open Escrow →"
+                  : "Prepare Escrow →"}
               </button>
             )}
           </div>

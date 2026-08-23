@@ -140,6 +140,12 @@ export function useRoomOffers({
   const sentOfferReadReceiptsRef =
     useRef<Set<string>>(new Set());
 
+  // Locally remember which pairwise route actually decrypted each action.
+  // Lifecycle replies must use this proven route instead of re-deriving a
+  // key from a participant announcement that may have changed meanwhile.
+  const matchedOfferRoutesRef =
+    useRef<Map<string, MessageRoute>>(new Map());
+
   // Stabilize the participant dependency so chat refreshes do not constantly
   // restart the Offer discovery interval with an equivalent participant set.
   const participantFingerprint = participants
@@ -191,6 +197,11 @@ export function useRoomOffers({
       },
     );
   }
+
+  useEffect(() => {
+    matchedOfferRoutesRef.current.clear();
+    sentOfferReadReceiptsRef.current.clear();
+  }, [roomId, session?.account.address]);
 
   useEffect(() => {
     // Direct Offers cannot derive a pairwise key without room and wallet identity.
@@ -326,6 +337,65 @@ export function useRoomOffers({
           ),
         encryptionKey: directKey,
         routingKey: directKey,
+      },
+    };
+  }
+
+  /**
+   * Reply through the exact pairwise key that opened the immutable parent.
+   * This keeps counter/accept/reject readable even when a wallet has stale
+   * participant announcements from another browser or device.
+   */
+  async function resolveReplyContext(
+    source: ConversationEntry,
+    peerAddress: string,
+  ): Promise<DirectOfferContext> {
+    const peer = participants.find(
+      (participant) =>
+        sameStarknetAddress(
+          participant.address,
+          peerAddress,
+        ),
+    );
+
+    let matchedRoute =
+      matchedOfferRoutesRef.current.get(
+        stripLocator(source.actionLocator),
+      );
+
+    // Cached cards can render before the first discovery pass finishes.
+    // Reconcile once before allowing an immutable lifecycle transaction.
+    if (!matchedRoute) {
+      await handleOfferRefresh(true);
+      matchedRoute =
+        matchedOfferRoutesRef.current.get(
+          stripLocator(source.actionLocator),
+        );
+    }
+
+    // Never guess a new key for a reply: that would create a valid on-chain
+    // action which the intended wallet cannot decrypt.
+    if (!peer || !matchedRoute) {
+      throw new Error(
+        "The private Offer reply route is not ready. Refresh both wallets and try again.",
+      );
+    }
+
+    const encryptionKey =
+      matchedRoute.encryptionKey ?? channelKey;
+
+    if (!encryptionKey) {
+      throw new Error("The private Offer route is not ready.");
+    }
+
+    return {
+      peer,
+      route: {
+        recipientIdentity:
+          canonicalStarknetAddress(peerAddress),
+        encryptionKey,
+        routingKey:
+          matchedRoute.routingKey ?? encryptionKey,
       },
     };
   }
@@ -506,6 +576,13 @@ export function useRoomOffers({
         routes,
       );
 
+      for (const item of discovered) {
+        matchedOfferRoutesRef.current.set(
+          stripLocator(item.actionLocator),
+          item.matchedRoute,
+        );
+      }
+
       const self =
         canonicalStarknetAddress(
           session.account.address,
@@ -664,18 +741,16 @@ export function useRoomOffers({
     }
 
     try {
-      const { peer } =
-        await resolveDirectContext(
+      const { route } =
+        await resolveReplyContext(
+          source,
           peerAddress,
-          session.account.address,
         );
 
       const directKey =
-        await deriveDirectMessageKey(
-          roomId!,
-          messagingIdentity!.privateKey,
-          peer.publicKey,
-        );
+        route.encryptionKey ?? channelKey;
+
+      if (!directKey) return;
 
       sentOfferReadReceiptsRef.current.add(
         receiptId,
@@ -870,8 +945,8 @@ export function useRoomOffers({
       async () => {
         // Counter goes back to the sender of the parent action.
         const { peer, route } =
-          await resolveDirectContext(
-            peerAddress,
+          await resolveReplyContext(
+            source,
             peerAddress,
           );
 
@@ -951,8 +1026,8 @@ export function useRoomOffers({
       async () => {
         // The acceptance action returns to the sender of the current terms.
         const { peer, route } =
-          await resolveDirectContext(
-            peerAddress,
+          await resolveReplyContext(
+            source,
             peerAddress,
           );
 
@@ -1035,8 +1110,8 @@ export function useRoomOffers({
       async () => {
         // The rejection action returns to the sender of the current terms.
         const { peer, route } =
-          await resolveDirectContext(
-            peerAddress,
+          await resolveReplyContext(
+            source,
             peerAddress,
           );
 
@@ -1132,8 +1207,8 @@ export function useRoomOffers({
       "We couldn't prepare this accepted offer for escrow. Please try again.",
       async () => {
         const { peer, route } =
-          await resolveDirectContext(
-            peerAddress,
+          await resolveReplyContext(
+            source,
             peerAddress,
           );
 

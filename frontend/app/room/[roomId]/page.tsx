@@ -670,7 +670,7 @@ export default function DealRoomPage() {
                     Add Escrow
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/28">
-                    Secure an accepted Offer with VINSS Rekber.
+                    Secure an accepted Offer with VINSS Escrow.
                   </p>
                 </div>
 

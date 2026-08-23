@@ -38,9 +38,10 @@ const OFFER_HELP: Record<
       "Complete the main terms first. Optional fields can be left empty when they are not important to your agreement.",
       "More Terms is for additional conditions that can make the agreement clearer, such as deadlines, acceptance requirements, revisions, delivery conditions or inspection periods.",
       "Before anything is sent, Review Offer lets you check the complete proposal. The other participant can then Accept, Reject or Counter it.",
-      "The 1 STRK Private Offer action fee is separate from the value of the deal. It does not fund Rekber.",
+      "The 1 STRK Private Offer action fee is separate from the value of the deal. It does not fund Escrow.",
       "When an Offer or Counter is accepted, it becomes the agreed basis for the deal. Accepting it still does not move funds.",
-      "Rekber is a separate step after agreement. Funds are only secured when Rekber is started from the accepted agreement and the funding action is completed.",
+      "The wallet that sends the original Offer is the Escrow Payer and deposits the agreed token. The other wallet is the Payee. Counter Offers do not swap these roles.",
+      "Escrow is a separate step after agreement. Funds are only secured when Escrow is started from the accepted agreement and the funding action is completed.",
       "VINSS keeps the deal terms private while recording proof of the private action on Starknet.",
     ],
   },
@@ -1744,6 +1745,11 @@ export function OfferPanel({
           <div className="border border-signal/20 bg-signal/[0.03] p-3">
             <p className="text-[10px] leading-relaxed text-paper/40">
               Deal terms and participant addresses are encrypted with the pairwise direct key. Creating this Offer does not fund escrow.
+            </p>
+            <p className="mt-2 text-[10px] leading-relaxed text-paper/55">
+              {counterSource
+                ? "This Counter does not change Escrow roles: the original Offer sender remains the Payer."
+                : "If accepted, your wallet becomes the Escrow Payer and the recipient wallet becomes the Payee."}
             </p>
           </div>
 

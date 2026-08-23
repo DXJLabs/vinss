@@ -332,6 +332,7 @@ export async function discoverOfferActions(
     action: OfferActionPayload;
     blockNumber: number;
     transactionHash: string;
+    matchedRoute: MessageRoute;
   }>
 > {
   // The backend remains keyless and receives only the record kind.
@@ -380,6 +381,7 @@ export async function discoverOfferActions(
     action: OfferActionPayload;
     blockNumber: number;
     transactionHash: string;
+    matchedRoute: MessageRoute;
   }> = [];
 
   // Try only private routing contexts known by this client.
@@ -461,6 +463,9 @@ export async function discoverOfferActions(
           action,
           blockNumber: record.blockNumber,
           transactionHash: record.transactionHash,
+          // Keep the locally matched pairwise route in memory so lifecycle
+          // replies can reuse the exact key that decrypted their parent.
+          matchedRoute: candidate,
         });
 
         // One record must belong to at most one candidate route.

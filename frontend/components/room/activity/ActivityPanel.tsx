@@ -175,7 +175,7 @@ export function ActivityPanel({
         </p>
 
         <p className="mt-1 text-[10px] text-paper/30">
-          Offers, Rekber and verified room actions.
+          Offers, Escrow and verified room actions.
         </p>
       </div>
 

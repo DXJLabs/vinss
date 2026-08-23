@@ -88,7 +88,29 @@ async function invokeHelper(
   contractAddress: string,
   calldata: string[],
 ): Promise<{ transaction_hash: string }> {
+  const token =
+    CONTRACTS.messageHelperOpenNoteToken;
+  const rawTreasury =
+    process.env
+      .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!token || !rawTreasury) {
+    throw new Error(
+      "STRK replay protection is not configured for private Escrow coordination.",
+    );
+  }
+
+  // An invoke-only STRK20 bundle has no spent note/nullifier and therefore
+  // does not satisfy pool-level replay protection. Consume a negligible
+  // 10 wei STRK note, matching the Invite flow, so setup/approval actions
+  // are accepted by the pool and cannot be replayed.
   return account.strk20InvokeTransaction([
+    {
+      type: "withdraw",
+      token,
+      amount: "0xa",
+      recipient: num.toHex(rawTreasury),
+    },
     {
       type: "invoke",
       contract: contractAddress,
