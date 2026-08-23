@@ -27,13 +27,17 @@ import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
-import type { MessagePayload, WorkEvidence } from "@/types/deal-room";
+import type { AttachmentRef, MessagePayload, WorkEvidence } from "@/types/deal-room";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { humanizeError } from "@/lib/errors/uiError";
 import {
   loadEncryptedLocalJson,
   saveEncryptedLocalJson,
 } from "@/lib/privacy/encryptedChatCache";
+import {
+  downloadDirectAttachment,
+  uploadDirectAttachment,
+} from "@/lib/privacy/directAttachments";
 
 interface UseDirectConversationOptions {
   roomId: string | null;
@@ -55,6 +59,13 @@ interface UseDirectConversationResult {
   chatEndRef: MutableRefObject<HTMLDivElement | null>;
   peerTyping: boolean;
   sendDirectMessage: () => Promise<void>;
+  sendDirectAttachment: (
+    file: File,
+    caption?: string,
+  ) => Promise<boolean>;
+  loadDirectAttachment: (
+    attachment: AttachmentRef,
+  ) => Promise<Blob>;
   sendDirectWorkSubmission: (input: {
     custodyCommitment: string;
     note: string;
@@ -351,6 +362,8 @@ export function useDirectConversation({
               item.message.recipientAddress,
             workEvidence:
               item.message.workEvidence,
+            attachment:
+              item.message.attachment,
           }));
 
       setEntries((previous) => {
@@ -736,6 +749,116 @@ export function useDirectConversation({
           "Private message could not be sent.",
         ),
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadDirectAttachment(
+    attachment: AttachmentRef,
+  ): Promise<Blob> {
+    const directKey = await resolveDirectKey();
+    if (!directKey) {
+      throw new Error("This private chat is not ready yet.");
+    }
+
+    return downloadDirectAttachment(
+      BACKEND_URL,
+      directKey,
+      attachment,
+    );
+  }
+
+  async function sendDirectAttachment(
+    file: File,
+    caption = "",
+  ): Promise<boolean> {
+    if (
+      !roomId ||
+      !session ||
+      !channelKey ||
+      !messagingIdentity ||
+      !selectedPeer
+    ) {
+      return false;
+    }
+
+    const directKey = await resolveDirectKey();
+    if (!directKey) {
+      setError("This private chat is not ready yet.");
+      return false;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const attachment = await uploadDirectAttachment(
+        BACKEND_URL,
+        directKey,
+        file,
+      );
+
+      const sentAt = new Date().toISOString();
+      const cleanCaption = caption.trim();
+      const route: MessageRoute = {
+        recipientIdentity: selectedPeer.address,
+        encryptionKey: directKey,
+        routingKey: directKey,
+      };
+      const payload: MessagePayload = {
+        kind: "attachment_ref",
+        scope: "direct",
+        body: cleanCaption || file.name,
+        senderIdentity: {
+          address: session.account.address,
+          messagingPublicKey: messagingIdentity.publicKey,
+        },
+        recipientAddress: selectedPeer.address,
+        attachment,
+        sentAt,
+      };
+
+      const result = await sendMessage(
+        session.account,
+        channelKey,
+        payload,
+        route,
+      );
+
+      const entry: ConversationEntry = {
+        id: `direct:${result.actionLocator.toString(16)}`,
+        kind: "message",
+        summary: cleanCaption || file.name,
+        transactionHash: result.transactionHash,
+        actionLocator: result.actionLocator.toString(16),
+        sentAt,
+        scope: "direct",
+        senderAddress: session.account.address,
+        recipientAddress: selectedPeer.address,
+        attachment,
+      };
+
+      setEntries((previous) => {
+        const next = [...previous, entry].sort(
+          (left, right) =>
+            new Date(left.sentAt).getTime() -
+            new Date(right.sentAt).getTime(),
+        );
+        void persistHistory(next);
+        return next;
+      });
+
+      return true;
+    } catch (err) {
+      console.error("[VINSS DIRECT ATTACHMENT ERROR]", err);
+      setError(
+        humanizeError(
+          err,
+          "We couldn't send this encrypted file.",
+        ),
+      );
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1619,6 +1742,8 @@ export function useDirectConversation({
     chatEndRef,
     peerTyping,
     sendDirectMessage,
+    sendDirectAttachment,
+    loadDirectAttachment,
     sendDirectWorkSubmission,
     refreshDirect,
   };

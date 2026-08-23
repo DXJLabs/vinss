@@ -27,7 +27,12 @@ export async function GET(
       : tokenId,
   );
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" style="color-scheme:dark">
+      <style>
+        :root {
+          color-scheme: dark;
+        }
+      </style>
       <defs>
         <radialGradient id="glow" cx="50%" cy="44%" r="60%">
           <stop offset="0" stop-color="#5ee7d4" stop-opacity=".18"/>

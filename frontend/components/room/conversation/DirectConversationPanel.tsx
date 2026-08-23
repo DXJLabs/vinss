@@ -26,6 +26,7 @@ import {
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
+import type { AttachmentRef } from "@/types/deal-room";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -42,6 +43,13 @@ interface DirectConversationPanelProps {
   onBack: () => void;
   onDraftChange: (value: string) => void;
   onSendMessage: () => void | Promise<void>;
+  onSendAttachment: (
+    file: File,
+    caption?: string,
+  ) => Promise<boolean>;
+  onLoadAttachment: (
+    attachment: AttachmentRef,
+  ) => Promise<Blob>;
   onSubmitWork: (input: {
     custodyCommitment: string;
     note: string;
@@ -104,6 +112,8 @@ export function DirectConversationPanel({
   onBack,
   onDraftChange,
   onSendMessage,
+  onSendAttachment,
+  onLoadAttachment,
   onSubmitWork,
   onCreateOffer,
   onAddEscrow,
@@ -653,7 +663,7 @@ export function DirectConversationPanel({
 
   return (
     <>
-      <div className="flex items-center gap-3 border-x border-b border-wire bg-vault/20 px-3 py-3">
+      <div className="relative z-30 flex items-center gap-3 border-x border-b border-wire bg-vault/20 px-3 py-3">
         <button
           type="button"
           onClick={onBack}

@@ -1,6 +1,8 @@
 "use client";
 
 import type { ConversationEntry } from "@/components/room/conversation/types";
+import { EncryptedAttachmentPreview } from "@/components/room/conversation/EncryptedAttachmentPreview";
+import type { AttachmentRef } from "@/types/deal-room";
 import {
   messageTime,
   shortAddress,
@@ -14,6 +16,9 @@ interface MessageBubbleProps {
   onViewProof: (
     entry: ConversationEntry,
   ) => void;
+  onLoadAttachment?: (
+    attachment: AttachmentRef,
+  ) => Promise<Blob>;
 }
 
 function ShieldIcon() {
@@ -71,6 +76,7 @@ export function MessageBubble({
   walletAddress,
   mode,
   onViewProof,
+  onLoadAttachment,
 }: MessageBubbleProps) {
   const own = sameStarknetAddress(
     entry.senderAddress,
@@ -113,9 +119,19 @@ export function MessageBubble({
               : "rounded-2xl rounded-bl-md bg-vault/45 px-3.5 py-2.5 ring-1 ring-wire/55"
           }
         >
-          <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-paper/88">
-            {entry.summary}
-          </p>
+          {entry.attachment && onLoadAttachment && (
+            <EncryptedAttachmentPreview
+              attachment={entry.attachment}
+              onLoad={onLoadAttachment}
+            />
+          )}
+
+          {(!entry.attachment ||
+            entry.summary !== entry.attachment.fileName) && (
+            <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-paper/88">
+              {entry.summary}
+            </p>
+          )}
 
           <div
             className={

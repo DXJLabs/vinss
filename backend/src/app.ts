@@ -6,6 +6,7 @@ import express, {
   type Response,
 } from "express";
 import swaggerUi from "swagger-ui-express";
+import type { Pool } from "pg";
 
 import type { AppConfig } from "./config.js";
 import { CertificateIndexer } from "./indexer/certificate.js";
@@ -19,6 +20,7 @@ import { loyaltyRouter } from "./loyalty/routes.js";
 import { createFixedWindowRateLimit } from "./middleware/rateLimit.js";
 import { openApiDocument } from "./openapi.js";
 import { agentRouter } from "./routes/agent.js";
+import { createAttachmentRouter } from "./routes/attachments.js";
 import { createActivityRouter } from "./routes/activity.js";
 import { createDiscoverRouter } from "./routes/discover.js";
 import { createHealthRouter } from "./routes/health.js";
@@ -26,6 +28,7 @@ import { presenceRouter } from "./routes/presence.js";
 import { createRekberRouter } from "./routes/rekber.js";
 
 interface AppDependencies {
+  database: Pool;
   config: AppConfig;
   definitions: readonly IndexerDefinition[];
   store: DiscoveryStore;
@@ -121,6 +124,7 @@ export function createApp(dependencies: AppDependencies): Express {
     app.use(loyaltyRouter);
   }
   app.use(presenceRouter);
+  app.use(createAttachmentRouter(dependencies.database));
 
   return app;
 }

@@ -5,6 +5,7 @@ import { useState } from "react";
 interface ConversationActionsProps {
   connected: boolean;
   busy: boolean;
+  onAddFile?: () => void;
   onAddOffer?: () => void;
   onAddEscrow?: () => void;
   onSubmitWork?: () => void;
@@ -13,6 +14,7 @@ interface ConversationActionsProps {
 export function ConversationActions({
   connected,
   busy,
+  onAddFile,
   onAddOffer,
   onAddEscrow,
   onSubmitWork,
@@ -54,6 +56,20 @@ export function ConversationActions({
       {open && (
         <div className="mt-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max snap-x snap-mandatory gap-2">
+            {onAddFile && (
+              <button
+                type="button"
+                onClick={onAddFile}
+                disabled={!connected || busy}
+                className={actionClass}
+              >
+                <span className="text-signal/55">
+                  ＋
+                </span>
+                <span>File</span>
+              </button>
+            )}
+
             {onSubmitWork && (
               <button
                 type="button"
@@ -64,7 +80,7 @@ export function ConversationActions({
                 <span className="text-signal/55">
                   📎
                 </span>
-                <span>File</span>
+                <span>Submit work</span>
               </button>
             )}
 

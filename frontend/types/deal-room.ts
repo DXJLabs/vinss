@@ -22,6 +22,17 @@ export interface MessageSenderIdentity {
   messagingPublicKey: string;
 }
 
+export interface AttachmentRef {
+  version: 1;
+  id: string;
+  accessToken: string;
+  iv: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  sha256: string;
+}
+
 export interface WorkEvidence {
   type: "work_submission";
 
@@ -56,6 +67,7 @@ export interface MessagePayload {
   groupId?: string;
 
   attachmentUri?: string;
+  attachment?: AttachmentRef;
   workEvidence?: WorkEvidence;
   sentAt: string; // ISO timestamp, part of the encrypted payload by choice —
   // block timestamp is already public, but an app-level timestamp lets the

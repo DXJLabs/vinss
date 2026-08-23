@@ -111,6 +111,8 @@ export default function DealRoomPage() {
     setMessageTarget,
     peerTyping,
     handleSendMessage,
+    sendDirectAttachment,
+    loadDirectAttachment,
     sendDirectWorkSubmission,
     handleRefresh,
   } = useRoomConversation({
@@ -560,6 +562,8 @@ export default function DealRoomPage() {
             setEscrowOfferSource(null);
           }}
           onSendMessage={handleSendMessage}
+          onSendAttachment={sendDirectAttachment}
+          onLoadAttachment={loadDirectAttachment}
           onSubmitWork={sendDirectWorkSubmission}
           onCreateOffer={() => {
             // Offer editing starts from the active private chat and keeps

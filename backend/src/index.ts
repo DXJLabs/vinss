@@ -67,6 +67,7 @@ async function main(): Promise<void> {
   );
 
   const app = createApp({
+    database,
     config,
     definitions,
     store,

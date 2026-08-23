@@ -25,6 +25,7 @@ import type {
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
+import type { AttachmentRef } from "@/types/deal-room";
 
 export type {
   ConversationEntry,
@@ -61,6 +62,13 @@ interface ConversationPanelProps {
   ) => void;
   onSendMessage:
     () => void | Promise<void>;
+  onSendAttachment: (
+    file: File,
+    caption?: string,
+  ) => Promise<boolean>;
+  onLoadAttachment: (
+    attachment: AttachmentRef,
+  ) => Promise<Blob>;
   onSubmitWork: (input: {
     custodyCommitment: string;
     note: string;
@@ -108,6 +116,8 @@ export function ConversationPanel({
   onDraftChange,
   onMessageTargetChange,
   onSendMessage,
+  onSendAttachment,
+  onLoadAttachment,
   onSubmitWork,
   onCreateOffer,
   onAddEscrow,
@@ -253,6 +263,12 @@ export function ConversationPanel({
           }
           onSendMessage={
             onSendMessage
+          }
+          onSendAttachment={
+            onSendAttachment
+          }
+          onLoadAttachment={
+            onLoadAttachment
           }
           onSubmitWork={
             onSubmitWork

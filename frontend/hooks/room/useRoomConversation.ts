@@ -240,6 +240,10 @@ export function useRoomConversation({
     peerTyping:
       direct.peerTyping,
     handleSendMessage,
+    sendDirectAttachment:
+      direct.sendDirectAttachment,
+    loadDirectAttachment:
+      direct.loadDirectAttachment,
     sendDirectWorkSubmission:
       direct.sendDirectWorkSubmission,
     handleRefresh,

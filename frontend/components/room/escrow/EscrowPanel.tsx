@@ -60,12 +60,14 @@ import {
 } from "@/lib/deal-room/rekberAuthorization";
 import {
   CONTRACTS,
-  NETWORK,
 } from "@/lib/starknet/constants";
 import {
   humanizeError,
 } from "@/lib/errors/uiError";
-import { FeeBreakdown } from "@/components/FeeBreakdown";
+import {
+  EscrowAgreedAmount,
+  EscrowPriceBreakdown,
+} from "@/components/room/escrow/EscrowPricing";
 import {
   explorerUrl,
   shortAddress,
@@ -195,8 +197,6 @@ export function EscrowPanel({
     useState(false);
   const [certificateTx, setCertificateTx] =
     useState("");
-  const [backupCopied, setBackupCopied] =
-    useState(false);
   const [coordinationAuthorized, setCoordinationAuthorized] =
     useState<boolean | null>(null);
   const [coordinationPhase, setCoordinationPhase] =
@@ -1669,22 +1669,6 @@ export function EscrowPanel({
     }
   }
 
-  async function handleCopyBackup() {
-    if (!localSecrets) return;
-
-    await navigator.clipboard.writeText(
-      JSON.stringify(
-        localSecrets,
-        null,
-        2,
-      ),
-    );
-    setBackupCopied(true);
-    window.setTimeout(
-      () => setBackupCopied(false),
-      1800,
-    );
-  }
 
   const stage = !accepted
     ? 0
@@ -1722,18 +1706,6 @@ export function EscrowPanel({
             </p>
           </div>
 
-          <span
-            className={
-              NETWORK === "mainnet"
-                ? "rounded-full bg-signal/[0.08] px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-signal"
-                : "rounded-full bg-amber/[0.08] px-2.5 py-1 text-[9px] uppercase tracking-[0.12em] text-amber"
-            }
-          >
-            {NETWORK === "mainnet"
-              ? "Mainnet"
-              : "Sepolia"}
-            {" · V2"}
-          </span>
         </div>
 
         <div className="mt-4 grid grid-cols-5 gap-1">
@@ -1756,8 +1728,8 @@ export function EscrowPanel({
                 <p
                   className={
                     done || active
-                      ? "mt-1.5 truncate text-[8px] text-paper/55"
-                      : "mt-1.5 truncate text-[8px] text-paper/22"
+                      ? "mt-1.5 truncate text-[8px] font-medium text-paper/70"
+                      : "mt-1.5 truncate text-[8px] text-paper/35"
                   }
                 >
                   {done ? "✓ " : ""}
@@ -1780,24 +1752,10 @@ export function EscrowPanel({
             </p>
           </div>
         ) : (
-          <div className="rounded-xl bg-paper/[0.025] p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[9px] uppercase tracking-[0.13em] text-paper/28">
-                  Agreed amount
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-paper">
-                  {accepted.amount}
-                  <span className="ml-2 text-sm font-medium text-paper/45">
-                    {accepted.asset}
-                  </span>
-                </p>
-              </div>
-              <span className="text-[10px] text-signal">
-                ✓ Approved
-              </span>
-            </div>
-          </div>
+          <EscrowAgreedAmount
+            amount={accepted.amount}
+            asset={accepted.asset}
+          />
         )}
 
         {accepted && legacyDeal && (
@@ -2056,25 +2014,20 @@ export function EscrowPanel({
           !funded &&
           role === "payer" && (
             <div className="space-y-3">
-              <div className="rounded-xl bg-paper/[0.03] p-4">
+              <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
                 <p className="text-[9px] uppercase tracking-[0.13em] text-signal/70">
                   Payee approved
                 </p>
-                <p className="mt-2 text-3xl font-semibold text-paper">
-                  {accepted.amount}
-                  <span className="ml-2 text-base text-paper/45">
-                    {accepted.asset}
-                  </span>
+                <p className="mt-1 text-xs leading-relaxed text-paper/38">
+                  Review the amount and VINSS fee before securing the payment.
                 </p>
-                <div className="mt-4 border-t border-wire/45 pt-3">
-                  <FeeBreakdown
-                    amount={accepted.amount}
-                    unit={accepted.asset}
-                    label="VINSS fee"
-                    feeBps={100}
-                  />
-                </div>
               </div>
+
+              <EscrowPriceBreakdown
+                amount={accepted.amount}
+                asset={accepted.asset}
+                feeBps={100}
+              />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
                 <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the 1% VINSS fee and locks it in the Escrow contract.
               </p>
@@ -2267,8 +2220,16 @@ export function EscrowPanel({
                       NFT Settlement Certificate
                     </p>
                     <p className="mt-1 text-[10px] leading-relaxed text-paper/32">
-                      Optional public evidence claimed by this wallet itself. Claiming links this wallet and role to the custody proof; public token, amount, and timing can be correlated. Private messages and Offer terms stay hidden.
+                      Optional public evidence. Your wallet and amount become publicly linkable — private messages and Offer terms stay hidden.
                     </p>
+                    <details className="group mt-1.5">
+                      <summary className="cursor-pointer list-none text-[9px] text-signal/80 [&::-webkit-details-marker]:hidden">
+                        Learn more ▾
+                      </summary>
+                      <p className="mt-1.5 text-[9px] leading-relaxed text-paper/28">
+                        Claiming links this wallet and role to the custody proof, so the token, amount, and timing can be correlated by anyone. This is separate from your private conversation and Offer, which are never exposed.
+                      </p>
+                    </details>
                     {role === "payee" && (
                       <p className="mt-2 text-[9px] leading-relaxed text-amber/70">
                         Confirm the payment appears in your private wallet balance before claiming your certificate.
@@ -2350,30 +2311,7 @@ export function EscrowPanel({
           </div>
         )}
 
-        {localSecrets && custodyCommitment && (
-          <details className="group rounded-xl border border-wire/45 bg-paper/[0.015] p-3">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-[9px] text-paper/32 [&::-webkit-details-marker]:hidden">
-              <span>Recovery backup</span>
-              <span className="group-open:rotate-180">
-                ▾
-              </span>
-            </summary>
-            <div className="mt-3 border-t border-wire/40 pt-3">
-              <p className="text-[9px] leading-relaxed text-danger/70">
-                These one-time secrets control settlement or recovery. Keep the backup private and offline.
-              </p>
-              <button
-                type="button"
-                onClick={handleCopyBackup}
-                className="mt-3 rounded-lg border border-wire/70 px-3 py-2 text-[9px] text-paper/55"
-              >
-                {backupCopied
-                  ? "Copied ✓"
-                  : "Copy recovery JSON"}
-              </button>
-            </div>
-          </details>
-        )}
+
 
         {custodyCommitment && (
           <details className="group rounded-xl bg-paper/[0.015] p-3">
