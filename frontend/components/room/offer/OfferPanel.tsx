@@ -683,20 +683,149 @@ export function OfferPanel({
     paymentTerms: string,
     conditions?: string,
   ) {
-    if (templateId === "freelance") {
+    const split = (
+      value?: string,
+    ) =>
+      value
+        ?.split(/\s*·\s*/)
+        .map((part) =>
+          part.trim(),
+        )
+        .filter(Boolean) ?? [];
+
+    const terms =
+      split(paymentTerms);
+
+    const conditionParts =
+      split(conditions);
+
+    const prefixed = (
+      parts: string[],
+      label: string,
+    ): string => {
+      const prefix =
+        `${label}:`;
+
+      const part =
+        parts.find((candidate) =>
+          candidate
+            .toLowerCase()
+            .startsWith(
+              prefix.toLowerCase(),
+            ),
+        );
+
+      return part
+        ? part
+            .slice(
+              prefix.length,
+            )
+            .trim()
+        : "";
+    };
+
+    const plain = (
+      parts: string[],
+      labels: string[],
+    ): string => {
+      return (
+        parts.find(
+          (part) =>
+            !labels.some(
+              (label) => {
+                const prefix =
+                  `${label}:`;
+
+                return part
+                  .toLowerCase()
+                  .startsWith(
+                    prefix.toLowerCase(),
+                  );
+              },
+            ),
+        ) ?? ""
+      );
+    };
+
+    const loose = (
+      value: string,
+    ) =>
+      value
+        .replace(
+          /^[A-Za-z][A-Za-z ]{1,30}:\s*/,
+          "",
+        )
+        .trim();
+
+    if (
+      templateId ===
+      "freelance"
+    ) {
+      const extra =
+        plain(
+          conditionParts,
+          [
+            "Deliverables",
+            "Acceptance",
+            "Revisions",
+            "Work stages",
+          ],
+        );
+
       setTemplateValues(
         (previous) => ({
           ...previous,
+
           freelance_project:
+            prefixed(
+              terms,
+              "Project",
+            ) ||
+            plain(
+              terms,
+              ["Deadline"],
+            ) ||
             paymentTerms,
+
           freelance_payment_amount:
             amount,
+
           freelance_payment_asset:
             asset,
+
+          freelance_deadline:
+            prefixed(
+              terms,
+              "Deadline",
+            ),
+
+          freelance_deliverables:
+            prefixed(
+              conditionParts,
+              "Deliverables",
+            ),
+
           freelance_acceptance_criteria:
-            conditions ?? "",
+            prefixed(
+              conditionParts,
+              "Acceptance",
+            ) ||
+            loose(extra),
+
+          freelance_revision_limit:
+            prefixed(
+              conditionParts,
+              "Revisions",
+            ),
+
+          freelance_work_stages:
+            prefixed(
+              conditionParts,
+              "Work stages",
+            ),
         }),
       );
+
       return;
     }
 
@@ -704,17 +833,53 @@ export function OfferPanel({
       templateId ===
       "token_trade"
     ) {
+      const trade =
+        terms[0] ?? "";
+
+      const tradeMatch =
+        trade.match(
+          /^(Buy|Sell)\s+(.+?)\s+for\s+(.+?)\s+([A-Za-z]{2,10})$/i,
+        );
+
       setTemplateValues(
         (previous) => ({
           ...previous,
+
+          token_trade_direction:
+            tradeMatch?.[1]
+              ?.toLowerCase() ===
+            "buy"
+              ? "buy_crypto"
+              : "sell_crypto",
+
           token_trade_crypto_amount:
             amount,
+
           token_trade_crypto_asset:
             asset,
+
+          token_trade_fiat_amount:
+            tradeMatch?.[3] ??
+            "",
+
+          token_trade_fiat_currency:
+            tradeMatch?.[4] ??
+            "",
+
           token_trade_payment_method:
-            paymentTerms,
+            prefixed(
+              terms,
+              "Payment",
+            ),
+
+          token_trade_payment_deadline:
+            prefixed(
+              terms,
+              "Deadline",
+            ),
         }),
       );
+
       return;
     }
 
@@ -722,19 +887,94 @@ export function OfferPanel({
       templateId ===
       "physical_goods"
     ) {
+      let itemLine =
+        plain(
+          terms,
+          [
+            "Delivery",
+            "Due",
+          ],
+        );
+
+      let quantity = "1";
+      let item = itemLine;
+
+      const quantityMatch =
+        itemLine.match(
+          /^(.+?)\s*×\s*(.+)$/,
+        );
+
+      if (quantityMatch) {
+        quantity =
+          quantityMatch[1]
+            ?.trim() || "1";
+
+        item =
+          quantityMatch[2]
+            ?.trim() || itemLine;
+
+        // Repair old:
+        // 1 × 1 × Item
+        const repeated =
+          item.match(
+            /^(.+?)\s*×\s*(.+)$/,
+          );
+
+        if (
+          repeated &&
+          repeated[1]
+            ?.trim() ===
+            quantity
+        ) {
+          item =
+            repeated[2]
+              ?.trim() ||
+            item;
+        }
+      }
+
+      const inspection =
+        prefixed(
+          conditionParts,
+          "Inspection window",
+        ) ||
+        loose(
+          conditions ?? "",
+        );
+
       setTemplateValues(
         (previous) => ({
           ...previous,
+
           physical_goods_item:
-            paymentTerms,
+            item,
+
+          physical_goods_quantity:
+            quantity,
+
           physical_goods_total_price:
             amount,
+
           physical_goods_payment_asset:
             asset,
+
+          physical_goods_delivery_method:
+            prefixed(
+              terms,
+              "Delivery",
+            ),
+
+          physical_goods_delivery_deadline:
+            prefixed(
+              terms,
+              "Due",
+            ),
+
           physical_goods_inspection_window:
-            conditions ?? "",
+            inspection,
         }),
       );
+
       return;
     }
 
@@ -745,63 +985,197 @@ export function OfferPanel({
       setTemplateValues(
         (previous) => ({
           ...previous,
+
           digital_goods_item:
+            plain(
+              terms,
+              ["Delivery"],
+            ) ||
             paymentTerms,
+
           digital_goods_price:
             amount,
+
           digital_goods_payment_asset:
             asset,
-          digital_goods_license_rights:
-            conditions ?? "",
-        }),
-      );
-      return;
-    }
 
-    if (templateId === "bounty") {
-      setTemplateValues(
-        (previous) => ({
-          ...previous,
-          bounty_task: paymentTerms,
-          bounty_reward_amount:
-            amount,
-          bounty_reward_asset:
-            asset,
-          bounty_success_criteria:
-            conditions ?? "",
+          digital_goods_delivery_method:
+            prefixed(
+              terms,
+              "Delivery",
+            ),
+
+          digital_goods_license_rights:
+            prefixed(
+              conditionParts,
+              "Rights",
+            ),
+
+          digital_goods_acceptance_window:
+            prefixed(
+              conditionParts,
+              "Acceptance",
+            ),
         }),
       );
+
       return;
     }
 
     if (
-      templateId === "nft_deal"
+      templateId ===
+      "bounty"
     ) {
       setTemplateValues(
         (previous) => ({
           ...previous,
-          nft_deal_collection:
+
+          bounty_task:
+            prefixed(
+              terms,
+              "Task",
+            ) ||
+            plain(
+              terms,
+              ["Deadline"],
+            ) ||
             paymentTerms,
-          nft_deal_price: amount,
-          nft_deal_payment_asset:
+
+          bounty_reward_amount:
+            amount,
+
+          bounty_reward_asset:
             asset,
-          nft_deal_transfer_condition:
-            conditions ?? "",
+
+          bounty_deadline:
+            prefixed(
+              terms,
+              "Deadline",
+            ),
+
+          bounty_success_criteria:
+            prefixed(
+              conditionParts,
+              "Success",
+            ) ||
+            loose(
+              conditions ?? "",
+            ),
+
+          bounty_submission_method:
+            prefixed(
+              conditionParts,
+              "Submit",
+            ),
         }),
       );
+
       return;
     }
+
+    if (
+      templateId ===
+      "nft_deal"
+    ) {
+      const nftLine =
+        plain(
+          terms,
+          ["Transfer"],
+        );
+
+      const nftMatch =
+        nftLine.match(
+          /^(.*)\s+#([^#]+)$/,
+        );
+
+      setTemplateValues(
+        (previous) => ({
+          ...previous,
+
+          nft_deal_collection:
+            nftMatch?.[1]
+              ?.trim() ||
+            nftLine ||
+            paymentTerms,
+
+          nft_deal_token_id:
+            nftMatch?.[2]
+              ?.trim() ??
+            "",
+
+          nft_deal_price:
+            amount,
+
+          nft_deal_payment_asset:
+            asset,
+
+          nft_deal_transfer_deadline:
+            prefixed(
+              terms,
+              "Transfer",
+            ),
+
+          nft_deal_transfer_condition:
+            loose(
+              conditions ?? "",
+            ),
+        }),
+      );
+
+      return;
+    }
+
+    const dealTitle =
+      prefixed(
+        terms,
+        "Deal",
+      ) ||
+      terms[0] ||
+      paymentTerms;
+
+    const customTerms =
+      terms
+        .filter(
+          (part) =>
+            !part
+              .toLowerCase()
+              .startsWith(
+                "deal:",
+              ) &&
+            !part
+              .toLowerCase()
+              .startsWith(
+                "deadline:",
+              ),
+        )
+        .join(" · ");
 
     setTemplateValues(
       (previous) => ({
         ...previous,
+
         custom_deal_title:
-          paymentTerms,
-        custom_deal_value: amount,
+          dealTitle,
+
+        custom_deal_value:
+          amount,
+
         custom_deal_value_asset:
           asset,
+
+        custom_deal_terms:
+          customTerms,
+
         custom_deal_completion_condition:
-          conditions ?? "",
+          loose(
+            conditions ?? "",
+          ),
+
+        custom_deal_deadline:
+          prefixed(
+            terms,
+            "Deadline",
+          ),
       }),
     );
   }

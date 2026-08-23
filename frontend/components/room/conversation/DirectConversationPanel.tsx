@@ -126,6 +126,8 @@ export function DirectConversationPanel({
   const [proofEntry, setProofEntry] =
     useState<ConversationEntry | null>(null);
   const scrollBoxRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef =
+    useRef<HTMLInputElement | null>(null);
   const endNodeRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -877,6 +879,9 @@ export function DirectConversationPanel({
                       walletAddress
                     }
                     mode="direct"
+                    onLoadAttachment={
+                      onLoadAttachment
+                    }
                     onViewProof={
                       setProofEntry
                     }
@@ -1113,6 +1118,9 @@ export function DirectConversationPanel({
           channelReady
         }
         busy={busy}
+        onAddFile={() =>
+          attachmentInputRef.current?.click()
+        }
         onAddOffer={
           onCreateOffer
         }
@@ -1131,6 +1139,35 @@ export function DirectConversationPanel({
       />
 
       <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
+        <input
+          ref={attachmentInputRef}
+          type="file"
+          className="hidden"
+          accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.zip"
+          disabled={!connected || !channelReady || busy}
+          onChange={async (event) => {
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+
+            if (!file) {
+              return;
+            }
+
+            const caption = draft.trim();
+
+            const sent =
+              await onSendAttachment(
+                file,
+                caption,
+              );
+
+            if (sent && caption) {
+              onDraftChange("");
+            }
+
+            input.value = "";
+          }}
+        />
         {showWorkComposer &&
           canSubmitWork &&
           fundedFreelanceEntry

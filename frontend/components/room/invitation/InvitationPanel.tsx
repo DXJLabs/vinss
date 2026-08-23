@@ -41,7 +41,7 @@ function InviteCard({
     scope === "group";
 
   return (
-    <article className="border border-wire bg-vault/20 p-4 sm:p-5">
+    <article className="rounded-2xl border border-wire/55 bg-vault/15 p-3.5 sm:p-4">
       {groupMode && (
         <div>
           <p className="mb-2 font-display text-[8px] uppercase tracking-[0.14em] text-paper/25">
@@ -101,11 +101,11 @@ function InviteCard({
             void onCreate()
           }
           disabled={disabled}
-          className={`${groupMode || joined ? "mt-5" : ""} flex h-11 w-full items-center justify-center border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30`}
+          className={`${groupMode || joined ? "mt-4" : ""} flex h-12 w-full items-center justify-center rounded-xl border border-signal/30 bg-signal/[0.045] px-4 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-30`}
         >
           {groupMode
             ? "Create member invite →"
-            : "Create private Chat invite →"}
+            : "Create invite →"}
         </button>
       ) : (
         <div className={groupMode ? "mt-5" : ""}>
@@ -245,15 +245,15 @@ export function InvitationPanel({
 
   return (
     <section
-      className="mb-6 border border-signal/25 bg-signal/[0.02]"
+      className="mb-6"
       data-testid={
         groupMode
           ? "group-invite"
           : "chat-invite"
       }
     >
-      <header className="border-b border-wire px-5 py-5 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
+      <header className="pb-4">
+        <div className="flex flex-col gap-3">
           <div>
             <p className="font-display text-[10px] uppercase tracking-[0.22em] text-signal">
               {groupMode
@@ -261,12 +261,12 @@ export function InvitationPanel({
                 : "Private Chat invite"}
             </p>
 
-            <h2 className="mt-2 text-lg text-paper">
+            <h2 className="mt-2 text-xl leading-tight text-paper">
               {groupMode
                 ? group
                   ? `Invite to ${group.name}`
                   : "Group unavailable"
-                : "Invite someone to private Chat"}
+                : "Invite to private chat"}
             </h2>
 
             <p className="mt-2 max-w-xl text-xs leading-relaxed text-paper/40">
@@ -274,13 +274,13 @@ export function InvitationPanel({
                 ? group
                   ? `This one-time link grants access only to ${group.name}. It does not grant private Chat access.`
                   : "This Group is not available on this device."
-                : "This one-time link grants private Chat access to one person. Group access is managed separately inside each Group."}
+                : "Create a one-time private link for one person. It expires after 1 hour."}
             </p>
           </div>
 
           <Link
             href={backHref}
-            className="shrink-0 font-display text-[8px] uppercase tracking-[0.13em] text-paper/35 transition hover:text-signal"
+            className="order-first w-fit font-display text-[8px] uppercase tracking-[0.13em] text-paper/30 transition hover:text-signal"
           >
             {groupMode
               ? "← Back to Group"
@@ -289,7 +289,7 @@ export function InvitationPanel({
         </div>
       </header>
 
-      <div className="p-5 sm:p-6">
+      <div>
         {groupMode ? (
           group ? (
             <InviteCard
@@ -350,13 +350,11 @@ export function InvitationPanel({
           />
         )}
 
-        <div className="mt-4 border-t border-wire/60 pt-4">
-          <p className="text-[10px] leading-relaxed text-paper/25">
-            {groupMode
-              ? "Member invitations are one-time and scoped to this Group key."
-              : "Private Chat invitations expire after 1 hour and are separate from Group membership."}
-          </p>
-        </div>
+        <p className="mt-3 px-1 text-[9px] leading-relaxed text-paper/22">
+          {groupMode
+            ? "One-time access · scoped to this Group"
+            : "One-time access · expires in 1 hour"}
+        </p>
       </div>
     </section>
   );

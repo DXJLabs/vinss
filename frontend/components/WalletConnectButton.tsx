@@ -3,18 +3,31 @@
 import dynamic from "next/dynamic";
 
 const WalletConnectModal = dynamic(
-  () => import("@starknet-io/get-starknet-ui").then((m) => m.WalletConnectModal),
+  () =>
+    import(
+      "@starknet-io/get-starknet-ui"
+    ).then(
+      (m) => m.WalletConnectModal,
+    ),
   { ssr: false },
 );
-import { useWallet } from "@/components/providers/WalletProvider";
-import { refreshInjectedWallets } from "@/lib/starknet/walletStore";
+
+import {
+  useWallet,
+} from "@/components/providers/WalletProvider";
+import {
+  refreshInjectedWallets,
+} from "@/lib/starknet/walletStore";
 
 export function WalletConnectButton({
   showCapability = true,
 }: {
   showCapability?: boolean;
 }) {
-  const { session, connected } = useWallet();
+  const {
+    session,
+    connected,
+  } = useWallet();
 
   const capability = connected
     ? session?.strk20Capable
@@ -25,8 +38,12 @@ export function WalletConnectButton({
   return (
     <div
       className="flex flex-col items-end gap-1.5"
-      onFocusCapture={refreshInjectedWallets}
-      onPointerDown={refreshInjectedWallets}
+      onFocusCapture={
+        refreshInjectedWallets
+      }
+      onPointerDown={
+        refreshInjectedWallets
+      }
     >
       <WalletConnectModal
         buttonClassName="
@@ -45,12 +62,16 @@ export function WalletConnectButton({
         "
       />
 
-      {connected && showCapability && (
-        <div className="flex items-center gap-1.5 pr-1 text-[9px] font-mono uppercase tracking-wider text-paper/45">
-          <span className="h-1.5 w-1.5 rounded-full bg-signal shadow-[0_0_5px_#10b981]" />
-          <span>{capability}</span>
-        </div>
-      )}
+      {connected &&
+        showCapability && (
+          <div className="flex items-center gap-1.5 pr-1 text-[9px] font-mono uppercase tracking-wider text-paper/45">
+            <span className="h-1.5 w-1.5 rounded-full bg-signal" />
+
+            <span>
+              {capability}
+            </span>
+          </div>
+        )}
     </div>
   );
 }

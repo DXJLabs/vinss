@@ -3,6 +3,10 @@
 import { useEffect, useRef } from "react";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
+import {
+  formatUsd,
+  useUsdPrice,
+} from "@/components/room/escrow/EscrowPricing";
 
 interface OfferCardProps {
   entry: ConversationEntry;
@@ -80,6 +84,549 @@ function stateLabel(
   return ownAction
     ? "Waiting"
     : "Received";
+}
+
+
+type OfferAction =
+  NonNullable<
+    ConversationEntry["offerAction"]
+  >;
+
+interface OfferDetailRow {
+  label: string;
+  value: string;
+}
+
+function splitOfferSegments(
+  value?: string,
+): string[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  return value
+    .split(/\s*·\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function prefixedValue(
+  part: string,
+  label: string,
+): string | null {
+  const prefix = `${label}:`;
+
+  if (
+    !part
+      .toLowerCase()
+      .startsWith(
+        prefix.toLowerCase(),
+      )
+  ) {
+    return null;
+  }
+
+  return part
+    .slice(prefix.length)
+    .trim();
+}
+
+function findPrefixed(
+  parts: string[],
+  label: string,
+): string | null {
+  for (const part of parts) {
+    const value =
+      prefixedValue(
+        part,
+        label,
+      );
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function findPlain(
+  parts: string[],
+  knownLabels: string[],
+): string | null {
+  return (
+    parts.find(
+      (part) =>
+        !knownLabels.some(
+          (label) =>
+            prefixedValue(
+              part,
+              label,
+            ) !== null,
+        ),
+    ) ?? null
+  );
+}
+
+function cleanLooseLabel(
+  value: string | null,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    value
+      .replace(
+        /^[A-Za-z][A-Za-z ]{1,30}:\s*/,
+        "",
+      )
+      .trim() || null
+  );
+}
+
+function normalizeGoodsLine(
+  value: string | null,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  // Old Counter prefill could produce:
+  // 1 × 1 × Item
+  return value.replace(
+    /^(\d+(?:[.,]\d+)?)\s*×\s*\1\s*×\s*/i,
+    "$1 × ",
+  );
+}
+
+function offerDetailRows(
+  action: OfferAction,
+): OfferDetailRow[] {
+  const terms =
+    splitOfferSegments(
+      action.paymentTerms,
+    );
+
+  const conditions =
+    splitOfferSegments(
+      action.conditions,
+    );
+
+  const rows: OfferDetailRow[] =
+    [];
+
+  const add = (
+    label: string,
+    value:
+      | string
+      | null
+      | undefined,
+  ) => {
+    const clean =
+      value?.trim();
+
+    if (!clean) {
+      return;
+    }
+
+    if (
+      rows.some(
+        (row) =>
+          row.label === label &&
+          row.value === clean,
+      )
+    ) {
+      return;
+    }
+
+    rows.push({
+      label,
+      value: clean,
+    });
+  };
+
+  switch (action.dealType) {
+    case "freelance": {
+      add(
+        "Project",
+        findPrefixed(
+          terms,
+          "Project",
+        ) ??
+          findPlain(
+            terms,
+            ["Deadline"],
+          ),
+      );
+
+      add(
+        "Deadline",
+        findPrefixed(
+          terms,
+          "Deadline",
+        ),
+      );
+
+      add(
+        "Deliverables",
+        findPrefixed(
+          conditions,
+          "Deliverables",
+        ),
+      );
+
+      add(
+        "Acceptance",
+        findPrefixed(
+          conditions,
+          "Acceptance",
+        ),
+      );
+
+      add(
+        "Revisions",
+        findPrefixed(
+          conditions,
+          "Revisions",
+        ),
+      );
+
+      add(
+        "Work stages",
+        findPrefixed(
+          conditions,
+          "Work stages",
+        ),
+      );
+
+      if (
+        rows.length <= 2 &&
+        conditions.length > 0
+      ) {
+        add(
+          "Additional terms",
+          cleanLooseLabel(
+            findPlain(
+              conditions,
+              [
+                "Deliverables",
+                "Acceptance",
+                "Revisions",
+                "Work stages",
+              ],
+            ),
+          ),
+        );
+      }
+
+      break;
+    }
+
+    case "otc": {
+      add(
+        "Trade",
+        terms[0],
+      );
+
+      add(
+        "Payment",
+        findPrefixed(
+          terms,
+          "Payment",
+        ),
+      );
+
+      add(
+        "Deadline",
+        findPrefixed(
+          terms,
+          "Deadline",
+        ),
+      );
+
+      if (
+        action.conditions
+          ?.trim()
+      ) {
+        add(
+          "Settlement",
+          action.conditions,
+        );
+      }
+
+      break;
+    }
+
+    case "goods": {
+      const item =
+        normalizeGoodsLine(
+          findPlain(
+            terms,
+            [
+              "Delivery",
+              "Due",
+            ],
+          ),
+        );
+
+      add(
+        "Item",
+        item,
+      );
+
+      const deliveries =
+        terms
+          .map((part) =>
+            prefixedValue(
+              part,
+              "Delivery",
+            ),
+          )
+          .filter(
+            (
+              value,
+            ): value is string =>
+              Boolean(value),
+          );
+
+      add(
+        "Delivery",
+        deliveries[0],
+      );
+
+      add(
+        "Due",
+        findPrefixed(
+          terms,
+          "Due",
+        ),
+      );
+
+      add(
+        "Inspection",
+        findPrefixed(
+          conditions,
+          "Inspection window",
+        ),
+      );
+
+      // Graceful rendering for older malformed
+      // cards where a condition inherited
+      // the wrong label.
+      if (
+        conditions.length > 0 &&
+        !findPrefixed(
+          conditions,
+          "Inspection window",
+        )
+      ) {
+        add(
+          "Additional terms",
+          cleanLooseLabel(
+            conditions.join(
+              " · ",
+            ),
+          ),
+        );
+      }
+
+      for (
+        let index = 1;
+        index <
+        deliveries.length;
+        index += 1
+      ) {
+        add(
+          "Additional terms",
+          deliveries[index],
+        );
+      }
+
+      break;
+    }
+
+    case "digital_goods": {
+      add(
+        "Item",
+        findPlain(
+          terms,
+          ["Delivery"],
+        ),
+      );
+
+      add(
+        "Delivery",
+        findPrefixed(
+          terms,
+          "Delivery",
+        ),
+      );
+
+      add(
+        "Rights",
+        findPrefixed(
+          conditions,
+          "Rights",
+        ),
+      );
+
+      add(
+        "Acceptance",
+        findPrefixed(
+          conditions,
+          "Acceptance",
+        ),
+      );
+
+      break;
+    }
+
+    case "bounty": {
+      add(
+        "Task",
+        findPrefixed(
+          terms,
+          "Task",
+        ) ??
+          findPlain(
+            terms,
+            ["Deadline"],
+          ),
+      );
+
+      add(
+        "Deadline",
+        findPrefixed(
+          terms,
+          "Deadline",
+        ),
+      );
+
+      add(
+        "Success",
+        findPrefixed(
+          conditions,
+          "Success",
+        ),
+      );
+
+      add(
+        "Submission",
+        findPrefixed(
+          conditions,
+          "Submit",
+        ),
+      );
+
+      break;
+    }
+
+    case "nft": {
+      add(
+        "NFT",
+        findPlain(
+          terms,
+          ["Transfer"],
+        ),
+      );
+
+      add(
+        "Transfer",
+        findPrefixed(
+          terms,
+          "Transfer",
+        ),
+      );
+
+      if (
+        action.conditions
+          ?.trim()
+      ) {
+        add(
+          "Condition",
+          cleanLooseLabel(
+            action.conditions,
+          ),
+        );
+      }
+
+      break;
+    }
+
+    case "other":
+    default: {
+      add(
+        "Deal",
+        findPrefixed(
+          terms,
+          "Deal",
+        ) ??
+          terms[0],
+      );
+
+      const plainTerms =
+        terms.filter(
+          (part) =>
+            prefixedValue(
+              part,
+              "Deal",
+            ) === null &&
+            prefixedValue(
+              part,
+              "Deadline",
+            ) === null,
+        );
+
+      if (
+        plainTerms.length
+      ) {
+        add(
+          "Terms",
+          plainTerms.join(
+            " · ",
+          ),
+        );
+      }
+
+      add(
+        "Deadline",
+        findPrefixed(
+          terms,
+          "Deadline",
+        ),
+      );
+
+      if (
+        action.conditions
+          ?.trim()
+      ) {
+        add(
+          "Completion",
+          cleanLooseLabel(
+            action.conditions,
+          ),
+        );
+      }
+
+      break;
+    }
+  }
+
+  if (rows.length === 0) {
+    add(
+      "Terms",
+      action.paymentTerms ||
+        "Not specified",
+    );
+
+    add(
+      "Additional terms",
+      action.conditions,
+    );
+  }
+
+  return rows;
 }
 
 export function OfferCard({
@@ -160,13 +707,35 @@ export function OfferCard({
   const rejected =
     action.kind === "reject";
 
+  const detailRows =
+    offerDetailRows(action);
+
+  const numericAmount =
+    Number(action.amount);
+
+  const {
+    price: usdPrice,
+  } = useUsdPrice(
+    action.asset,
+  );
+
+  const usdValue =
+    Number.isFinite(
+      numericAmount,
+    ) &&
+    numericAmount > 0 &&
+    usdPrice !== null
+      ? numericAmount *
+        usdPrice
+      : null;
+
   return (
     <div
       ref={offerCardRef}
       className={
         ownAction
-          ? "ml-auto w-[82%] max-w-sm"
-          : "mr-auto w-[82%] max-w-sm"
+          ? "ml-auto w-[88%] max-w-sm"
+          : "mr-auto w-[88%] max-w-sm"
       }
     >
       <div
@@ -226,19 +795,30 @@ export function OfferCard({
           </div>
         </div>
 
-        <div className="mt-3 flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xl leading-none text-paper">
-              {action.amount}
-            </p>
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {detailRows[0] && (
+              <p className="break-words text-[13px] font-medium leading-relaxed text-paper/72">
+                {detailRows[0].value}
+              </p>
+            )}
 
-            <p className="mt-1 truncate text-[11px] text-paper/50">
-              {action.asset}
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-[16px] font-medium text-paper/82">
+                {action.amount}{" "}
+                {action.asset}
+              </span>
+
+              {usdValue !== null && (
+                <span className="text-[9px] text-paper/30">
+                  ≈ {formatUsd(usdValue)}
+                </span>
+              )}
+            </div>
           </div>
 
           {action.dealType && (
-            <span className="max-w-[46%] truncate border border-wire px-2 py-1 font-display text-[7px] uppercase tracking-[0.12em] text-paper/30">
+            <span className="max-w-[42%] shrink-0 truncate rounded-md border border-wire/65 px-2 py-1 font-display text-[7px] uppercase tracking-[0.12em] text-paper/32">
               {action.dealType === "otc"
                 ? "Token Trade"
                 : action.dealType === "freelance"
@@ -256,28 +836,34 @@ export function OfferCard({
           )}
         </div>
 
-        <div className="mt-3 border-t border-wire/60 pt-2.5">
-          <p className="text-[10px] leading-relaxed text-paper/35">
-            Terms{" "}
-            <span className="text-paper/55">
-              ·{" "}
-              {action.paymentTerms ||
-                "Not specified"}
-            </span>
-          </p>
+        {detailRows.length > 0 && (
+          <div className="mt-3 border-t border-wire/55 pt-3">
+            {detailRows.length > 1 && (
+              <div className="mt-2.5 space-y-1.5">
+                {detailRows
+                  .slice(1)
+                  .map((row) => (
+                    <p
+                      key={`${row.label}:${row.value}`}
+                      className="break-words text-[10px] leading-relaxed text-paper/42"
+                    >
+                      <span className="text-paper/27">
+                        {row.label}
+                      </span>
 
-          {action.conditions && (
-            <p className="mt-1 text-[10px] leading-relaxed text-paper/30">
-              Condition{" "}
-              <span className="text-paper/50">
-                ·{" "}
-                {
-                  action.conditions
-                }
-              </span>
-            </p>
-          )}
-        </div>
+                      <span className="px-1.5 text-paper/18">
+                        ·
+                      </span>
+
+                      <span className="text-paper/55">
+                        {row.value}
+                      </span>
+                    </p>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {entry.transactionHash && onViewProof && (
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-2.5">

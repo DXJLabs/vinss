@@ -54,7 +54,7 @@ function formatToken(
   )} ${asset}`;
 }
 
-function formatUsd(
+export function formatUsd(
   value: number,
 ): string {
   return new Intl.NumberFormat(
@@ -71,7 +71,7 @@ function formatUsd(
   ).format(value);
 }
 
-function useUsdPrice(
+export function useUsdPrice(
   asset: string | undefined,
 ) {
   const symbol =

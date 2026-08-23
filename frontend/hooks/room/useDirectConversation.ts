@@ -783,81 +783,296 @@ export function useDirectConversation({
       return false;
     }
 
-    const directKey = await resolveDirectKey();
+    const directKey =
+      await resolveDirectKey();
+
     if (!directKey) {
-      setError("This private chat is not ready yet.");
+      setError(
+        "This private chat is not ready yet.",
+      );
       return false;
     }
+
+    const cleanCaption =
+      caption.trim();
+
+    const sentAt =
+      new Date().toISOString();
+
+    const preparedLocatorRef: {
+      value: string | null;
+    } = {
+      value: null,
+    };
+
+    let uploadedAttachment:
+      AttachmentRef | null = null;
 
     setBusy(true);
     setError(null);
 
     try {
-      const attachment = await uploadDirectAttachment(
-        BACKEND_URL,
-        directKey,
-        file,
-      );
+      uploadedAttachment =
+        await uploadDirectAttachment(
+          BACKEND_URL,
+          directKey,
+          file,
+        );
 
-      const sentAt = new Date().toISOString();
-      const cleanCaption = caption.trim();
       const route: MessageRoute = {
-        recipientIdentity: selectedPeer.address,
-        encryptionKey: directKey,
-        routingKey: directKey,
+        recipientIdentity:
+          selectedPeer.address,
+        encryptionKey:
+          directKey,
+        routingKey:
+          directKey,
       };
+
       const payload: MessagePayload = {
         kind: "attachment_ref",
         scope: "direct",
-        body: cleanCaption || file.name,
+        body:
+          cleanCaption ||
+          file.name,
         senderIdentity: {
-          address: session.account.address,
-          messagingPublicKey: messagingIdentity.publicKey,
+          address:
+            session.account.address,
+          messagingPublicKey:
+            messagingIdentity.publicKey,
         },
-        recipientAddress: selectedPeer.address,
-        attachment,
+        recipientAddress:
+          selectedPeer.address,
+        attachment:
+          uploadedAttachment,
         sentAt,
       };
 
-      const result = await sendMessage(
-        session.account,
-        channelKey,
-        payload,
-        route,
+      const result =
+        await sendMessage(
+          session.account,
+          channelKey,
+          payload,
+          route,
+          (prepared) => {
+            preparedLocatorRef.value =
+              prepared.actionLocator
+                .toString(16);
+
+            const pending:
+              ConversationEntry = {
+              id:
+                `direct:${preparedLocatorRef.value}`,
+              kind: "message",
+              summary:
+                cleanCaption ||
+                file.name,
+              transactionHash: "",
+              actionLocator:
+                preparedLocatorRef.value!,
+              sentAt,
+              scope: "direct",
+              senderAddress:
+                session.account.address,
+              recipientAddress:
+                selectedPeer.address,
+              attachment:
+                uploadedAttachment!,
+            };
+
+            setEntries(
+              (previous) => {
+                const next = [
+                  ...previous.filter(
+                    (entry) =>
+                      entry.actionLocator !==
+                      preparedLocatorRef.value,
+                  ),
+                  pending,
+                ].sort(
+                  (left, right) =>
+                    new Date(
+                      left.sentAt,
+                    ).getTime() -
+                    new Date(
+                      right.sentAt,
+                    ).getTime(),
+                );
+
+                void persistHistory(
+                  next,
+                );
+
+                return next;
+              },
+            );
+          },
+        );
+
+      const confirmedLocator =
+        result.actionLocator
+          .toString(16);
+
+      setEntries(
+        (previous) => {
+          const next =
+            previous.map(
+              (entry) =>
+                entry.actionLocator ===
+                confirmedLocator
+                  ? {
+                      ...entry,
+                      transactionHash:
+                        result.transactionHash,
+                    }
+                  : entry,
+            );
+
+          void persistHistory(
+            next,
+          );
+
+          return next;
+        },
       );
 
-      const entry: ConversationEntry = {
-        id: `direct:${result.actionLocator.toString(16)}`,
-        kind: "message",
-        summary: cleanCaption || file.name,
-        transactionHash: result.transactionHash,
-        actionLocator: result.actionLocator.toString(16),
-        sentAt,
-        scope: "direct",
-        senderAddress: session.account.address,
-        recipientAddress: selectedPeer.address,
-        attachment,
-      };
-
-      setEntries((previous) => {
-        const next = [...previous, entry].sort(
-          (left, right) =>
-            new Date(left.sentAt).getTime() -
-            new Date(right.sentAt).getTime(),
-        );
-        void persistHistory(next);
-        return next;
-      });
-
+      setError(null);
       return true;
     } catch (err) {
-      console.error("[VINSS DIRECT ATTACHMENT ERROR]", err);
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      /*
+       * Ready X on mobile can report USER_REFUSED after
+       * the transaction was actually submitted.
+       *
+       * If we already have a prepared locator, verify
+       * discovery before declaring the send cancelled.
+       */
+      if (
+        /USER_REFUSED/i.test(raw) &&
+        preparedLocatorRef.value &&
+        uploadedAttachment
+      ) {
+        const target =
+          preparedLocatorRef.value
+            .replace(/^0x/, "")
+            .toLowerCase();
+
+        for (
+          let attempt = 0;
+          attempt < 4;
+          attempt += 1
+        ) {
+          if (attempt > 0) {
+            await new Promise<void>(
+              (resolve) =>
+                window.setTimeout(
+                  resolve,
+                  1800,
+                ),
+            );
+          }
+
+          try {
+            const routes =
+              await buildDiscoveryRoutes();
+
+            const discovered =
+              await discoverMessages(
+                BACKEND_URL,
+                channelKey,
+                routes,
+              );
+
+            const confirmed =
+              discovered.find(
+                (item) => {
+                  try {
+                    return (
+                      BigInt(
+                        item.actionLocator,
+                      )
+                        .toString(16)
+                        .toLowerCase() ===
+                      target
+                    );
+                  } catch {
+                    return false;
+                  }
+                },
+              );
+
+            if (confirmed) {
+              setEntries(
+                (previous) => {
+                  const next =
+                    previous.map(
+                      (entry) =>
+                        entry.actionLocator
+                          .replace(
+                            /^0x/,
+                            "",
+                          )
+                          .toLowerCase() ===
+                        target
+                          ? {
+                              ...entry,
+                              transactionHash:
+                                confirmed
+                                  .transactionHash,
+                            }
+                          : entry,
+                    );
+
+                  void persistHistory(
+                    next,
+                  );
+
+                  return next;
+                },
+              );
+
+              setError(null);
+              return true;
+            }
+          } catch {
+            // Retry briefly while the indexer catches up.
+          }
+        }
+      }
+
+      if (preparedLocatorRef.value) {
+        const target =
+          preparedLocatorRef.value
+            .replace(/^0x/, "")
+            .toLowerCase();
+
+        setEntries(
+          (previous) =>
+            previous.filter(
+              (entry) =>
+                entry.actionLocator
+                  .replace(/^0x/, "")
+                  .toLowerCase() !==
+                target,
+            ),
+        );
+      }
+
+      console.error(
+        "[VINSS DIRECT ATTACHMENT ERROR]",
+        err,
+      );
+
       setError(
         humanizeError(
           err,
           "We couldn't send this encrypted file.",
         ),
       );
+
       return false;
     } finally {
       setBusy(false);
@@ -1198,18 +1413,96 @@ export function useDirectConversation({
           Boolean(entry.transactionHash),
       );
 
-      if (recovered) {
+      /*
+       * Ready X mobile can return a delayed/lost callback even when the
+       * transaction is already confirmed. In that case the discovered
+       * message can be present while the cached prepared locator is stale.
+       *
+       * Treat a confirmed message with the same body + direct participants
+       * + close timestamp as the same send.
+       */
+      const equivalentConfirmed =
+        pending.body
+          ? entries.find(
+              (entry) => {
+                if (
+                  entry.kind !== "message" ||
+                  entry.scope !== "direct" ||
+                  !entry.transactionHash ||
+                  entry.summary !== pending.body
+                ) {
+                  return false;
+                }
+
+                if (
+                  !sameStarknetAddress(
+                    entry.senderAddress,
+                    session.account.address,
+                  ) ||
+                  !sameStarknetAddress(
+                    entry.recipientAddress,
+                    selectedPeer.address,
+                  )
+                ) {
+                  return false;
+                }
+
+                const sentAt =
+                  new Date(
+                    entry.sentAt,
+                  ).getTime();
+
+                if (
+                  !Number.isFinite(
+                    sentAt,
+                  )
+                ) {
+                  return false;
+                }
+
+                return (
+                  Math.abs(
+                    sentAt -
+                      pending.createdAt,
+                  ) <
+                  5 * 60_000
+                );
+              },
+            )
+          : undefined;
+
+      if (
+        recovered ||
+        equivalentConfirmed
+      ) {
         window.localStorage.removeItem(
           storageKey,
         );
+
         setMessagePending(false);
         setError(null);
         return;
       }
 
+      const pendingAge =
+        Date.now() -
+        pending.createdAt;
+
+      /*
+       * Before declaring a pending send failed, force one more discovery
+       * reconciliation. Do not flash a red error just because the wallet
+       * callback was slower than the browser.
+       */
       if (
-        Date.now() - pending.createdAt >
-        60_000
+        pendingAge > 60_000 &&
+        pendingAge <= 75_000
+      ) {
+        await refreshDirect(true);
+        return;
+      }
+
+      if (
+        pendingAge > 75_000
       ) {
         window.localStorage.removeItem(
           storageKey,

@@ -69,7 +69,11 @@ export default function DealRoomPage() {
     inviteScope !== null;
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
-  const { room, channelKey } = useRoom(params.roomId);
+  const {
+    room,
+    channelKey,
+    hydrated: roomHydrated,
+  } = useRoom(params.roomId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -414,7 +418,7 @@ export default function DealRoomPage() {
         roomId={params.roomId}
       />
 
-      {!room && (
+      {roomHydrated && !room && (
         <p className="mb-6 border border-danger/40 px-4 py-3 text-xs text-danger">
           This room is not available on this device. Create or join the room
           from the Rooms page first.

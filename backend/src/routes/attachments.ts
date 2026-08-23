@@ -102,6 +102,12 @@ export function createAttachmentRouter(database: Pool): Router {
     "/attachments/:id",
     async (req: Request, res: Response) => {
       const id = req.params.id;
+
+      res.on("finish", () => {
+        console.log(
+          `[attachments] GET ${id} -> ${res.statusCode}`,
+        );
+      });
       const token = readToken(req);
 
       if (!ID_PATTERN.test(id)) {

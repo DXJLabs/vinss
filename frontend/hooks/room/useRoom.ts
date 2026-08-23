@@ -29,12 +29,19 @@ function loadRoom(roomId: string): LocalRoom | null {
 export function useRoom(roomId: string) {
   const [room, setRoom] = useState<LocalRoom | null>(null);
   const [channelKey, setChannelKey] = useState<Uint8Array | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
+    setHydrated(false);
+
+    setHydrated(false);
+
     const nextRoom = loadRoom(roomId);
     setRoom(nextRoom);
+    setHydrated(true);
+    setHydrated(true);
     // Clear the previous room key so it cannot be reused across room changes.
     setChannelKey(null);
 
@@ -62,5 +69,9 @@ export function useRoom(roomId: string) {
     };
   }, [roomId]);
 
-  return { room, channelKey };
+  return {
+    room,
+    channelKey,
+    hydrated,
+  };
 }

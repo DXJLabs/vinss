@@ -391,36 +391,27 @@ div[id*="headlessui-dialog-overlay"] {
     overflow: hidden !important;
   }
 
-  /* Handle */
-
+  /* Wallet drawer chrome — hidden on VINSS */
   .get-starknet-ui[data-vaul-drawer]::before,
   [data-vaul-drawer].get-starknet-ui::before {
-    content: "" !important;
+    content: none !important;
+    display: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
 
-    position: absolute !important;
-    top: 10px !important;
-    left: 50% !important;
-
-    width: 54px !important;
-    height: 4px !important;
-
-    transform: translateX(-50%) !important;
-
-    border-radius: 999px !important;
-
-    background:
-      linear-gradient(
-        90deg,
-        rgba(94,234,212,.12),
-        rgba(94,234,212,.55),
-        rgba(94,234,212,.12)
-      ) !important;
-
-    box-shadow:
-      0 0 14px rgba(45,212,191,.12) !important;
-
-    pointer-events: none !important;
-    z-index: 100 !important;
+  /* Native Vaul drag handle — this is the white pill */
+  .get-starknet-ui [data-vaul-handle],
+  [data-vaul-drawer].get-starknet-ui [data-vaul-handle] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   /* Header */
@@ -575,22 +566,21 @@ div[id*="headlessui-dialog-overlay"] {
     color: #5eead4 !important;
   }
 
-  /* Scrollbar */
-
+  /* Wallet list scrolls normally but without visible scrollbar */
   .get-starknet-ui [class*="styled-scrollbar"] {
-    scrollbar-width: thin !important;
-    scrollbar-color:
-      rgba(94,234,212,.22)
-      transparent !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
   }
 
   .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar {
-    width: 4px !important;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
+  .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar-track,
   .get-starknet-ui [class*="styled-scrollbar"]::-webkit-scrollbar-thumb {
-    background: rgba(94,234,212,.22) !important;
-    border-radius: 999px !important;
+    background: transparent !important;
   }
 }
 
@@ -1108,5 +1098,26 @@ html {
   .vinss-home-grid,
   .vinss-home-grid::after {
     animation: none !important;
+  }
+}
+
+
+
+/* VINSS — remove native white wallet drawer handle */
+@media (max-width: 767px) {
+  .get-starknet-ui [class*="mx-auto"][class*="rounded-full"][class*="bg-muted"],
+  .get-starknet-ui [class*="mx-auto"][class*="rounded-full"][class*="bg-foreground"],
+  .get-starknet-ui [class*="h-2"][class*="w-[100px]"],
+  .get-starknet-ui [class*="h-1.5"][class*="w-"],
+  [data-vaul-drawer] [class*="mx-auto"][class*="rounded-full"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 }

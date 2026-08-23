@@ -238,6 +238,119 @@ function commandsFor(
   }
 }
 
+
+function cleanAgentText(
+  value: string,
+): string {
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^>\s?/gm, "")
+    .replace(/^---+$/gm, "")
+    .replace(
+      /\b([0-9a-fA-F]{20})[0-9a-fA-F]{18,}([0-9a-fA-F]{8})\b/g,
+      "$1…$2",
+    )
+    .replace(
+      /\n{3,}/g,
+      "\n\n",
+    )
+    .trim();
+}
+
+function analysisWithoutProposal(
+  answer: string,
+  proposal: AgentProposal | null,
+): string {
+  let next = answer;
+
+  if (proposal) {
+    for (
+      const line of proposalLines(
+        proposal,
+      )
+    ) {
+      if (line.trim()) {
+        next = next.replace(
+          line,
+          "",
+        );
+      }
+    }
+
+    next = next.replace(
+      /Draft private message\s*\([^)]*\)\s*:?\s*/gi,
+      "",
+    );
+  }
+
+  return cleanAgentText(next);
+}
+
+function AgentText({
+  text,
+}: {
+  text: string;
+}) {
+  const cleaned =
+    cleanAgentText(text);
+
+  const lines =
+    cleaned
+      .split("\n")
+      .map((line) =>
+        line.trim(),
+      )
+      .filter(Boolean);
+
+  if (!lines.length) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      {lines.map(
+        (line, index) => {
+          const bullet =
+            /^[-*]\s+/.test(
+              line,
+            );
+
+          const content =
+            line.replace(
+              /^[-*]\s+/,
+              "",
+            );
+
+          if (bullet) {
+            return (
+              <div
+                key={`${index}:${content}`}
+                className="flex items-start gap-2"
+              >
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-signal/55" />
+
+                <p className="min-w-0 break-words text-[12px] leading-5 text-paper/58 [overflow-wrap:anywhere]">
+                  {content}
+                </p>
+              </div>
+            );
+          }
+
+          return (
+            <p
+              key={`${index}:${content}`}
+              className="break-words text-[12px] leading-5 text-paper/62 [overflow-wrap:anywhere]"
+            >
+              {content}
+            </p>
+          );
+        },
+      )}
+    </div>
+  );
+}
+
 export function AgentPanel({
   roomLabel,
   contextKind,
@@ -463,7 +576,7 @@ export function AgentPanel({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-black/70 sm:flex sm:items-end sm:justify-end sm:p-5"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] sm:flex sm:items-end sm:justify-end sm:p-5"
           role="dialog"
           aria-modal="true"
           aria-label="VINSS Agent"
@@ -479,12 +592,13 @@ export function AgentPanel({
           }}
         >
           <section
-            className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto border-t border-signal/25 bg-ink shadow-2xl sm:static sm:w-full sm:max-w-md sm:border"
+            className="absolute inset-0 h-[100dvh] overflow-x-hidden overflow-y-auto border-0 bg-ink shadow-2xl sm:static sm:h-auto sm:max-h-[86vh] sm:w-full sm:max-w-md sm:rounded-2xl sm:border sm:border-wire/70"
             data-testid="agent-panel"
           >
-            <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-wire bg-ink/95 px-4 py-4 backdrop-blur">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
+            <header className="sticky top-0 z-10 border-b border-wire/55 bg-ink/95 px-4 pb-3 pt-2 backdrop-blur">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
                   <span className="text-sm text-signal">
                     ✦
                   </span>
@@ -494,26 +608,27 @@ export function AgentPanel({
                   </p>
                 </div>
 
-                <p className="mt-1.5 truncate text-[10px] text-paper/35">
-                  Context · {contextLabel}
-                </p>
-              </div>
+                  <p className="mt-1.5 truncate text-[10px] text-paper/32">
+                    {contextLabel}
+                  </p>
+                </div>
 
               <button
                 type="button"
                 onClick={() =>
                   setOpen(false)
                 }
-                className="flex h-8 w-8 shrink-0 items-center justify-center border border-wire text-sm text-paper/40 transition hover:border-signal/40 hover:text-signal"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-wire/65 bg-paper/[0.02] text-sm text-paper/40 transition hover:border-signal/40 hover:text-signal"
                 aria-label="Close Agent"
               >
                 ×
               </button>
+              </div>
             </header>
 
-            <div className="space-y-5 p-4 pb-6">
+            <div className="space-y-4 p-4 pb-7">
               <section>
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-2 flex items-center justify-between gap-3 px-0.5">
                   <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
                     Context permission
                   </p>
@@ -541,15 +656,15 @@ export function AgentPanel({
                   }
                   className={
                     shareContext
-                      ? "flex w-full items-start gap-3 border border-signal/25 bg-signal/[0.035] p-3 text-left"
-                      : "flex w-full items-start gap-3 border border-wire p-3 text-left transition hover:border-signal/30"
+                      ? "flex w-full items-center gap-3 rounded-xl border border-signal/25 bg-signal/[0.035] px-3 py-3 text-left"
+                      : "flex w-full items-center gap-3 rounded-xl border border-wire/65 bg-paper/[0.012] px-3 py-3 text-left transition hover:border-signal/30"
                   }
                 >
                   <span
                     className={
                       shareContext
-                        ? "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border border-signal bg-signal text-[9px] text-ink"
-                        : "mt-0.5 h-4 w-4 shrink-0 border border-paper/30"
+                        ? "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-signal bg-signal text-[9px] text-ink"
+                        : "h-5 w-5 shrink-0 rounded-md border border-paper/25"
                     }
                   >
                     {shareContext
@@ -558,12 +673,12 @@ export function AgentPanel({
                   </span>
 
                   <span>
-                    <span className="block text-xs text-paper/70">
-                      Allow privacy-safe metadata
+                    <span className="block text-[12px] font-medium text-paper/72">
+                      Share safe context with Agent
                     </span>
 
-                    <span className="mt-1 block text-[10px] leading-relaxed text-paper/30">
-                      Message text, Offer terms, room labels and participant addresses stay on this device. Only privacy-safe workflow metadata is shared. Your Agent instruction itself is sent for analysis.
+                    <span className="mt-1 block text-[9px] leading-relaxed text-paper/28">
+                      Private content stays on this device. Only privacy-safe workflow context and your instruction are sent.
                     </span>
                   </span>
                 </button>
@@ -571,8 +686,8 @@ export function AgentPanel({
 
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
-                    Actions
+                  <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/34">
+                    Quick actions
                   </p>
 
                   {!shareContext && (
@@ -599,7 +714,7 @@ export function AgentPanel({
                           !shareContext ||
                           busy
                         }
-                        className="min-h-12 border border-wire px-3 py-2.5 text-left text-[11px] leading-snug text-paper/55 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
+                        className="min-h-11 rounded-xl border border-wire/60 bg-paper/[0.015] px-3 py-2.5 text-left text-[11px] leading-snug text-paper/55 transition hover:border-signal/35 hover:bg-signal/[0.025] hover:text-signal disabled:cursor-not-allowed disabled:opacity-25"
                       >
                         {command.label}
                       </button>
@@ -610,7 +725,7 @@ export function AgentPanel({
 
               <section>
                 <p className="mb-2 font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
-                  Instruction
+                  Ask Agent
                 </p>
 
                 <textarea
@@ -626,7 +741,7 @@ export function AgentPanel({
                     !shareContext ||
                     busy
                   }
-                  className="w-full resize-none border border-wire bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/20 focus:border-signal/50 disabled:opacity-35"
+                  className="min-h-[92px] w-full resize-none rounded-xl border border-wire/60 bg-paper/[0.012] px-3.5 py-3 text-sm leading-relaxed text-paper outline-none placeholder:text-paper/20 focus:border-signal/45 disabled:opacity-35"
                 />
 
                 <button
@@ -639,7 +754,7 @@ export function AgentPanel({
                     !instruction.trim() ||
                     busy
                   }
-                  className="mt-2 flex h-10 w-full items-center justify-center border border-signal/35 font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+                  className="mt-2 flex h-11 w-full items-center justify-center rounded-xl border border-signal/30 bg-signal/[0.035] font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:cursor-not-allowed disabled:opacity-25"
                 >
                   {busy
                     ? "Working…"
@@ -649,14 +764,15 @@ export function AgentPanel({
 
               {(answer ||
                 dealStage) && (
-                <section className="border border-wire bg-vault/20 p-4">
+                <section className="overflow-hidden rounded-2xl border border-wire/55 bg-paper/[0.012] p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-display text-[9px] uppercase tracking-[0.16em] text-paper/35">
-                      Agent analysis
+                    <p className="font-display text-[8px] uppercase tracking-[0.18em] text-paper/32">
+                      Analysis
                     </p>
 
-                    <span className="flex items-center gap-1.5 text-[9px] text-signal/70">
+                    <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-signal/[0.055] px-2.5 py-1 text-[9px] text-signal/75">
                       <span className="h-1.5 w-1.5 rounded-full bg-signal" />
+
                       {stageLabel(
                         dealStage,
                       )}
@@ -664,44 +780,44 @@ export function AgentPanel({
                   </div>
 
                   {answer && (
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-paper/70">
-                      {answer}
-                    </p>
+                    <div className="mt-3 border-t border-wire/45 pt-3">
+                      <AgentText
+                        text={analysisWithoutProposal(
+                          answer,
+                          proposal,
+                        )}
+                      />
+                    </div>
                   )}
                 </section>
               )}
 
               {proposal && (
-                <section className="border border-signal/30 bg-signal/[0.025] p-4">
+                <section className="overflow-hidden rounded-2xl border border-signal/25 bg-signal/[0.02] p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-display text-[9px] uppercase tracking-[0.16em] text-signal">
+                    <p className="font-display text-[8px] uppercase tracking-[0.18em] text-signal/80">
                       Proposed action
                     </p>
 
-                    <span className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/25">
+                    <span className="rounded-full border border-wire/55 px-2 py-1 font-display text-[7px] uppercase tracking-[0.12em] text-paper/28">
                       Approval required
                     </span>
                   </div>
 
-                  <h3 className="mt-3 text-sm text-paper/80">
+                  <h3 className="mt-3 text-[15px] font-medium text-paper/82">
                     {proposal.title}
                   </h3>
 
-                  <p className="mt-1 text-xs leading-relaxed text-paper/35">
+                  <p className="mt-1 text-[11px] leading-5 text-paper/36">
                     {proposal.description}
                   </p>
 
-                  <div className="mt-3 space-y-1.5 border-l border-signal/40 pl-3">
-                    {proposalLines(
-                      proposal,
-                    ).map((line) => (
-                      <p
-                        key={line}
-                        className="text-xs leading-relaxed text-paper/60"
-                      >
-                        {line}
-                      </p>
-                    ))}
+                  <div className="mt-4 rounded-xl border border-wire/50 bg-ink/35 p-3.5">
+                    <AgentText
+                      text={proposalLines(
+                        proposal,
+                      ).join("\n")}
+                    />
                   </div>
 
                   {!acted ? (
@@ -714,26 +830,29 @@ export function AgentPanel({
                         approved &&
                         !acted
                       }
-                      className="mt-4 flex h-10 w-full items-center justify-center border border-signal font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-35"
+                      className="mt-4 flex h-11 w-full items-center justify-center rounded-xl border border-signal/35 bg-signal/[0.04] font-display text-[9px] uppercase tracking-[0.15em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-35"
                     >
                       {approved
                         ? "Preparing…"
                         : "Review & prepare →"}
                     </button>
                   ) : (
-                    <div className="mt-4 border-t border-wire pt-3 text-xs text-signal/75">
-                      ✓ Prepared in the relevant VINSS workflow.
+                    <div className="mt-4 flex items-center gap-2 rounded-xl bg-signal/[0.05] px-3 py-2.5 text-[11px] text-signal/75">
+                      <span>✓</span>
+                      <span>
+                        Prepared in VINSS workflow
+                      </span>
                     </div>
                   )}
 
-                  <p className="mt-3 text-[10px] leading-relaxed text-paper/25">
-                    The Agent prepares actions only. Ready X remains the final authority for any blockchain transaction.
+                  <p className="mt-3 text-[9px] leading-4 text-paper/22">
+                    Agent prepares the action. Your wallet remains the final approval for blockchain transactions.
                   </p>
                 </section>
               )}
 
               {error && (
-                <section className="border border-danger/30 p-3">
+                <section className="rounded-xl border border-danger/25 bg-danger/[0.025] p-3">
                   <p className="text-xs text-danger">
                     {error}
                   </p>

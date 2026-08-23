@@ -793,8 +793,27 @@ export function useRoomOffers({
     setBusy(true);
     setError(null);
 
+    let callbackTimer:
+      number | null = null;
+
     try {
-      await action();
+      await Promise.race([
+        action(),
+        new Promise<never>(
+          (_, reject) => {
+            callbackTimer =
+              window.setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
+                    ),
+                  ),
+                25_000,
+              );
+          },
+        ),
+      ]);
 
       // Local confirmed state is already inserted. Reconcile ciphertext
       // discovery in the background so backend/indexer latency does not keep
@@ -846,6 +865,14 @@ export function useRoomOffers({
 
       return false;
     } finally {
+      if (
+        callbackTimer !== null
+      ) {
+        window.clearTimeout(
+          callbackTimer,
+        );
+      }
+
       setBusy(false);
     }
   }
