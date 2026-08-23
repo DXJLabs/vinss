@@ -19,6 +19,7 @@ export interface AppConfig {
     offerHelper: string;
     privateEscrowHelper: string;
     escrowRekber: string;
+    settlementCertificate: string;
   };
   indexer: {
     startBlocks: {
@@ -26,6 +27,7 @@ export interface AppConfig {
       offer: number;
       escrow: number;
       rekber: number;
+      certificate: number;
     };
     pollIntervalMs: number;
     blockRange: number;
@@ -242,6 +244,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         requireEnv(env, "ESCROW_REKBER_ADDRESS"),
         "ESCROW_REKBER_ADDRESS",
       ),
+      settlementCertificate: parseAddress(
+        requireEnv(env, "SETTLEMENT_CERTIFICATE_ADDRESS"),
+        "SETTLEMENT_CERTIFICATE_ADDRESS",
+      ),
     },
     indexer: {
       startBlocks: {
@@ -263,6 +269,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         rekber: parseInteger(
           env.ESCROW_REKBER_START_BLOCK,
           "ESCROW_REKBER_START_BLOCK",
+          { min: 0 },
+        ),
+        certificate: parseInteger(
+          env.SETTLEMENT_CERTIFICATE_START_BLOCK,
+          "SETTLEMENT_CERTIFICATE_START_BLOCK",
           { min: 0 },
         ),
       },

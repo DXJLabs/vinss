@@ -8,6 +8,8 @@ import express, {
 import swaggerUi from "swagger-ui-express";
 
 import type { AppConfig } from "./config.js";
+import { CertificateIndexer } from "./indexer/certificate.js";
+import { CertificateStore } from "./indexer/certificateStore.js";
 import type { IndexerDefinition } from "./indexer/definitions.js";
 import { RekberIndexer } from "./indexer/rekber.js";
 import { RekberStore } from "./indexer/rekberStore.js";
@@ -30,6 +32,8 @@ interface AppDependencies {
   indexer: DiscoveryIndexer;
   rekberStore: RekberStore;
   rekberIndexer: RekberIndexer;
+  certificateStore: CertificateStore;
+  certificateIndexer: CertificateIndexer;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -60,6 +64,7 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.config,
       dependencies.indexer,
       dependencies.rekberIndexer,
+      dependencies.certificateIndexer,
     ),
   );
 
@@ -91,8 +96,10 @@ export function createApp(dependencies: AppDependencies): Express {
     createActivityRouter(
       dependencies.store,
       dependencies.rekberStore,
+      dependencies.certificateStore,
       dependencies.config.network,
       dependencies.config.contracts.escrowRekber,
+      dependencies.config.contracts.settlementCertificate,
     ),
   );
 

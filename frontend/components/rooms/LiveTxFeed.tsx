@@ -16,7 +16,8 @@ type ActivityKind =
   | "escrow"
   | "rekber_funded"
   | "rekber_released"
-  | "rekber_refunded";
+  | "rekber_refunded"
+  | "certificate_issued";
 
 interface ActivityItem {
   network: "sepolia" | "mainnet";
@@ -29,6 +30,14 @@ interface ActivityItem {
   rekber?: {
     amount?: string;
     token?: string;
+  };
+  certificate?: {
+    tokenId: string;
+    recipient: string;
+    custodyCommitment: string;
+    role: 1 | 2;
+    settledAt: number;
+    issuedAt: number;
   };
 }
 
@@ -81,6 +90,11 @@ const ACTIVITY_LABELS: Record<
     label: "REKBER · REFUND",
     accent: "text-amber",
     target: "VINSS REKBER",
+  },
+  certificate_issued: {
+    label: "CERTIFICATE · ISSUED",
+    accent: "text-signal",
+    target: "VINSS CERTIFICATE",
   },
 };
 
@@ -135,6 +149,12 @@ function sameAddress(left: string | undefined, right: string) {
 }
 
 function formatActivityAmount(item: ActivityItem) {
+  if (item.kind === "certificate_issued" && item.certificate) {
+    return item.certificate.role === 1
+      ? "PAYER CERTIFICATE"
+      : "PAYEE CERTIFICATE";
+  }
+
   const amount = item.rekber?.amount;
   const token = item.rekber?.token;
 

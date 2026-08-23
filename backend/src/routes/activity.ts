@@ -7,6 +7,7 @@ import type {
   GlobalActivityItem,
   RekberEventKind,
 } from "../types.js";
+import { CertificateStore } from "../indexer/certificateStore.js";
 import { RekberStore } from "../indexer/rekberStore.js";
 import { DiscoveryStore } from "../indexer/store.js";
 
@@ -17,6 +18,7 @@ const VALID_KINDS: readonly ActivityKind[] = [
   "rekber_funded",
   "rekber_released",
   "rekber_refunded",
+  "certificate_issued",
 ];
 
 interface ActivityCursor {
@@ -128,8 +130,10 @@ function compareActivity(a: GlobalActivityItem, b: GlobalActivityItem): number {
 export function createActivityRouter(
   store: DiscoveryStore,
   rekberStore: RekberStore,
+  certificateStore: CertificateStore,
   network: StarknetNetwork,
   rekberContractAddress: string,
+  certificateContractAddress: string,
 ): Router {
   const router = Router();
 
@@ -152,7 +156,16 @@ export function createActivityRouter(
     try {
       let items: GlobalActivityItem[];
 
-      if (kind && isRekberKind(kind)) {
+      if (kind === "certificate_issued") {
+        items = await certificateStore.recentActivity(
+          network,
+          certificateContractAddress,
+          {
+            limit,
+            cursor,
+          },
+        );
+      } else if (kind && isRekberKind(kind)) {
         items = await rekberStore.recentActivity(
           network,
           rekberContractAddress,
@@ -169,18 +182,28 @@ export function createActivityRouter(
           cursor,
         });
       } else {
-        const [privateItems, rekberItems] = await Promise.all([
-          store.recentActivity(network, {
-            limit,
-            cursor,
-          }),
-          rekberStore.recentActivity(network, rekberContractAddress, {
-            limit,
-            cursor,
-          }),
-        ]);
+        const [privateItems, rekberItems, certificateItems] = await Promise.all(
+          [
+            store.recentActivity(network, {
+              limit,
+              cursor,
+            }),
+            rekberStore.recentActivity(network, rekberContractAddress, {
+              limit,
+              cursor,
+            }),
+            certificateStore.recentActivity(
+              network,
+              certificateContractAddress,
+              {
+                limit,
+                cursor,
+              },
+            ),
+          ],
+        );
 
-        items = [...privateItems, ...rekberItems]
+        items = [...privateItems, ...rekberItems, ...certificateItems]
           .sort(compareActivity)
           .slice(0, limit);
       }

@@ -1,6 +1,11 @@
 import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { createDatabase } from "./database.js";
+import {
+  CertificateEventSource,
+  CertificateIndexer,
+} from "./indexer/certificate.js";
+import { CertificateStore } from "./indexer/certificateStore.js";
 import { createIndexerDefinitions } from "./indexer/definitions.js";
 import { StarknetEventSource } from "./indexer/poolEvents.js";
 import { RekberEventSource, RekberIndexer } from "./indexer/rekber.js";
@@ -13,6 +18,7 @@ async function main(): Promise<void> {
   const definitions = createIndexerDefinitions(config);
   const store = new DiscoveryStore(database);
   const rekberStore = new RekberStore(database);
+  const certificateStore = new CertificateStore(database);
 
   try {
     await store.initialize(definitions);
@@ -21,6 +27,12 @@ async function main(): Promise<void> {
       network: config.network,
       contractAddress: config.contracts.escrowRekber,
       startBlock: config.indexer.startBlocks.rekber,
+    });
+
+    await certificateStore.initialize({
+      network: config.network,
+      contractAddress: config.contracts.settlementCertificate,
+      startBlock: config.indexer.startBlocks.certificate,
     });
   } catch {
     console.error("[startup] database initialization failed");
@@ -43,6 +55,17 @@ async function main(): Promise<void> {
 
   const rekberIndexer = new RekberIndexer(config, rekberSource, rekberStore);
 
+  const certificateSource = new CertificateEventSource(
+    config.rpcUrl,
+    config.indexer.eventPageSize,
+  );
+
+  const certificateIndexer = new CertificateIndexer(
+    config,
+    certificateSource,
+    certificateStore,
+  );
+
   const app = createApp({
     config,
     definitions,
@@ -50,6 +73,8 @@ async function main(): Promise<void> {
     indexer,
     rekberStore,
     rekberIndexer,
+    certificateStore,
+    certificateIndexer,
   });
 
   const server = app.listen(config.port, () => {
@@ -60,6 +85,7 @@ async function main(): Promise<void> {
 
   indexer.start();
   rekberIndexer.start();
+  certificateIndexer.start();
 
   let shuttingDown = false;
 
@@ -71,7 +97,11 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log(`[shutdown] ${signal}`);
 
-    await Promise.all([indexer.stop(), rekberIndexer.stop()]);
+    await Promise.all([
+      indexer.stop(),
+      rekberIndexer.stop(),
+      certificateIndexer.stop(),
+    ]);
 
     await new Promise<void>((resolve) => {
       server.close(() => resolve());

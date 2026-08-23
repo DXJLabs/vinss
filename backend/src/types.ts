@@ -33,7 +33,8 @@ export interface IndexedAction extends DiscoveredAction {
 
 export type RekberEventKind = "funded" | "released" | "refunded";
 
-export type ActivityKind = DiscoverKind | `rekber_${RekberEventKind}`;
+export type ActivityKind =
+  DiscoverKind | `rekber_${RekberEventKind}` | "certificate_issued";
 
 export interface IndexedRekberEvent {
   network: StarknetNetwork;
@@ -45,6 +46,20 @@ export interface IndexedRekberEvent {
   refundAfter?: number;
   outputNoteId?: string;
   timestamp: number;
+  blockNumber: number;
+  transactionHash: string;
+  indexedAt: string;
+}
+
+export interface IndexedCertificateEvent {
+  network: StarknetNetwork;
+  contractAddress: string;
+  tokenId: string;
+  recipient: string;
+  custodyCommitment: string;
+  role: 1 | 2;
+  settledAt: number;
+  issuedAt: number;
   blockNumber: number;
   transactionHash: string;
   indexedAt: string;
@@ -67,6 +82,14 @@ export interface GlobalActivityItem {
     outputNoteId?: string;
     timestamp: number;
   };
+  certificate?: {
+    tokenId: string;
+    recipient: string;
+    custodyCommitment: string;
+    role: 1 | 2;
+    settledAt: number;
+    issuedAt: number;
+  };
 }
 
 export type IndexerCheckpointStatus =
@@ -85,6 +108,17 @@ export interface IndexerCheckpointView {
 }
 
 export interface RekberIndexerCheckpointView {
+  identity: string;
+  contractAddress: string;
+  startBlock: number;
+  nextBlock: number;
+  lastIndexedBlock: number | null;
+  latestObservedBlock: number | null;
+  status: IndexerCheckpointStatus;
+  updatedAt: string;
+}
+
+export interface CertificateIndexerCheckpointView {
   identity: string;
   contractAddress: string;
   startBlock: number;

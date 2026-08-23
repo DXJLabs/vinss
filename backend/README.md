@@ -11,7 +11,7 @@ The backend helps VINSS clients discover encrypted on-chain activity, relay opaq
 | Area      | Purpose                                                                         |
 | --------- | ------------------------------------------------------------------------------- |
 | Discovery | Finds committed Message, Offer, and Escrow ciphertext on Starknet               |
-| Indexer   | Reads VINSS helper events and encrypted payload chunks                          |
+| Indexer   | Reads VINSS helper, Rekber, and settlement-certificate events                   |
 | Presence  | Relays short-lived encrypted typing/read-receipt envelopes                      |
 | Agent     | Routes explicit `chat`, `offer`, or `escrow` skills to configured LLM providers |
 | Privacy   | Re-sanitizes Agent context before provider calls                                |

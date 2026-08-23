@@ -130,7 +130,15 @@ export const openApiDocument = {
             name: "kind",
             schema: {
               type: "string",
-              enum: ["message", "offer", "escrow"],
+              enum: [
+                "message",
+                "offer",
+                "escrow",
+                "rekber_funded",
+                "rekber_released",
+                "rekber_refunded",
+                "certificate_issued",
+              ],
             },
           },
           {
@@ -470,7 +478,15 @@ export const openApiDocument = {
           },
           kind: {
             type: "string",
-            enum: ["message", "offer", "escrow"],
+            enum: [
+              "message",
+              "offer",
+              "escrow",
+              "rekber_funded",
+              "rekber_released",
+              "rekber_refunded",
+              "certificate_issued",
+            ],
           },
           contractAddress: {
             type: "string",
@@ -487,6 +503,17 @@ export const openApiDocument = {
           indexedAt: {
             type: "string",
             format: "date-time",
+          },
+          certificate: {
+            type: "object",
+            properties: {
+              tokenId: { type: "string" },
+              recipient: { type: "string" },
+              custodyCommitment: { type: "string" },
+              role: { type: "integer", enum: [1, 2] },
+              settledAt: { type: "integer" },
+              issuedAt: { type: "integer" },
+            },
           },
         },
       },
@@ -563,6 +590,14 @@ export const openApiDocument = {
                 $ref: "#/components/schemas/IndexerCheckpoint",
               },
             },
+          },
+          rekberIndexer: {
+            nullable: true,
+            $ref: "#/components/schemas/IndexerCheckpoint",
+          },
+          certificateIndexer: {
+            nullable: true,
+            $ref: "#/components/schemas/IndexerCheckpoint",
           },
         },
       },

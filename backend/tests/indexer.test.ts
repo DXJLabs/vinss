@@ -23,6 +23,7 @@ function testConfig(): AppConfig {
       offerHelper: "0x3",
       privateEscrowHelper: "0x4",
       escrowRekber: "0x5",
+      settlementCertificate: "0x6",
     },
     indexer: {
       startBlocks: {
@@ -30,6 +31,7 @@ function testConfig(): AppConfig {
         offer: 200,
         escrow: 300,
         rekber: 400,
+        certificate: 500,
       },
       pollIntervalMs: 5_000,
       blockRange: 2_000,
