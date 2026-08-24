@@ -28,6 +28,7 @@ import {
 import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
+import { VINSS_FEES } from "@/lib/fees";
 
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
@@ -161,13 +162,13 @@ export async function sendOfferAction(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // VinssOfferHelper returns one OpenNoteDeposit worth 1 STRK.
+  // VinssOfferHelper returns one OpenNoteDeposit worth 10 STRK.
   // STRK20 invokes privacy_invoke itself, so no selector is prepended.
   const response = await account.strk20InvokeTransaction([
     {
       type: "withdraw",
       token: CONTRACTS.offerHelperOpenNoteToken,
-      amount: "0xde0b6b3a7640000",
+      amount: VINSS_FEES.offer.baseUnits,
       recipient: CONTRACTS.offerHelper,
     },
     {

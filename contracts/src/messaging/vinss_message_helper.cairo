@@ -22,6 +22,8 @@ pub mod VinssMessageHelper {
     use crate::utils::constants::MESSAGE_ENVELOPE_HEADER_FELTS;
     use crate::utils::errors;
 
+    const MESSAGE_REVENUE_AMOUNT: u128 =
+        7000000000000000000_u128;
 
     #[storage]
     struct Storage {
@@ -29,7 +31,7 @@ pub mod VinssMessageHelper {
         privacy_pool: ContractAddress,
 
         /// Revenue token used by the helper OpenNoteDeposit.
-        /// Current private messaging revenue is 0.5 STRK per submitted action;
+        /// Current private messaging revenue is 7 STRK per submitted action;
         /// the paired frontend `transfer: "OPEN"` action routes the resulting
         /// private treasury note.
         open_note_token: ContractAddress,
@@ -132,8 +134,8 @@ pub mod VinssMessageHelper {
 
             self.store_message(message_calldata);
 
-            // VINSS private messaging revenue: 0.5 STRK.
-            let revenue_amount: u128 = 500000000000000000_u128;
+            // VINSS private messaging revenue: 7 STRK.
+            let revenue_amount = MESSAGE_REVENUE_AMOUNT;
             let revenue_token = self.open_note_token.read();
 
             let erc20 = IERC20Dispatcher {

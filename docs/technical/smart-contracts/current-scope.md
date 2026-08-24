@@ -25,7 +25,7 @@ ciphertext storage
 commitment validation
 one-time locator/commitment guards
 Privacy-Pool-only invocation
-0.5 STRK application revenue output
+7 STRK application revenue output
 ```
 
 ## Offer Helper
@@ -37,7 +37,7 @@ ciphertext storage
 commitment validation
 one-time locator/commitment guards
 Privacy-Pool-only invocation
-1 STRK application revenue output
+10 STRK application revenue output
 ```
 
 ## Private Escrow Helper
@@ -65,7 +65,7 @@ no Invite payload storage
 Implemented contract mechanics:
 
 ```text
-deposit principal + 1% fee
+deposit principal + 2% fee
 reserve full principal
 release before refund boundary
 refund at/after boundary

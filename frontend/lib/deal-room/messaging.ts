@@ -30,6 +30,7 @@ import {
   type MessageRoute,
 } from "@/lib/privacy/messageRouting";
 import type { MessagePayload, SendActionResult } from "@/types/deal-room";
+import { VINSS_FEES } from "@/lib/fees";
 
 export interface PreparedMessageSend {
   actionLocator: bigint;
@@ -107,7 +108,7 @@ export async function sendMessage(
   // convention: the LAST felt is always the id of the open note to fill
   // (`${openNoteIds[0]}`, substituted by the wallet), everything before it
   // is the message envelope. The contract returns a single OpenNoteDeposit
-  // with 0.5 STRK against `messageHelperOpenNoteToken` as VINSS messaging revenue
+  // with 7 STRK against `messageHelperOpenNoteToken` as VINSS messaging revenue
   // is used as the VINSS messaging revenue token for the treasury OPEN note.
   const calldata = [
     MESSAGE_ENVELOPE_VERSION,
@@ -133,7 +134,7 @@ export async function sendMessage(
     {
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
-      amount: "0x6f05b59d3b20000", // 0.5 STRK
+      amount: VINSS_FEES.message.baseUnits,
       recipient: CONTRACTS.messageHelper,
     },
     {

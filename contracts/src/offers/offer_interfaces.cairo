@@ -75,7 +75,7 @@ pub trait IVinssOfferHelper<TContractState> {
     /// - deal commitment.
     ///
     /// Successful invocation returns one OpenNoteDeposit carrying the current
-    /// 1 STRK VINSS Offer application revenue for the paired OPEN transfer.
+    /// 10 STRK VINSS Offer application revenue for the paired OPEN transfer.
     fn privacy_invoke(
         ref self: TContractState,
         calldata: Span<felt252>,

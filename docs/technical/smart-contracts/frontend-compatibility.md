@@ -36,8 +36,8 @@ ciphertext
 Current application revenue also matches:
 
 ```text
-contract  0.5 STRK
-frontend  0.5 STRK
+contract  7 STRK
+frontend  7 STRK
 ```
 
 ## Offer — compatible
@@ -56,7 +56,7 @@ Frontend:
 frontend/lib/deal-room/offers.ts
 ```
 
-Current commitment order and 1 STRK revenue path match the helper.
+Current commitment order and 10 STRK revenue path match the helper.
 
 ## Private Escrow coordination — executable code compatible
 
@@ -141,7 +141,7 @@ The contract receives eight felts including that final note ID.
 Both frontend and contract currently use:
 
 ```text
-fee = principal / 100
+fee = principal / 50
 ```
 
 ## Escrow Rekber release/refund — code aligned, E2E pending

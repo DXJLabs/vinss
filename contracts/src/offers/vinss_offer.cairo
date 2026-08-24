@@ -24,6 +24,9 @@ pub mod VinssOfferHelper {
     use crate::utils::constants::OFFER_ENVELOPE_HEADER_FELTS;
     use crate::utils::errors;
 
+    const OFFER_REVENUE_AMOUNT: u128 =
+        10000000000000000000_u128;
+
     // -------------------------------------------------------------------------
     // Storage
     // -------------------------------------------------------------------------
@@ -144,9 +147,8 @@ pub mod VinssOfferHelper {
                 offer_calldata,
             );
 
-            // Flat VINSS Offer revenue = 1 STRK.
-            let revenue_amount: u128 =
-                1000000000000000000_u128;
+            // Flat VINSS Offer revenue = 10 STRK.
+            let revenue_amount = OFFER_REVENUE_AMOUNT;
 
             let revenue_token =
                 self.open_note_token.read();

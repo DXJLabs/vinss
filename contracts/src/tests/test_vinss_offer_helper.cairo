@@ -28,7 +28,7 @@ use crate::utils::constants::{
 };
 
 const PRIVACY_POOL: felt252 = 0x123;
-const OFFER_REVENUE: u128 = 1000000000000000000_u128;
+const OFFER_REVENUE: u128 = 10000000000000000000_u128;
 const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
 const OTHER_CALLER: felt252 = 0x456;
 

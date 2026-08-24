@@ -21,6 +21,7 @@ import {
   shortStringToFelt,
   toFelt,
 } from "@/lib/privacy/envelope";
+import { VINSS_FEES } from "@/lib/fees";
 
 const RELEASE_AUTH_DOMAIN =
   "VINSS_RELEASE_AUTH_V2";
@@ -231,11 +232,13 @@ export async function depositEscrowV2(
   const treasury =
     num.toHex(rawTreasury);
   const token = num.toHex(params.token);
-  const fee = params.amount / 100n;
+  const fee =
+    params.amount /
+    BigInt(VINSS_FEES.rekber.divisor);
 
   if (fee <= 0n) {
     throw new Error(
-      "Amount is too small for the 1% Rekber fee.",
+      `Amount is too small for the ${VINSS_FEES.rekber.percent}% Rekber fee.`,
     );
   }
 

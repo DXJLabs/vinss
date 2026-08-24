@@ -136,8 +136,8 @@ Successful external invocation returns one:
 
 ```text
 OpenNoteDeposit
-  amount = 1000000000000000000
-         = 1 STRK
+  amount = 10000000000000000000
+         = 10 STRK
 ```
 
 against the configured `open_note_token`.

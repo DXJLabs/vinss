@@ -205,7 +205,7 @@ export function quoteVinssFee(
   feeBps = Number(
     process.env
       .NEXT_PUBLIC_VINSS_FEE_BPS ??
-      "25",
+      "200",
   ),
 ) {
   const value =

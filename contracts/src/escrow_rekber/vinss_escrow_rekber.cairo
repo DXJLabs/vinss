@@ -53,6 +53,7 @@ pub mod VinssEscrowRekber {
     pub const DEPOSIT_ACTION: felt252 = 1;
     pub const RELEASE_ACTION: felt252 = 2;
     pub const REFUND_ACTION: felt252 = 3;
+    const FEE_DIVISOR: u128 = 50_u128;
 
     component!(
         path: ReentrancyGuardComponent,
@@ -247,9 +248,9 @@ pub mod VinssEscrowRekber {
             let revenue_open_note_id = *calldata.at(7);
             assert(revenue_open_note_id != 0, ZERO_NOTE_ID);
 
-            // VINSS Rekber revenue = 1%.
+            // VINSS Rekber revenue = 2%.
             // Principal TIDAK dipotong.
-            let fee_amount: u128 = amount / 100_u128;
+            let fee_amount: u128 = amount / FEE_DIVISOR;
 
             assert(
                 fee_amount != 0,
@@ -281,7 +282,7 @@ pub mod VinssEscrowRekber {
             let balance =
                 erc20.balance_of(account: contract);
 
-            // Wallet harus mengirim principal + 1%.
+            // Wallet harus mengirim principal + 2%.
             assert(
                 balance >= required_balance.into(),
                 errors::FUNDS_NOT_RECEIVED,

@@ -118,7 +118,7 @@ Actual blockchain execution remains a frontend + wallet action.
 
 ## Fee-tool boundary
 
-`calculate_fee` uses `VINSS_FEE_BPS` and defaults to **25 bps** if unset.
+`calculate_fee` uses `VINSS_FEE_BPS` and defaults to **200 bps** if unset.
 
 It is an illustrative Agent calculation helper.
 

@@ -30,7 +30,7 @@ export const CONTRACTS = {
   ),
   // Must match the `open_note_token` constructor arg VinssMessageHelper was
   // deployed with. It participates in the STRK20 action bundle that routes
-  // the current 0.5 STRK per-message VINSS application revenue.
+  // the current 7 STRK per-message VINSS application revenue.
   messageHelperOpenNoteToken: normalizeAddress(
     process.env.NEXT_PUBLIC_MESSAGE_HELPER_OPEN_NOTE_TOKEN ?? "",
   ),

@@ -7,6 +7,7 @@ import {
   formatUsd,
   useUsdPrice,
 } from "@/components/room/escrow/EscrowPricing";
+import { VINSS_FEES } from "@/lib/fees";
 
 interface OfferCardProps {
   entry: ConversationEntry;
@@ -889,43 +890,50 @@ export function OfferCard({
         )}
 
         {actionable && (
-          <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-wire/60 pt-3">
-            <button
-              type="button"
-              onClick={() =>
-                void onReject(
-                  entry,
-                )
-              }
-              disabled={busy}
-              className="h-9 border border-danger/25 px-2 font-display text-[8px] uppercase tracking-widest text-danger/75 transition hover:bg-danger/10 disabled:opacity-30"
-            >
-              Reject
-            </button>
+          <div className="mt-3 border-t border-wire/60 pt-3">
+            <p className="mb-2 text-[8px] leading-relaxed text-paper/25">
+              Each Accept, Reject, or Counter action costs{" "}
+              {VINSS_FEES.offer.strk} STRK. Pool/network fee appears
+              separately in Ready X.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  void onReject(
+                    entry,
+                  )
+                }
+                disabled={busy}
+                className="h-9 border border-danger/25 px-2 font-display text-[8px] uppercase tracking-widest text-danger/75 transition hover:bg-danger/10 disabled:opacity-30"
+              >
+                Reject
+              </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                onCounter(entry)
-              }
-              disabled={busy}
-              className="h-9 border border-wire px-2 font-display text-[8px] uppercase tracking-widest text-paper/50 transition hover:border-amber-400/40 hover:text-amber-300 disabled:opacity-30"
-            >
-              Counter
-            </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onCounter(entry)
+                }
+                disabled={busy}
+                className="h-9 border border-wire px-2 font-display text-[8px] uppercase tracking-widest text-paper/50 transition hover:border-amber-400/40 hover:text-amber-300 disabled:opacity-30"
+              >
+                Counter
+              </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onAccept(
-                  entry,
-                )
-              }
-              disabled={busy}
-              className="h-9 border border-signal/35 px-2 font-display text-[8px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
-            >
-              Accept
-            </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void onAccept(
+                    entry,
+                  )
+                }
+                disabled={busy}
+                className="h-9 border border-signal/35 px-2 font-display text-[8px] uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+              >
+                Accept
+              </button>
+            </div>
           </div>
         )}
 

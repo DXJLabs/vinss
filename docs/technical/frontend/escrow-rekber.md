@@ -96,11 +96,11 @@ Current code:
 
 ```ts
 const principal = params.amount;
-const fee = principal / 100n;
+const fee = principal / 50n;
 const total = principal + fee;
 ```
 
-So the current implementation uses a **1% Rekber fee**.
+So the current implementation uses a **2% Rekber fee**.
 
 ## 4. Release / refund
 

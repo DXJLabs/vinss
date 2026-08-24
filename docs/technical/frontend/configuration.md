@@ -54,19 +54,19 @@ This prevents strict Wallet API felt validation from rejecting zero-padded addre
 Current Message path:
 
 ```text
-0.5 STRK per submitted private Message action
+7 STRK per submitted private Message action
 ```
 
 Current Offer path:
 
 ```text
-1 STRK per submitted Offer action
+10 STRK per submitted Offer action
 ```
 
 Current Escrow Rekber deposit path:
 
 ```text
-1% of principal
+2% of principal
 ```
 
 These are implementation facts from current code and should not be confused with generic UI fee quoting helpers.

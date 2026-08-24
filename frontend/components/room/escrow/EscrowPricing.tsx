@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { quoteVinssFee } from "@/lib/agent";
+import { VINSS_FEES } from "@/lib/fees";
 
 type SupportedPriceAsset =
   | "STRK"
@@ -310,7 +311,7 @@ export function EscrowAgreedAmount({
 export function EscrowPriceBreakdown({
   amount,
   asset,
-  feeBps = 100,
+  feeBps = VINSS_FEES.rekber.bps,
 }: {
   amount: string;
   asset: string;
@@ -420,9 +421,8 @@ export function EscrowPriceBreakdown({
       </div>
 
       <p className="mt-2 text-[8px] leading-relaxed text-paper/22">
-        Network fee is not included here.
-        Your wallet shows the actual
-        network fee before confirmation.
+        Privacy Pool and network fees are not included here.
+        Ready X shows those fees before confirmation.
       </p>
     </div>
   );

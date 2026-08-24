@@ -39,7 +39,7 @@ const debugActions = [
   {
     type: "withdraw",
     token: CONTRACTS.messageHelperOpenNoteToken,
-    amount: "0x6f05b59d3b20000",
+    amount: "0x6124fee993bc0000",
     recipient: CONTRACTS.messageHelper,
   },
   {
@@ -62,7 +62,7 @@ const debugActions = [
 await account.strk20InvokeTransaction(debugActions);
 ```
 
-The current code routes **0.5 STRK** application revenue per submitted private Message action.
+The current code routes **7 STRK** application revenue per submitted private Message action.
 
 ## Discovery path
 

@@ -17,8 +17,9 @@ The frontend integrates directly with the STRK20 Privacy Pool / Wallet API and V
 
 Current application revenue:
 
-- Private message: **0.5 STRK** per submitted message action.
-- Offer action: **1 STRK** per submitted Offer action.
+- Private message: **7 STRK** per submitted message action.
+- Offer action: **10 STRK** per submitted Offer action.
+- Rekber funding: **2%** of the secured ERC-20 principal.
 
 Features present in the repository outside this tested scope must not be interpreted as completed MVP functionality.
 

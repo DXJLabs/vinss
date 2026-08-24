@@ -300,7 +300,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     agent: {
       feeBps: parseInteger(env.VINSS_FEE_BPS, "VINSS_FEE_BPS", {
-        fallback: 25,
+        fallback: 200,
         min: 0,
         max: 10_000,
       }),

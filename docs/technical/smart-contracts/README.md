@@ -9,10 +9,10 @@ They do not replace the Privacy Pool. They define how VINSS persists encrypted c
 | Contract | Technical role | Current status |
 |---|---|---|
 | **VinssInvite** | One-time commitment-based Invite create/consume + expiry | Implemented + Cairo tested |
-| **VinssMessageHelper** | Persist encrypted Message envelopes and return 0.5 STRK revenue OpenNoteDeposit | ✅ Testnet on-chain verified |
-| **VinssOfferHelper** | Persist immutable encrypted Offer actions and return 1 STRK revenue OpenNoteDeposit | ✅ Testnet on-chain verified |
+| **VinssMessageHelper** | Persist encrypted Message envelopes and return 7 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
+| **VinssOfferHelper** | Persist immutable encrypted Offer actions and return 10 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
 | **VinssPrivateEscrowHelper** | Persist encrypted Escrow Rekber coordination actions | Implemented + Cairo tested |
-| **VinssEscrowRekber** | ERC-20 custody, 1% fee path, release/refund to private output note | 🟡 Integration stage; E2E verification pending |
+| **VinssEscrowRekber** | ERC-20 custody, 2% fee path, release/refund to private output note | 🟡 New fee build; redeploy + E2E pending |
 | **Mainnet deployment/evidence** | Live STRK20 contract execution evidence | 🟡 Pending |
 
 ## Contract architecture

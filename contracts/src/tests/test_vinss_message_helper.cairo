@@ -49,7 +49,7 @@ use crate::utils::constants::{
 ///
 /// Those properties require separate SDK, prover, integration, and Sepolia E2E tests.
 const PRIVACY_POOL: felt252 = 0x123;
-const MESSAGE_REVENUE: u128 = 500000000000000000_u128;
+const MESSAGE_REVENUE: u128 = 7000000000000000000_u128;
 const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
 const TEST_SENDER_TAG: felt252 = 0xabc123;
 const TEST_RECIPIENT_TAG: felt252 = 0xdef456;

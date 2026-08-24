@@ -73,7 +73,7 @@ export type AgentProposal =
       };
     };
 
-export function calculateFee(amount: string, feeBps = 25) {
+export function calculateFee(amount: string, feeBps = 200) {
   const value = Number(amount);
 
   if (!Number.isFinite(value) || value < 0) {

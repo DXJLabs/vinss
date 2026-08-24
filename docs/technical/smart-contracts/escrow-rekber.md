@@ -72,8 +72,8 @@ The contract validates:
 Current fee:
 
 ```text
-fee = principal / 100
-    = 1%
+fee = principal / 50
+    = 2%
 ```
 
 Fee must be non-zero.
@@ -211,7 +211,7 @@ Current dedicated Cairo test verifies the deposit-side invariant:
 
 ```text
 principal remains intact
-1% fee returned
+2% fee returned
 principal reserve correct
 Pool allowance equals fee
 ```

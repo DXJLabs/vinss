@@ -54,7 +54,7 @@ const DEPOSIT_TIME: u64 = 1000;
 const RELEASE_TIME: u64 = 1500;
 const REFUND_AFTER: u64 = 2000;
 const PRINCIPAL: u128 = 10000_u128;
-const FEE: u128 = 100_u128;
+const FEE: u128 = 200_u128;
 
 fn privacy_pool() -> ContractAddress {
     PRIVACY_POOL.try_into().unwrap()

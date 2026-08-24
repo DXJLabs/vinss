@@ -27,6 +27,7 @@ import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
 import type { AttachmentRef } from "@/types/deal-room";
+import { VINSS_FEES } from "@/lib/fees";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -1276,6 +1277,15 @@ export function DirectConversationPanel({
             </button>
           </div>
         )}
+
+        <div className="mb-1 flex items-center justify-between gap-3 px-3 font-display text-[7px] uppercase tracking-[0.1em] text-paper/25">
+          <span>
+            VINSS fee · {VINSS_FEES.message.strk} STRK
+          </span>
+          <span>
+            Pool/network fee shown in Ready X
+          </span>
+        </div>
 
         <div className="flex items-end gap-2">
           <textarea

@@ -54,8 +54,9 @@ Both current helpers:
 ## Current revenue behavior
 
 ```text
-VinssMessageHelper   0.5 STRK per submitted private message
-VinssOfferHelper     1 STRK per submitted Offer action
+VinssMessageHelper   7 STRK per submitted private message
+VinssOfferHelper     10 STRK per submitted Offer action
+VinssEscrowRekberV2  2% of the secured ERC-20 principal at funding
 ```
 
 The frontend constructs the corresponding STRK20 action bundle. The helper returns an `OpenNoteDeposit` for the configured revenue token and amount.

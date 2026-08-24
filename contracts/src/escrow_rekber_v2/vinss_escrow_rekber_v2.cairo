@@ -48,6 +48,7 @@ pub mod VinssEscrowRekberV2 {
     pub const DEPOSIT_ACTION: felt252 = 1;
     pub const RELEASE_ACTION: felt252 = 2;
     pub const REFUND_ACTION: felt252 = 3;
+    const FEE_DIVISOR: u128 = 50_u128;
 
     component!(
         path: ReentrancyGuardComponent,
@@ -226,7 +227,8 @@ pub mod VinssEscrowRekberV2 {
             let revenue_open_note_id = *calldata.at(10);
             assert(revenue_open_note_id != 0, ZERO_NOTE_ID);
 
-            let fee_amount: u128 = amount / 100_u128;
+            // VINSS Rekber revenue = 2% of the secured principal.
+            let fee_amount: u128 = amount / FEE_DIVISOR;
             assert(fee_amount != 0, errors::FEE_TOO_SMALL);
 
             let now = get_block_timestamp();
@@ -447,4 +449,3 @@ pub mod VinssEscrowRekberV2 {
         }
     }
 }
-

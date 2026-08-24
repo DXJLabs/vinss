@@ -31,7 +31,7 @@ Current tests cover contract-level behavior including:
 - ciphertext storage/getters;
 - locator/commitment replay guards;
 - event structure;
-- 0.5 STRK revenue OpenNoteDeposit.
+- 7 STRK revenue OpenNoteDeposit.
 
 The product flow is also currently marked testnet on-chain verified.
 
@@ -43,7 +43,7 @@ Current tests verify:
 - V2 storage;
 - routing tags;
 - ciphertext retrieval;
-- 1 STRK revenue deposit;
+- 10 STRK revenue deposit;
 - unauthorized caller rejection;
 - zero routing-tag rejection;
 - invalid commitment rejection;
@@ -89,8 +89,8 @@ Current dedicated test coverage is narrower.
 The existing test verifies deposit-side economics/invariants:
 
 ```text
-wallet-equivalent balance = principal + 1%
-returned fee note         = 1%
+wallet-equivalent balance = principal + 2%
+returned fee note         = 2%
 stored custody amount     = full principal
 reserved amount           = full principal
 Pool allowance            = fee

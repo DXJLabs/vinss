@@ -45,6 +45,7 @@ import {
 import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
+import { VINSS_FEES } from "@/lib/fees";
 
 const PRIVATE_ESCROW_ENVELOPE_VERSION = 2;
 const ESCROW_COMMITMENT_DOMAIN =
@@ -612,11 +613,12 @@ export async function depositEscrow(
     params.amount;
 
   const fee =
-    principal / 100n;
+    principal /
+    BigInt(VINSS_FEES.rekber.divisor);
 
   if (fee <= 0n) {
     throw new Error(
-      "Amount is too small for the 1% Rekber fee.",
+      `Amount is too small for the ${VINSS_FEES.rekber.percent}% Rekber fee.`,
     );
   }
 

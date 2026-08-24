@@ -109,7 +109,7 @@ through:
 account.strk20InvokeTransaction(...)
 ```
 
-The current code routes **1 STRK** application revenue per submitted Offer action.
+The current code routes **10 STRK** application revenue per submitted Offer action.
 
 ## Discovery and binding
 

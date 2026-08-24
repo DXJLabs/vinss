@@ -47,7 +47,7 @@ const OUTPUT_NOTE: felt252 = 0x555;
 const DEPOSIT_TIME: u64 = 1000;
 const REFUND_AFTER: u64 = 2000;
 const PRINCIPAL: u128 = 10000_u128;
-const FEE: u128 = 100_u128;
+const FEE: u128 = 200_u128;
 
 // Fixed configured Privacy Pool address used by the test contract.
 fn privacy_pool() -> ContractAddress {
@@ -80,7 +80,7 @@ fn deploy_contracts() -> (ContractAddress, ContractAddress) {
 // Create one valid custody using the production commitment formulas.
 //
 // The wallet/Privacy Pool flow is represented by:
-// 1. mint principal + 1% fee to Rekber;
+// 1. mint principal + 2% fee to Rekber;
 // 2. invoke DEPOSIT as the configured Privacy Pool;
 // 3. store domain-separated release/refund commitments.
 fn fund_default_custody(
@@ -128,7 +128,7 @@ fn fund_default_custody(
 
 // Simulate the Privacy Pool consuming the fee OpenNoteDeposit.
 //
-// Deposit leaves an exact 1% token allowance for the Pool. Release/refund
+// Deposit leaves an exact 2% token allowance for the Pool. Release/refund
 // expects no stale allowance before approving the full principal output,
 // so the test explicitly consumes the fee first.
 fn consume_fee_allowance(
@@ -165,10 +165,10 @@ fn consume_fee_allowance(
 
 // Happy path: deposit.
 //
-// Verifies that the VINSS 1% fee is returned separately while the custody
+// Verifies that the VINSS 2% fee is returned separately while the custody
 // still records and reserves the complete principal.
 #[test]
-fn deposit_keeps_full_principal_and_returns_one_percent_fee() {
+fn deposit_keeps_full_principal_and_returns_two_percent_fee() {
     let (rekber_address, token_address) = deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
     let rekber = IVinssEscrowRekberDispatcher { contract_address: rekber_address };
@@ -437,7 +437,7 @@ fn non_privacy_pool_caller_is_rejected() {
 }
 
 // Funding invariant: principal alone is insufficient. Rekber must
-// already hold principal + the additional 1% VINSS fee.
+// already hold principal + the additional 2% VINSS fee.
 #[test]
 #[should_panic(expected: 'FUNDS_NOT_RECEIVED')]
 fn deposit_requires_principal_plus_fee() {
@@ -447,7 +447,7 @@ fn deposit_requires_principal_plus_fee() {
 
     start_cheat_block_timestamp(rekber_address, DEPOSIT_TIME);
 
-    // Only principal arrives; the required extra 1% fee is missing.
+    // Only principal arrives; the required extra 2% fee is missing.
     token.mint(rekber_address, PRINCIPAL.into());
     start_cheat_caller_address(rekber_address, privacy_pool());
 

@@ -72,6 +72,7 @@ import {
   explorerUrl,
   shortAddress,
 } from "@/components/room/conversation/chatFormat";
+import { VINSS_FEES } from "@/lib/fees";
 
 interface LocalCoordination {
   actionLocator: string;
@@ -2026,10 +2027,10 @@ export function EscrowPanel({
               <EscrowPriceBreakdown
                 amount={accepted.amount}
                 asset={accepted.asset}
-                feeBps={100}
+                feeBps={VINSS_FEES.rekber.bps}
               />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the 1% VINSS fee and locks it in the Escrow contract.
+                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the {VINSS_FEES.rekber.percent}% VINSS fee and locks it in the Escrow contract.
               </p>
               <button
                 type="button"

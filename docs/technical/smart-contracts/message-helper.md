@@ -120,8 +120,8 @@ Successful `privacy_invoke` approves the configured Privacy Pool and returns:
 
 ```text
 OpenNoteDeposit
-  amount = 500000000000000000
-         = 0.5 STRK
+  amount = 7000000000000000000
+         = 7 STRK
 ```
 
 against the configured `open_note_token`.
