@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { GuidedDeal } from "@/components/home/GuidedDeal";
 import { HomeWorkspace } from "@/components/home/HomeWorkspace";
@@ -20,36 +19,26 @@ const LIFECYCLE = [
     number: "01",
     label: "CHAT",
     title: "Private conversation",
-    status: "Testnet verified",
-    tone: "signal",
   },
   {
     number: "02",
     label: "OFFER",
     title: "Structured agreement",
-    status: "Testnet verified",
-    tone: "signal",
   },
   {
     number: "03",
     label: "REKBER",
-    title: "Two-party custody setup",
-    status: "Testnet gate",
-    tone: "amber",
+    title: "Secure payment",
   },
   {
     number: "04",
     label: "SETTLE",
-    title: "Release or timeout refund",
-    status: "Testnet gate",
-    tone: "amber",
+    title: "Release or refund",
   },
   {
     number: "05",
     label: "CERTIFICATE",
-    title: "Optional public NFT proof",
-    status: "Testnet gate",
-    tone: "muted",
+    title: "Optional public proof",
   },
 ] as const;
 
@@ -103,7 +92,7 @@ function SocialLink({
   children: React.ReactNode;
 }) {
   const classes =
-    "flex h-10 w-10 items-center justify-center border border-wire text-paper/42 transition hover:border-signal/50 hover:text-signal [&_svg]:h-4 [&_svg]:w-4";
+    "inline-flex h-8 w-8 items-center justify-center text-paper/38 transition hover:text-signal [&_svg]:h-[18px] [&_svg]:w-[18px]";
 
   if (!href) {
     return (
@@ -140,7 +129,7 @@ export default function HomePage() {
       <div aria-hidden="true" className="vinss-home-grid pointer-events-none fixed inset-0" />
 
       <div className="relative z-10 mx-auto w-full max-w-[1220px] px-4 pb-10 pt-4 sm:px-7 sm:pb-14 sm:pt-6 lg:px-10">
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-y border-wire/75 py-3">
+        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-y border-wire/75 py-3 sm:gap-4">
           <a className="group min-w-0" href="#top">
             <div className="font-display text-base tracking-[0.22em] text-paper transition group-hover:text-signal sm:text-lg">
               VINSS
@@ -150,40 +139,33 @@ export default function HomePage() {
             </p>
           </a>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              className="min-h-9 border border-wire px-2.5 font-display text-[7px] uppercase tracking-[0.15em] text-paper/52 transition hover:border-signal/50 hover:text-signal sm:px-3.5 sm:text-[8px]"
-              onClick={() => setGuideOpen(true)}
-              type="button"
-            >
-              Get started
-            </button>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <span className="hidden font-display text-[7px] uppercase tracking-[0.16em] text-paper/30 sm:inline">
               {NETWORK}
             </span>
-            <span data-guide="wallet">
+            <span className="shrink-0" data-guide="wallet">
               <WalletConnectButton showCapability={false} />
             </span>
           </div>
         </header>
 
         <section
-          className="scroll-mt-6 border-b border-wire/80 py-14 sm:py-16 lg:py-20"
+          className="scroll-mt-6 border-b border-wire/80 pb-6 pt-10 sm:py-14 lg:py-16"
           id="top"
         >
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(290px,.75fr)] lg:items-end lg:gap-16">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(290px,.75fr)] lg:items-end lg:gap-14">
             <div>
               <p className="font-display text-[9px] uppercase tracking-[0.3em] text-signal sm:text-[10px]">
                 Private Deal Room on Starknet
               </p>
 
-              <h1 className="mt-5 max-w-4xl text-[2.35rem] font-medium leading-[1.04] tracking-[-0.035em] text-paper sm:text-5xl lg:text-[4.15rem]">
+              <h1 className="mt-4 max-w-4xl text-[2.2rem] font-medium leading-[1.04] tracking-[-0.035em] text-paper sm:mt-5 sm:text-5xl lg:text-[4.15rem]">
                 Negotiate privately.
                 <br />
                 <span className="text-paper/48">Settle with confidence.</span>
               </h1>
 
-              <p className="mt-6 max-w-2xl text-sm leading-6 text-paper/50 sm:text-base sm:leading-7">
+              <p className="mt-5 max-w-2xl text-sm leading-6 text-paper/50 sm:mt-6 sm:text-base sm:leading-7">
                 VINSS keeps conversation, structured Offers, and deal context
                 inside a private room—and is built to carry an accepted
                 agreement through Rekber, settlement, and verifiable evidence.
@@ -193,12 +175,12 @@ export default function HomePage() {
                 Deals do not begin with a transaction. They begin with trust.
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-2.5">
+              <div className="mt-7 flex flex-wrap gap-2.5">
                 <a
                   className="inline-flex min-h-11 items-center justify-center border border-signal bg-signal px-5 font-display text-[8px] uppercase tracking-[0.17em] text-ink transition hover:bg-transparent hover:text-signal"
                   href="#rooms"
                 >
-                  {session ? "Open workspace →" : "Explore private rooms ↓"}
+                  {session ? "Open workspace →" : "Open workspace ↓"}
                 </a>
                 <button
                   className="inline-flex min-h-11 items-center justify-center border border-wire px-5 font-display text-[8px] uppercase tracking-[0.17em] text-paper/50 transition hover:border-paper/40 hover:text-paper"
@@ -217,11 +199,11 @@ export default function HomePage() {
             </div>
 
             <aside
-              className="border border-wire/85 bg-[#090c0f]/78"
+              className="overflow-hidden border border-wire/80 bg-[#090c0f]/78"
               data-guide="privacy"
               id="privacy-model"
             >
-              <header className="flex items-center justify-between border-b border-wire/65 px-4 py-3">
+              <header className="flex items-center justify-between border-b border-wire/60 px-3.5 py-2.5 sm:px-4 sm:py-3">
                 <span className="font-display text-[8px] uppercase tracking-[0.2em] text-paper/38">
                   Privacy boundary
                 </span>
@@ -231,26 +213,26 @@ export default function HomePage() {
                 </span>
               </header>
 
-              <div className="grid gap-px bg-wire/60 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                <div className="bg-[#0a0d10] p-4">
+              <div className="grid grid-cols-2 gap-px bg-wire/55 lg:grid-cols-1 xl:grid-cols-2">
+                <div className="min-w-0 bg-[#0a0d10] p-3.5 sm:p-4">
                   <p className="font-display text-[8px] uppercase tracking-[0.17em] text-signal/75">
                     Hidden
                   </p>
-                  <p className="mt-3 text-xs leading-5 text-paper/50">
+                  <p className="mt-2 text-[11px] leading-[1.55] text-paper/46 sm:mt-3 sm:text-xs sm:leading-5">
                     Messages, Offer terms, deal notes, room secrets
                   </p>
                 </div>
-                <div className="bg-[#0a0d10] p-4">
+                <div className="min-w-0 bg-[#0a0d10] p-3.5 sm:p-4">
                   <p className="font-display text-[8px] uppercase tracking-[0.17em] text-amber/75">
                     Visible
                   </p>
-                  <p className="mt-3 text-xs leading-5 text-paper/50">
+                  <p className="mt-2 text-[11px] leading-[1.55] text-paper/46 sm:mt-3 sm:text-xs sm:leading-5">
                     Transaction timing, commitments, public proofs, optional NFT owner
                   </p>
                 </div>
               </div>
 
-              <p className="border-t border-wire/65 px-4 py-3 text-[10px] leading-4 text-paper/28">
+              <p className="border-t border-wire/60 px-3.5 py-2.5 text-[9px] leading-4 text-paper/26 sm:px-4 sm:py-3 sm:text-[10px]">
                 Public-observer privacy is not the same as hiding every piece of
                 blockchain metadata.
               </p>
@@ -259,11 +241,11 @@ export default function HomePage() {
         </section>
 
         <section
-          className="py-7 sm:py-9"
+          className="py-5 sm:py-8"
           data-guide="workflow"
           id="workflow"
         >
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-3 flex items-center gap-3 sm:mb-4">
             <p className="font-display text-[8px] uppercase tracking-[0.22em] text-paper/35">
               Deal lifecycle
             </p>
@@ -273,29 +255,18 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid gap-px border border-wire/80 bg-wire/70 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-px border border-wire/75 bg-wire/65 lg:grid-cols-5">
             {LIFECYCLE.map((item, index) => (
-              <article className="relative bg-[#090c0f] p-4 sm:p-5" key={item.label}>
+              <article className="relative min-h-[118px] bg-[#090c0f] p-3.5 last:col-span-2 sm:p-4 lg:min-h-0 lg:last:col-span-1 lg:p-5" key={item.label}>
                 <div className="flex items-start justify-between gap-3">
                   <span className="font-display text-[8px] text-paper/22">
                     {item.number}
                   </span>
-                  <span
-                    className={`font-display text-[7px] uppercase tracking-[0.12em] ${
-                      item.tone === "signal"
-                        ? "text-signal/70"
-                        : item.tone === "amber"
-                          ? "text-amber/70"
-                          : "text-paper/25"
-                    }`}
-                  >
-                    {item.status}
-                  </span>
                 </div>
-                <h2 className="mt-7 font-display text-xs uppercase tracking-[0.16em] text-paper/85">
+                <h2 className="mt-4 font-display text-[10px] uppercase tracking-[0.15em] text-paper/82 sm:text-[11px] lg:mt-7 lg:text-xs">
                   {item.label}
                 </h2>
-                <p className="mt-2 text-[11px] text-paper/34">{item.title}</p>
+                <p className="mt-1.5 text-[10px] leading-4 text-paper/34 sm:text-[11px]">{item.title}</p>
                 {index < LIFECYCLE.length - 1 && (
                   <span className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 bg-[#090c0f] px-1 font-display text-[8px] text-signal/55 lg:block">
                     →
@@ -308,91 +279,80 @@ export default function HomePage() {
 
         <HomeWorkspace />
 
-        <section className="mt-12 grid gap-px border border-wire/80 bg-wire/65 sm:grid-cols-3">
-          <details className="group bg-[#090c0f] p-4 sm:p-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-display text-[8px] uppercase tracking-[0.18em] text-paper/55">
-              Privacy model
-              <span className="text-signal/55 transition group-open:rotate-45">+</span>
-            </summary>
-            <p className="mt-4 text-[11px] leading-5 text-paper/35">
-              Encryption protects private deal context. Pool interaction,
-              timing, commitments, and settlement results can remain public.
+
+
+                        <footer className="mt-6 border-t border-wire/75 sm:mt-8">
+          <div className="py-3.5">
+            <p className="font-display text-[8px] uppercase tracking-[0.22em] text-paper/38">
+              Resources
             </p>
-          </details>
 
-          <details className="group bg-[#090c0f] p-4 sm:p-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-display text-[8px] uppercase tracking-[0.18em] text-paper/55">
-              Verification status
-              <span className="text-signal/55 transition group-open:rotate-45">+</span>
-            </summary>
-            <ul className="mt-4 space-y-2 font-display text-[7px] uppercase leading-4 tracking-[0.1em] text-paper/35">
-              <li><span className="text-signal">●</span> Message · Testnet verified</li>
-              <li><span className="text-signal">●</span> Offer · Testnet verified</li>
-              <li><span className="text-amber">●</span> Rekber V2 · Testnet gate</li>
-              <li><span className="text-amber">●</span> Release/refund · Testnet gate</li>
-              <li><span className="text-paper/20">●</span> Certificate · Testnet gate</li>
-              <li><span className="text-paper/20">●</span> Mainnet · Pending</li>
-            </ul>
-          </details>
-
-          <details className="group bg-[#090c0f] p-4 sm:p-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-display text-[8px] uppercase tracking-[0.18em] text-paper/55">
-              Documentation
-              <span className="text-signal/55 transition group-open:rotate-45">+</span>
-            </summary>
-            <div className="mt-4 flex flex-col gap-2 font-display text-[7px] uppercase tracking-[0.12em]">
-              <a className="text-paper/35 transition hover:text-signal" href={`${GITHUB_URL}#how-it-works`} rel="noreferrer" target="_blank">
-                How VINSS works →
-              </a>
-              <a className="text-paper/35 transition hover:text-signal" href={`${GITHUB_URL}/blob/main/STRK20_INTEGRATION_PLAN.md`} rel="noreferrer" target="_blank">
-                Technical architecture →
-              </a>
-              <a className="text-paper/35 transition hover:text-signal" href={`${GITHUB_URL}/blob/main/TEST_REPORT.md`} rel="noreferrer" target="_blank">
-                Test evidence →
-              </a>
-            </div>
-          </details>
-        </section>
-
-        <footer className="mt-12 border-t border-wire/75 pt-5">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-display text-[9px] uppercase tracking-[0.2em] text-paper/55">
-                VINSS — Private Deal Rooms
-              </p>
-              <p className="mt-2 text-[10px] leading-4 text-paper/25">
-                Capability-dependent privacy · Network: {NETWORK}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <SocialLink href={TELEGRAM_URL} label="VINSS Telegram">
-                <TelegramIcon />
-              </SocialLink>
-              <SocialLink href={X_URL} label="VINSS on X">
-                <XIcon />
-              </SocialLink>
-              <SocialLink href={GITHUB_URL} label="VINSS GitHub">
-                <GithubIcon />
-              </SocialLink>
-              <Link
-                className="flex h-10 items-center justify-center border border-wire px-3 font-display text-[7px] uppercase tracking-[0.14em] text-paper/42 transition hover:border-signal/50 hover:text-signal"
-                href="/loyalty"
+            <nav
+              aria-label="VINSS resources"
+              className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 font-display text-[7px] uppercase tracking-[0.12em]"
+            >
+              <a
+                className="text-paper/35 transition hover:text-signal"
+                href={`${GITHUB_URL}#how-it-works`}
+                rel="noreferrer"
+                target="_blank"
               >
-                Loyalty
-              </Link>
-              <Link
-                className="flex h-10 items-center justify-center border border-wire px-3 font-display text-[7px] uppercase tracking-[0.14em] text-paper/42 transition hover:border-signal/50 hover:text-signal"
-                href="/terms"
+                How VINSS works ↗
+              </a>
+
+              <a
+                className="text-paper/35 transition hover:text-signal"
+                href={`${GITHUB_URL}/blob/main/STRK20_INTEGRATION_PLAN.md`}
+                rel="noreferrer"
+                target="_blank"
               >
-                Terms
-              </Link>
-            </div>
+                Technical docs ↗
+              </a>
+
+              <a
+                className="text-paper/35 transition hover:text-signal"
+                href={`${GITHUB_URL}/blob/main/TEST_REPORT.md`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Test evidence ↗
+              </a>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3 py-2.5">
+            <SocialLink href={TELEGRAM_URL} label="VINSS Telegram">
+              <TelegramIcon />
+            </SocialLink>
+
+            <SocialLink href={X_URL} label="VINSS on X">
+              <XIcon />
+            </SocialLink>
+
+            <SocialLink href={GITHUB_URL} label="VINSS GitHub">
+              <GithubIcon />
+            </SocialLink>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 pb-3 pt-1">
+            <p className="text-[11px] text-paper/32">
+              © 2026 VINSS
+            </p>
+
+            <Link
+              className="text-[11px] text-paper/32 transition hover:text-signal"
+              href="/terms"
+            >
+              Terms of Service
+            </Link>
           </div>
         </footer>
       </div>
 
-      <GuidedDeal onClose={() => setGuideOpen(false)} open={guideOpen} />
+      <GuidedDeal
+        onClose={() => setGuideOpen(false)}
+        open={guideOpen}
+      />
     </main>
   );
 }

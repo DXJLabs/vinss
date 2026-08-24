@@ -83,6 +83,8 @@ export function HomeWorkspace() {
   const [label, setLabel] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [creating, setCreating] = useState(false);
+  const [roomToDelete, setRoomToDelete] =
+    useState<LocalRoom | null>(null);
   const [activity, setActivity] = useState<ActivitySnapshot>({
     count: 0,
     online: false,
@@ -151,6 +153,45 @@ export function HomeWorkspace() {
     window.location.assign(value);
   }
 
+  function deleteLocalRoom(room: LocalRoom) {
+    const next = rooms.filter(
+      (entry) => entry.id !== room.id,
+    );
+
+    setRooms(next);
+    saveRooms(next);
+
+    /*
+     * Remove VINSS browser data scoped to this room.
+     * Public/on-chain records are intentionally untouched.
+     */
+    const keysToRemove: string[] = [];
+
+    for (
+      let index = 0;
+      index < window.localStorage.length;
+      index += 1
+    ) {
+      const key =
+        window.localStorage.key(index);
+
+      if (
+        key &&
+        key !== STORAGE_KEY &&
+        key.startsWith("vinss:") &&
+        key.includes(room.id)
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+
+    setRoomToDelete(null);
+  }
+
   return (
     <>
       <section
@@ -158,7 +199,7 @@ export function HomeWorkspace() {
         data-guide="rooms"
         id="rooms"
       >
-        <div className="mb-4 flex items-end justify-between gap-4 sm:mb-5">
+        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-display text-[9px] uppercase tracking-[0.28em] text-signal">
               Local workspace
@@ -166,14 +207,14 @@ export function HomeWorkspace() {
             <h2 className="mt-2 font-display text-xl uppercase tracking-[0.12em] text-paper sm:text-2xl">
               Private rooms
             </h2>
-            <p className="mt-2 max-w-xl text-xs leading-5 text-paper/38 sm:text-sm">
-              One room holds one deal. Labels and room secrets stay in this
-              browser.
+            <p className="mt-2 max-w-xl text-xs leading-5 text-paper/48 sm:text-sm">
+              Create one room for each deal. Room labels and secrets stay on
+              this device.
             </p>
           </div>
 
           <button
-            className="min-h-10 shrink-0 border border-signal bg-signal px-3 font-display text-[8px] uppercase tracking-[0.17em] text-ink transition hover:bg-transparent hover:text-signal sm:px-4 sm:text-[9px]"
+            className="min-h-10 self-start border border-signal bg-signal px-4 font-display text-[8px] uppercase tracking-[0.17em] text-ink transition hover:bg-transparent hover:text-signal sm:self-auto sm:text-[9px]"
             onClick={() => setLauncherOpen(true)}
             type="button"
           >
@@ -191,7 +232,7 @@ export function HomeWorkspace() {
                 <span className="h-px min-w-4 flex-1 bg-wire/70" />
               </div>
               <span className="font-display text-[8px] uppercase tracking-[0.15em] text-paper/28">
-                {rooms.length.toString().padStart(2, "0")} local
+                {rooms.length} {rooms.length === 1 ? "room" : "rooms"}
               </span>
             </header>
 
@@ -247,12 +288,15 @@ export function HomeWorkspace() {
                         <span className="h-1 w-1 rounded-full bg-signal" />
                         Private
                       </span>
-                      <Link
-                        className="mt-2 font-display text-[7px] uppercase tracking-[0.15em] text-paper/34 transition hover:text-signal"
-                        href={`/room/${room.id}?access=1`}
+                      <button
+                        className="mt-2 font-display text-[7px] uppercase tracking-[0.15em] text-danger/55 transition hover:text-danger"
+                        onClick={() =>
+                          setRoomToDelete(room)
+                        }
+                        type="button"
                       >
-                        Invite +
-                      </Link>
+                        Delete
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -264,7 +308,7 @@ export function HomeWorkspace() {
               onClick={() => setLauncherOpen(true)}
               type="button"
             >
-              <span>Open invitation or create room</span>
+              <span>Open invitation</span>
               <span>+</span>
             </button>
           </section>
@@ -281,6 +325,73 @@ export function HomeWorkspace() {
           </span>
         </div>
       </section>
+
+      {roomToDelete && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/78 p-0 backdrop-blur-[3px] sm:items-center sm:p-6"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setRoomToDelete(null);
+            }
+          }}
+        >
+          <section
+            aria-labelledby="delete-room-title"
+            aria-modal="true"
+            className="vinss-dialog w-full border border-wire bg-[#090d10] p-5 sm:max-w-md sm:p-6"
+            role="dialog"
+          >
+            <p className="font-display text-[8px] uppercase tracking-[0.2em] text-danger/70">
+              Local room
+            </p>
+
+            <h2
+              className="mt-2 text-xl font-medium text-paper"
+              id="delete-room-title"
+            >
+              Delete this room?
+            </h2>
+
+            <p className="mt-2 font-display text-[10px] uppercase tracking-[0.12em] text-paper/55">
+              {roomToDelete.label}
+            </p>
+
+            <p className="mt-4 text-xs leading-5 text-paper/38">
+              This removes the room, room secret,
+              and VINSS local data from this browser.
+              On-chain transactions and proofs are
+              not deleted.
+            </p>
+
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button
+                className="min-h-11 border border-wire font-display text-[8px] uppercase tracking-[0.16em] text-paper/45 transition hover:border-paper/35 hover:text-paper"
+                onClick={() =>
+                  setRoomToDelete(null)
+                }
+                type="button"
+              >
+                Cancel
+              </button>
+
+              <button
+                className="min-h-11 border border-danger/60 bg-danger/10 font-display text-[8px] uppercase tracking-[0.16em] text-danger transition hover:bg-danger hover:text-ink"
+                onClick={() =>
+                  deleteLocalRoom(
+                    roomToDelete,
+                  )
+                }
+                type="button"
+              >
+                Delete room
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {launcherOpen && (
         <div

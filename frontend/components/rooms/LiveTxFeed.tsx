@@ -5,10 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BACKEND_URL,
   NETWORK,
-  STRK_ADDRESS,
-  USDC_ADDRESS,
+  RPC_URL,
 } from "@/lib/starknet/constants";
-import { formatUnits } from "@/lib/utils/units";
 
 type ActivityKind =
   | "message"
@@ -45,6 +43,10 @@ interface ActivityResponse {
   items?: unknown;
 }
 
+interface PublicTxMeta {
+  senderAddress: string | null;
+}
+
 export interface ActivitySnapshot {
   count: number;
   online: boolean;
@@ -63,37 +65,37 @@ const ACTIVITY_LABELS: Record<
 > = {
   message: {
     label: "MESSAGE",
-    accent: "text-paper/70",
+    accent: "text-paper/72",
     target: "VINSS MESSAGE",
   },
   offer: {
     label: "OFFER · ACTION",
-    accent: "text-signal",
+    accent: "text-paper/72",
     target: "VINSS OFFER",
   },
   escrow: {
     label: "REKBER · START",
-    accent: "text-amber",
+    accent: "text-paper/72",
     target: "VINSS REKBER",
   },
   rekber_funded: {
     label: "REKBER · FUND",
-    accent: "text-signal",
+    accent: "text-paper/72",
     target: "VINSS REKBER",
   },
   rekber_released: {
     label: "REKBER · RELEASE",
-    accent: "text-signal",
+    accent: "text-paper/72",
     target: "VINSS REKBER",
   },
   rekber_refunded: {
     label: "REKBER · REFUND",
-    accent: "text-amber",
+    accent: "text-paper/72",
     target: "VINSS REKBER",
   },
   certificate_issued: {
-    label: "CERTIFICATE · ISSUED",
-    accent: "text-signal",
+    label: "CERTIFICATE",
+    accent: "text-paper/72",
     target: "VINSS CERTIFICATE",
   },
 };
@@ -120,6 +122,11 @@ function shortHash(value: string) {
   return `${value.slice(0, 8)}…${value.slice(-5)}`;
 }
 
+function shortAddress(value: string) {
+  if (value.length <= 17) return value;
+  return `${value.slice(0, 8)}…${value.slice(-5)}`;
+}
+
 function formatRelativeTime(value: string, now: number) {
   const date = new Date(value);
 
@@ -138,43 +145,6 @@ function formatRelativeTime(value: string, now: number) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function sameAddress(left: string | undefined, right: string) {
-  if (!left || !right) return false;
-
-  try {
-    return BigInt(left) === BigInt(right);
-  } catch {
-    return false;
-  }
-}
-
-function formatActivityAmount(item: ActivityItem) {
-  if (item.kind === "certificate_issued" && item.certificate) {
-    return item.certificate.role === 1
-      ? "PAYER CERTIFICATE"
-      : "PAYEE CERTIFICATE";
-  }
-
-  const amount = item.rekber?.amount;
-  const token = item.rekber?.token;
-
-  if (!amount || !token) return null;
-
-  try {
-    if (sameAddress(token, STRK_ADDRESS)) {
-      return `${formatUnits(BigInt(amount), 18)} STRK`;
-    }
-
-    if (sameAddress(token, USDC_ADDRESS)) {
-      return `${formatUnits(BigInt(amount), 6)} USDC`;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 function explorerUrl(transactionHash: string) {
   return NETWORK === "mainnet"
     ? `https://voyager.online/tx/${transactionHash}`
@@ -188,6 +158,9 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
   );
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(0);
+  const [txMeta, setTxMeta] = useState<
+    Record<string, PublicTxMeta>
+  >({});
 
   useEffect(() => {
     const updateClock = () => setNow(Date.now());
@@ -267,19 +240,82 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
     [expanded, items],
   );
 
-  const amountByCustody = useMemo(() => {
-    const amounts = new Map<string, string>();
+  useEffect(() => {
+    let disposed = false;
 
-    for (const item of items) {
-      const amount = formatActivityAmount(item);
+    const missing = visibleItems.filter(
+      (item) => !txMeta[item.transactionHash],
+    );
 
-      if (amount) {
-        amounts.set(item.actionLocator, amount);
-      }
+    if (missing.length === 0) return;
+
+    async function loadTxMeta() {
+      const results = await Promise.all(
+        missing.map(async (item) => {
+          try {
+            const response = await fetch(RPC_URL, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: item.transactionHash,
+                method: "starknet_getTransactionByHash",
+                params: [item.transactionHash],
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error(
+                `RPC ${response.status}`,
+              );
+            }
+
+            const payload = (await response.json()) as {
+              result?: {
+                sender_address?: string;
+              };
+            };
+
+            return {
+              hash: item.transactionHash,
+              meta: {
+                senderAddress:
+                  payload.result?.sender_address ??
+                  null,
+              } satisfies PublicTxMeta,
+            };
+          } catch {
+            return {
+              hash: item.transactionHash,
+              meta: {
+                senderAddress: null,
+              } satisfies PublicTxMeta,
+            };
+          }
+        }),
+      );
+
+      if (disposed) return;
+
+      setTxMeta((previous) => {
+        const next = { ...previous };
+
+        for (const result of results) {
+          next[result.hash] = result.meta;
+        }
+
+        return next;
+      });
     }
 
-    return amounts;
-  }, [items]);
+    void loadTxMeta();
+
+    return () => {
+      disposed = true;
+    };
+  }, [visibleItems, txMeta]);
 
   return (
     <section className="overflow-hidden border border-wire/90 bg-[#090c0f]/95 lg:sticky lg:top-5">
@@ -288,14 +324,11 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-display text-[9px] uppercase tracking-[0.26em] text-paper/42">
-              VINSS
-            </p>
-            <h2 className="mt-1 font-display text-base uppercase tracking-[0.16em] text-paper/88">
-              LIVE TX
+            <h2 className="font-display text-base uppercase tracking-[0.18em] text-paper/88">
+              LOG TX
             </h2>
-            <p className="mt-1.5 font-display text-[7px] uppercase tracking-[0.18em] text-paper/28 sm:text-[8px]">
-              STARKNET · {NETWORK.toUpperCase()}
+            <p className="mt-1.5 font-display text-[7px] uppercase tracking-[0.15em] text-paper/25 sm:text-[8px]">
+              Public transaction activity
             </p>
           </div>
 
@@ -358,9 +391,19 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
         {visibleItems.map((item, index) => {
           const meta = ACTIVITY_LABELS[item.kind];
-          const amount =
-            formatActivityAmount(item) ??
-            amountByCustody.get(item.actionLocator);
+
+          const displayLabel =
+            item.kind === "certificate_issued" &&
+            item.certificate
+              ? `CERTIFICATE · ${
+                  item.certificate.role === 1
+                    ? "PAYER"
+                    : "PAYEE"
+                }`
+              : meta.label;
+
+          const publicTx =
+            txMeta[item.transactionHash];
 
           return (
             <article
@@ -373,33 +416,43 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
                   className={`min-w-0 truncate font-display text-[9px] uppercase tracking-[0.13em] sm:text-[10px] ${meta.accent}`}
                 >
                   <span className="mr-2 text-paper/55">&gt;</span>
-                  {meta.label}
+                  {displayLabel}
                 </p>
                 <time className="shrink-0 font-display text-[8px] tracking-[0.08em] text-paper/25">
                   {formatRelativeTime(item.indexedAt, now)}
                 </time>
               </div>
 
-              {amount && (
-                <p className="mt-3 font-display text-xs tracking-[0.05em] text-paper/76">
-                  {amount}
-                </p>
-              )}
 
               <dl className="mt-3 space-y-1.5 font-display text-[7px] uppercase tracking-[0.12em] sm:text-[8px]">
-                <div className="grid grid-cols-[38px_minmax(0,1fr)] gap-2">
-                  <dt className="text-paper/20">FROM</dt>
-                  <dd className="text-danger/62">[PRIVATE]</dd>
-                </div>
-                <div className="grid grid-cols-[38px_minmax(0,1fr)] gap-2">
-                  <dt className="text-paper/20">TO</dt>
+                <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-2">
+                  <dt className="text-paper/20">
+                    FROM
+                  </dt>
                   <dd
-                    className="truncate text-paper/42"
-                    title={item.contractAddress}
+                    className="truncate text-paper/55"
+                    title={
+                      publicTx?.senderAddress ??
+                      undefined
+                    }
                   >
-                    {meta.target}
+                    {publicTx?.senderAddress
+                      ? shortAddress(
+                          publicTx.senderAddress,
+                        )
+                      : "LOADING…"}
                   </dd>
                 </div>
+
+                <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-2">
+                  <dt className="text-paper/20">
+                    TO
+                  </dt>
+                  <dd className="text-paper/58">
+                    AVNU PAYMASTER
+                  </dd>
+                </div>
+
               </dl>
 
               <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/35 pt-3">
