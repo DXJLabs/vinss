@@ -1,5 +1,12 @@
 use starknet::ContractAddress;
 
+// Public Rekber lifecycle events.
+//
+// Events expose custody commitments and settlement evidence required
+// for indexing without publishing private deal terms or participant
+// identities.
+
+/// Emitted after principal is secured by the Rekber contract.
 #[derive(Drop, starknet::Event)]
 pub struct EscrowRekberCustodyFunded {
     #[key]
@@ -11,6 +18,7 @@ pub struct EscrowRekberCustodyFunded {
     pub timestamp: u64,
 }
 
+/// Emitted when custody is successfully released.
 #[derive(Drop, starknet::Event)]
 pub struct EscrowRekberCustodyReleased {
     #[key]
@@ -20,6 +28,7 @@ pub struct EscrowRekberCustodyReleased {
     pub timestamp: u64,
 }
 
+/// Emitted when custody is returned through the refund path.
 #[derive(Drop, starknet::Event)]
 pub struct EscrowRekberCustodyRefunded {
     #[key]

@@ -1,5 +1,16 @@
 use crate::escrow_rekber::interfaces::IVinssEscrowRekber;
 
+// VINSS Rekber custody contract.
+//
+// Funds enter and leave this contract only through the configured
+// STRK20 Privacy Pool. Deal semantics and participant identities remain
+// outside the public custody contract.
+//
+// Lifecycle:
+//   DEPOSIT -> RELEASE
+//           -> REFUND
+//
+// Each custody commitment may be consumed exactly once.
 #[starknet::contract]
 pub mod VinssEscrowRekber {
     use openzeppelin_security::reentrancyguard::ReentrancyGuardComponent;
@@ -45,9 +56,12 @@ pub mod VinssEscrowRekber {
     };
     use crate::utils::validation::assert_non_zero_address;
 
+    // privacy_invoke action selectors.
     pub const DEPOSIT_ACTION: felt252 = 1;
     pub const RELEASE_ACTION: felt252 = 2;
     pub const REFUND_ACTION: felt252 = 3;
+
+    // VINSS Rekber fee = principal / 50 = 2%.
     const FEE_DIVISOR: u128 = 50_u128;
 
     component!(
@@ -56,6 +70,8 @@ pub mod VinssEscrowRekber {
         event: ReentrancyGuardEvent,
     );
 
+    // Public custody state contains commitments and accounting only.
+    // Plaintext deal terms and participant identities are not stored here.
     #[storage]
     struct Storage {
         #[substorage(v0)]
@@ -76,6 +92,8 @@ pub mod VinssEscrowRekber {
         EscrowRekberCustodyRefunded: EscrowRekberCustodyRefunded,
     }
 
+    // Bind this custody contract permanently to the Privacy Pool
+    // authorized to execute private Rekber actions.
     #[constructor]
     fn constructor(
         ref self: ContractState,
@@ -87,6 +105,11 @@ pub mod VinssEscrowRekber {
 
     #[abi(embed_v0)]
     impl VinssEscrowRekberImpl of IVinssEscrowRekber<ContractState> {
+        // Privacy Pool entrypoint.
+        //
+        // Direct wallet calls are rejected. The first calldata felt selects
+        // DEPOSIT, RELEASE, or REFUND. Reentrancy protection covers the
+        // complete state-changing action.
         fn privacy_invoke(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -176,6 +199,12 @@ pub mod VinssEscrowRekber {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        // Create a new funded custody.
+        //
+        // The contract verifies all commitments, refund boundary, token
+        // balance, and reserve accounting before recording custody state.
+        // Principal remains reserved in this contract while only the VINSS
+        // fee is returned to the Privacy Pool as an OpenNoteDeposit.
         fn deposit_custody(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -299,6 +328,11 @@ pub mod VinssEscrowRekber {
                 .span()
         }
 
+        // Release principal before the refund boundary.
+        //
+        // Release requires two independent preimages:
+        // payer release authorization + payee claim secret.
+        // Neither party can complete release with only one secret.
         fn release_custody(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -344,6 +378,10 @@ pub mod VinssEscrowRekber {
             self.prepare_output(custody, output_note_id, false, now)
         }
 
+        // Refund principal after the refund boundary.
+        //
+        // Only the valid refund preimage can unlock this path, and the
+        // custody must still be unconsumed.
         fn refund_custody(
             ref self: ContractState,
             calldata: Span<felt252>,
@@ -376,6 +414,15 @@ pub mod VinssEscrowRekber {
             self.prepare_output(custody, output_note_id, true, now)
         }
 
+        // Finalize a release or refund atomically.
+        //
+        // Mark custody consumed before exposing the output deposit,
+        // decrease reserved principal, approve exactly the principal amount
+        // to the Privacy Pool, and emit the corresponding settlement event.
+        // Finalize release or refund atomically.
+        //
+        // Consumes custody, updates reserved accounting, approves exactly
+        // the principal to the Privacy Pool, then emits settlement evidence.
         fn prepare_output(
             ref self: ContractState,
             mut custody: EscrowRekberCustody,
