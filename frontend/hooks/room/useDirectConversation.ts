@@ -153,6 +153,11 @@ export function useDirectConversation({
   const chatEndRef =
     useRef<HTMLDivElement | null>(null);
 
+  // Prevent network discovery from replacing a fuller encrypted local
+  // history while the cache is still being decrypted after a reload.
+  const historyHydratedRef =
+    useRef(false);
+
   const peerKey = peerAddress
     ? canonicalStarknetAddress(peerAddress)
     : "";
@@ -399,7 +404,12 @@ export function useDirectConversation({
             new Date(right.sentAt).getTime(),
         );
 
-        void persistHistory(next);
+        // During reload, encrypted local history may still be decrypting.
+        // Do not let a partial discovery result overwrite that fuller cache.
+        if (historyHydratedRef.current) {
+          void persistHistory(next);
+        }
+
         return next;
       });
     } catch (err) {
@@ -1554,7 +1564,9 @@ export function useDirectConversation({
     entries,
   ]);
 
-  // Hydrate encrypted local history before network discovery for fast reopen.
+  // Hydrate encrypted local history before allowing discovery to persist.
+  // Cache and network state are complementary: discovery must enrich history,
+  // never replace messages already decrypted on this device.
   useEffect(() => {
     if (
       !active ||
@@ -1566,14 +1578,26 @@ export function useDirectConversation({
       return;
     }
 
+    historyHydratedRef.current = false;
+
     let cancelled = false;
 
     const hydrate = async () => {
       const storageKey = historyStorageKey();
-      if (!storageKey) return;
+
+      if (!storageKey) {
+        historyHydratedRef.current = true;
+        return;
+      }
 
       const directKey = await resolveDirectKey();
-      if (!directKey || cancelled) return;
+
+      if (!directKey || cancelled) {
+        if (!cancelled) {
+          historyHydratedRef.current = true;
+        }
+        return;
+      }
 
       const cached = await loadEncryptedLocalJson<{
         version: 1;
@@ -1581,14 +1605,57 @@ export function useDirectConversation({
         entries: ConversationEntry[];
       }>(storageKey, directKey);
 
-      if (cancelled || !cached?.entries?.length) return;
+      if (cancelled) return;
 
-      setEntries((previous) =>
-        previous.length > 0 ? previous : cached.entries,
-      );
+      if (cached?.entries?.length) {
+        setEntries((previous) => {
+          const byLocator =
+            new Map<string, ConversationEntry>();
+
+          // Cache first, then current/discovered state so confirmed network
+          // metadata can enrich the cached entry without dropping history.
+          for (const entry of [
+            ...cached.entries,
+            ...previous,
+          ]) {
+            const locator =
+              entry.actionLocator
+                .replace(/^0x/, "")
+                .toLowerCase();
+
+            const existing =
+              byLocator.get(locator);
+
+            byLocator.set(locator, {
+              ...existing,
+              ...entry,
+              readAt:
+                entry.readAt ??
+                existing?.readAt,
+            });
+          }
+
+          return [...byLocator.values()].sort(
+            (left, right) =>
+              new Date(left.sentAt).getTime() -
+              new Date(right.sentAt).getTime(),
+          );
+        });
+      }
+
+      historyHydratedRef.current = true;
     };
 
-    void hydrate();
+    void hydrate().catch((err) => {
+      console.error(
+        "[VINSS DIRECT HISTORY HYDRATE ERROR]",
+        err,
+      );
+
+      if (!cancelled) {
+        historyHydratedRef.current = true;
+      }
+    });
 
     return () => {
       cancelled = true;
