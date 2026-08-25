@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import {
+  useEffect,
+  useRef,
   useState,
   type MutableRefObject,
 } from "react";
@@ -75,6 +77,16 @@ export function GroupConversationPanel({
   const [membersOpen, setMembersOpen] =
     useState(false);
 
+  const messageInputRef =
+    useRef<HTMLTextAreaElement | null>(
+      null,
+    );
+
+  const [
+    messageInputFocused,
+    setMessageInputFocused,
+  ] = useState(false);
+
   const visibleEntries =
     entries
       .filter(
@@ -102,6 +114,42 @@ export function GroupConversationPanel({
       group,
       walletAddress,
     );
+
+  const resizeMessageInput = () => {
+    const node =
+      messageInputRef.current;
+
+    if (!node) return;
+
+    node.style.height = "auto";
+    node.style.height =
+      `${Math.min(
+        node.scrollHeight,
+        112,
+      )}px`;
+  };
+
+  useEffect(() => {
+    resizeMessageInput();
+  }, [draft]);
+
+  async function sendComposerMessage() {
+    if (
+      !draft.trim() ||
+      busy ||
+      !connected ||
+      !channelReady
+    ) {
+      return;
+    }
+
+    await onSendMessage();
+
+    requestAnimationFrame(() => {
+      resizeMessageInput();
+      messageInputRef.current?.blur();
+    });
+  }
 
   return (
     <>
@@ -298,41 +346,75 @@ export function GroupConversationPanel({
 
       <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
         <div className="flex items-end gap-2">
-          <textarea
-            value={draft}
-            onChange={(event) =>
-              onDraftChange(
-                event.target.value,
-              )
-            }
-            onKeyDown={(event) => {
-              if (
-                event.key ===
-                  "Enter" &&
-                !event.shiftKey
-              ) {
-                event.preventDefault();
-                void onSendMessage();
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              ref={messageInputRef}
+              value={draft}
+              onFocus={() =>
+                setMessageInputFocused(
+                  true,
+                )
               }
-            }}
-            placeholder={
-              connected
-                ? `Message ${group.name}…`
-                : "Connect wallet to message…"
-            }
-            rows={1}
-            disabled={
-              !connected ||
-              !channelReady ||
-              busy
-            }
-            className="min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
-          />
+              onBlur={() =>
+                setMessageInputFocused(
+                  false,
+                )
+              }
+              onChange={(event) => {
+                onDraftChange(
+                  event.target.value,
+                );
+
+                requestAnimationFrame(
+                  resizeMessageInput,
+                );
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key ===
+                    "Enter" &&
+                  !event.shiftKey
+                ) {
+                  event.preventDefault();
+                  void sendComposerMessage();
+                }
+              }}
+              placeholder={
+                connected
+                  ? `Message ${group.name}…`
+                  : "Connect wallet to message…"
+              }
+              rows={1}
+              enterKeyHint="send"
+              disabled={
+                !connected ||
+                !channelReady ||
+                busy
+              }
+              className="max-h-28 min-h-11 w-full resize-none overflow-y-auto bg-transparent px-3 py-3 pr-10 text-sm leading-5 text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
+            />
+
+            {messageInputFocused && (
+              <button
+                type="button"
+                aria-label="Close keyboard"
+                onMouseDown={(event) =>
+                  event.preventDefault()
+                }
+                onClick={() =>
+                  messageInputRef.current?.blur()
+                }
+                className="absolute bottom-2.5 right-1 flex h-7 w-7 items-center justify-center rounded-lg text-xs text-paper/30 transition hover:bg-paper/5 hover:text-paper/60"
+              >
+                ↓
+              </button>
+            )}
+          </div>
 
           <button
             type="button"
             onClick={() =>
-              void onSendMessage()
+              void sendComposerMessage()
             }
             disabled={
               !connected ||

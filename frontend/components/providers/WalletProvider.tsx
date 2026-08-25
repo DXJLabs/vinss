@@ -24,6 +24,7 @@ import {
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 import { createWalletSession } from "@/lib/starknet/walletClient";
 import {
+  refreshInjectedWallets,
   walletStore,
   watchForInjectedWallets,
 } from "@/lib/starknet/walletStore";
@@ -56,8 +57,26 @@ function WalletState({
   const [resumeNonce, setResumeNonce] = useState(0);
 
   useEffect(() => {
+    let resumeTimer: number | null = null;
+
     const resume = () => {
-      setResumeNonce((value) => value + 1);
+      /*
+       * Ready X extension can invalidate the wallet object that
+       * initiated connect while the extension was still locked.
+       *
+       * Re-discover first, then retry restoration after the browser
+       * has returned from the extension unlock flow.
+       */
+      refreshInjectedWallets();
+
+      if (resumeTimer !== null) {
+        window.clearTimeout(resumeTimer);
+      }
+
+      resumeTimer = window.setTimeout(() => {
+        refreshInjectedWallets();
+        setResumeNonce((value) => value + 1);
+      }, 350);
     };
 
     const visibility = () => {
@@ -74,6 +93,10 @@ function WalletState({
       window.removeEventListener("focus", resume);
       window.removeEventListener("pageshow", resume);
       document.removeEventListener("visibilitychange", visibility);
+
+      if (resumeTimer !== null) {
+        window.clearTimeout(resumeTimer);
+      }
     };
   }, []);
 

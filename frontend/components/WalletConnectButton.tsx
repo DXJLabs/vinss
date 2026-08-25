@@ -1,6 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 const WalletConnectModal = dynamic(
   () =>
@@ -29,6 +34,98 @@ export function WalletConnectButton({
     connected,
   } = useWallet();
 
+  const connectedRef =
+    useRef(connected);
+
+  const connectAttemptedRef =
+    useRef(false);
+
+  const [walletUiNonce, setWalletUiNonce] =
+    useState(0);
+
+  useEffect(() => {
+    connectedRef.current = connected;
+
+    if (connected) {
+      connectAttemptedRef.current = false;
+    }
+  }, [connected]);
+
+  useEffect(() => {
+    let recoveryTimer: number | null = null;
+
+    const recoverAfterWalletUnlock = () => {
+      if (
+        !connectAttemptedRef.current ||
+        connectedRef.current
+      ) {
+        return;
+      }
+
+      refreshInjectedWallets();
+
+      if (recoveryTimer !== null) {
+        window.clearTimeout(recoveryTimer);
+      }
+
+      /*
+       * WalletProvider gets the first chance to silently recover.
+       * If it cannot, reset only the wallet modal so a second connect
+       * uses the freshly injected Ready X provider. No page reload.
+       */
+      recoveryTimer = window.setTimeout(() => {
+        refreshInjectedWallets();
+
+        if (!connectedRef.current) {
+          setWalletUiNonce(
+            (value) => value + 1,
+          );
+          connectAttemptedRef.current = false;
+        }
+      }, 900);
+    };
+
+    const visibility = () => {
+      if (
+        document.visibilityState === "visible"
+      ) {
+        recoverAfterWalletUnlock();
+      }
+    };
+
+    window.addEventListener(
+      "focus",
+      recoverAfterWalletUnlock,
+    );
+    window.addEventListener(
+      "pageshow",
+      recoverAfterWalletUnlock,
+    );
+    document.addEventListener(
+      "visibilitychange",
+      visibility,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "focus",
+        recoverAfterWalletUnlock,
+      );
+      window.removeEventListener(
+        "pageshow",
+        recoverAfterWalletUnlock,
+      );
+      document.removeEventListener(
+        "visibilitychange",
+        visibility,
+      );
+
+      if (recoveryTimer !== null) {
+        window.clearTimeout(recoveryTimer);
+      }
+    };
+  }, []);
+
   const capability = connected
     ? session?.strk20Capable
       ? "STRK20 · SUPPORTED"
@@ -41,11 +138,13 @@ export function WalletConnectButton({
       onFocusCapture={
         refreshInjectedWallets
       }
-      onPointerDown={
-        refreshInjectedWallets
-      }
+      onPointerDown={() => {
+        connectAttemptedRef.current = true;
+        refreshInjectedWallets();
+      }}
     >
       <WalletConnectModal
+        key={walletUiNonce}
         buttonClassName="
           border border-signal/60
           bg-signal/5
