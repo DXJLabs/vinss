@@ -12,7 +12,7 @@ contracts/src/escrow_rekber/
 └── vinss_escrow_rekber.cairo
 ```
 
-`VinssEscrowRekber` is the single supported ERC-20 custody contract. The removed legacy implementation allowed unilateral release; the canonical contract requires independent payer authorization and payee claim secrets.
+`VinssEscrowRekber` is the supported ERC-20 custody contract and requires independent payer authorization and payee claim secrets.
 
 ## Status
 
@@ -74,11 +74,11 @@ Release is valid only before `refund_after` and requires both parties' independe
 ]
 ```
 
-Commitments use the immutable domains:
+Commitments use the domains:
 
 ```text
-VINSS_RELEASE_AUTH_V2
-VINSS_PAYEE_CLAIM_V2
+VINSS_RELEASE_AUTH
+VINSS_PAYEE_CLAIM
 ```
 
 The full principal is returned to the wallet-created private output note.
@@ -96,7 +96,7 @@ Refund is valid at or after `refund_after` and requires the payer's refund preim
 ]
 ```
 
-The commitment domain is `VINSS_ESCROW_REFUND_V2`. A released or refunded custody cannot be consumed again.
+The commitment domain is `VINSS_ESCROW_REFUND`. A released or refunded custody cannot be consumed again.
 
 ## Public state
 

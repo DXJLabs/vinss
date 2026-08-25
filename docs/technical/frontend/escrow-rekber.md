@@ -14,7 +14,7 @@ frontend/lib/deal-room/settlement.ts
   custody, release, refund, proofs, and certificates
 ```
 
-There is no legacy custody fallback and no separate `V2` address. The only frontend contract variable is:
+The frontend uses one Rekber contract variable:
 
 ```text
 NEXT_PUBLIC_ESCROW_REKBER_ADDRESS

@@ -2,9 +2,9 @@ use core::poseidon::poseidon_hash_span;
 use starknet::ContractAddress;
 
 pub const CERTIFICATE_CLAIM_DOMAIN: felt252 =
-    'VINSS_CERT_CLAIM_V1';
+    'VINSS_CERT_CLAIM';
 pub const CERTIFICATE_TOKEN_DOMAIN: felt252 =
-    'VINSS_CERT_TOKEN_V1';
+    'VINSS_CERT_TOKEN';
 
 pub fn compute_certificate_claim_commitment(
     custody_commitment: felt252,

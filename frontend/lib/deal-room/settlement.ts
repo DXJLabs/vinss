@@ -10,7 +10,6 @@ import {
 } from "@/lib/privacy/envelope";
 import { VINSS_FEES } from "@/lib/fees";
 
-// Domain tags are immutable: changing them would invalidate saved secrets.
 const RELEASE_AUTH_DOMAIN =
   "VINSS_RELEASE_AUTH";
 const PAYEE_CLAIM_DOMAIN =
@@ -18,9 +17,9 @@ const PAYEE_CLAIM_DOMAIN =
 const REFUND_DOMAIN =
   "VINSS_ESCROW_REFUND";
 const CERTIFICATE_CLAIM_DOMAIN =
-  "VINSS_CERT_CLAIM_V1";
+  "VINSS_CERT_CLAIM";
 const CERTIFICATE_TOKEN_DOMAIN =
-  "VINSS_CERT_TOKEN_V1";
+  "VINSS_CERT_TOKEN";
 
 export type SettlementRole =
   | "payer"

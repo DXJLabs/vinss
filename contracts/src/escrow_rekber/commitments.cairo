@@ -1,6 +1,5 @@
 use core::poseidon::poseidon_hash_span;
 
-// Domain tags are immutable: changing them would invalidate saved secrets.
 pub const RELEASE_AUTH_DOMAIN: felt252 =
     'VINSS_RELEASE_AUTH';
 pub const PAYEE_CLAIM_DOMAIN: felt252 =
