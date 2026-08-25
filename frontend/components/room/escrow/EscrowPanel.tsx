@@ -65,6 +65,9 @@ import {
   humanizeError,
 } from "@/lib/errors/uiError";
 import {
+  VINSS_FEES,
+} from "@/lib/fees";
+import {
   EscrowAgreedAmount,
   EscrowPriceBreakdown,
 } from "@/components/room/escrow/EscrowPricing";
@@ -151,6 +154,44 @@ function formatDeadline(
   );
 }
 
+function formatRefundDuration(
+  totalSeconds: number,
+): string {
+  if (totalSeconds <= 0) {
+    return "Available now";
+  }
+
+  const days =
+    Math.floor(
+      totalSeconds / 86_400,
+    );
+
+  const hours =
+    Math.floor(
+      (totalSeconds % 86_400) /
+        3_600,
+    );
+
+  const minutes =
+    Math.floor(
+      (totalSeconds % 3_600) /
+        60,
+    );
+
+  const seconds =
+    totalSeconds % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
+}
+
 function hasCustody(
   action: EscrowActionPayload,
   custody: bigint | null,
@@ -177,6 +218,13 @@ export function EscrowPanel({
 }: EscrowPanelProps) {
   const [refundHours, setRefundHours] =
     useState("24");
+
+  const [refundClock, setRefundClock] =
+    useState(
+      Math.floor(
+        Date.now() / 1000,
+      ),
+    );
   const [custodyCommitment, setCustodyCommitment] =
     useState<bigint | null>(null);
   const [localSecrets, setLocalSecrets] =
@@ -424,10 +472,59 @@ export function EscrowPanel({
       custodyState?.refundAfter ??
       0,
   );
+  const refundRemainingSeconds =
+    refundAfter
+      ? Math.max(
+          0,
+          refundAfter -
+            refundClock,
+        )
+      : 0;
+
   const refundAvailable =
     Boolean(refundAfter) &&
-    Math.floor(Date.now() / 1000) >=
-      refundAfter;
+    refundRemainingSeconds === 0;
+
+  const refundCountdown =
+    refundAfter
+      ? formatRefundDuration(
+          refundRemainingSeconds,
+        )
+      : "—";
+
+  useEffect(() => {
+    if (
+      !refundAfter ||
+      custodyState?.consumed
+    ) {
+      return;
+    }
+
+    const tick = () => {
+      setRefundClock(
+        Math.floor(
+          Date.now() / 1000,
+        ),
+      );
+    };
+
+    tick();
+
+    const timer =
+      window.setInterval(
+        tick,
+        1000,
+      );
+
+    return () => {
+      window.clearInterval(
+        timer,
+      );
+    };
+  }, [
+    refundAfter,
+    custodyState?.consumed,
+  ]);
 
   useEffect(() => {
     if (
@@ -1987,7 +2084,7 @@ export function EscrowPanel({
                 feeBps={100}
               />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the 1% VINSS fee and locks it in the Escrow contract.
+                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the {VINSS_FEES.rekber.percent}% VINSS fee and locks it in the Escrow contract.
               </p>
               <button
                 type="button"
@@ -2293,6 +2390,50 @@ export function EscrowPanel({
           </details>
         )}
       </div>
+        {/* VINSS_REFUND_COUNTDOWN */}
+        {funded &&
+          !settled &&
+          refundAfter > 0 && (
+            <div className="mx-4 mb-4 rounded-xl border border-wire/60 bg-black/10 p-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[9px] font-medium uppercase tracking-[0.12em] text-paper/35">
+                    Refund protection
+                  </p>
+
+                  <p
+                    className={
+                      refundAvailable
+                        ? "mt-1 text-sm font-medium text-amber"
+                        : "mt-1 text-sm font-medium text-paper/75"
+                    }
+                  >
+                    {refundAvailable
+                      ? "Refund available now"
+                      : `${refundCountdown} remaining`}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                    Deadline
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-paper/45">
+                    {formatDeadline(
+                      refundAfter,
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-2 border-t border-wire/40 pt-2 text-[9px] leading-relaxed text-paper/30">
+                Release must complete before this deadline. After it passes,
+                the payer can recover unsettled funds.
+              </p>
+            </div>
+          )}
+
     </section>
   );
 }

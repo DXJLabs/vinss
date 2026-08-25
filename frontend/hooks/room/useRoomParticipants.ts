@@ -162,6 +162,68 @@ export function useRoomParticipants({
         RoomParticipant
       >();
 
+      const peerObservedAt =
+        new Map<
+          string,
+          {
+            at: number;
+            priority: number;
+          }
+        >();
+
+      const rememberPeer = (
+        address: string,
+        publicKey: string,
+        sentAt: string | undefined,
+        priority: number,
+      ) => {
+        const key =
+          canonicalStarknetAddress(
+            address,
+          );
+
+        const parsed =
+          Date.parse(sentAt ?? "");
+
+        const at =
+          Number.isFinite(parsed)
+            ? parsed
+            : 0;
+
+        const previous =
+          peerObservedAt.get(key);
+
+        if (
+          previous &&
+          (
+            previous.at > at ||
+            (
+              previous.at === at &&
+              previous.priority >
+                priority
+            )
+          )
+        ) {
+          return;
+        }
+
+        peerObservedAt.set(
+          key,
+          {
+            at,
+            priority,
+          },
+        );
+
+        peerMap.set(
+          key,
+          {
+            address,
+            publicKey,
+          },
+        );
+      };
+
       const ownAliases = new Set<string>();
 
       // Room-level encrypted participant announcements remove the old
@@ -185,15 +247,11 @@ export function useRoomParticipants({
           continue;
         }
 
-        peerMap.set(
-          canonicalStarknetAddress(
-            event.senderAddress,
-          ),
-          {
-            address: event.senderAddress,
-            publicKey:
-              event.messagingPublicKey,
-          },
+        rememberPeer(
+          event.senderAddress,
+          event.messagingPublicKey,
+          event.sentAt,
+          2,
         );
       }
 
@@ -220,13 +278,12 @@ export function useRoomParticipants({
           continue;
         }
 
-        const peerKey =
-          canonicalStarknetAddress(sender.address);
-
-        peerMap.set(peerKey, {
-          address: sender.address,
-          publicKey: sender.messagingPublicKey,
-        });
+        rememberPeer(
+          sender.address,
+          sender.messagingPublicKey,
+          item.message.sentAt,
+          1,
+        );
       }
 
       setParticipants((previous) => {

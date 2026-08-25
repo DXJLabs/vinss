@@ -179,10 +179,14 @@ export async function loadEncryptedLocalJson<T>(
       record,
     );
   } catch {
-    window.localStorage.removeItem(
-      storageKey,
-    );
-
+    /*
+     * A failed decrypt can be caused by a temporarily stale participant
+     * key while wallet/room state is rehydrating.
+     *
+     * Encrypted recovery data must never be destroyed merely because one
+     * read attempt used the wrong key. The caller can retry once the correct
+     * room or pairwise key is available.
+     */
     return null;
   }
 }

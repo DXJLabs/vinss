@@ -22,8 +22,107 @@ import {
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
-import type { AttachmentRef } from "@/types/deal-room";
+import type {
+  AttachmentRef,
+  DealType,
+  WorkEvidence,
+  WorkReviewDecision,
+} from "@/types/deal-room";
+import {
+  EncryptedAttachmentPreview,
+} from "@/components/room/conversation/EncryptedAttachmentPreview";
 import { VINSS_FEES } from "@/lib/fees";
+
+interface EvidenceUiCopy {
+  actionLabel: string;
+  submittedLabel: string;
+  composerTitle: string;
+  placeholder: string;
+  submitButton: string;
+  approveButton: string;
+  revisionButton: string;
+  rejectButton: string;
+}
+
+function evidenceUiForDealType(
+  dealType?: DealType,
+): EvidenceUiCopy {
+  switch (dealType) {
+    case "freelance":
+      return {
+        actionLabel: "Submit work",
+        submittedLabel: "Work submitted ✓",
+        composerTitle: "Submit work evidence",
+        placeholder:
+          "Describe what was completed, delivery note, link…",
+        submitButton: "Submit Work →",
+        approveButton: "Approve work",
+        revisionButton: "Request revision",
+        rejectButton: "Reject",
+      };
+
+    case "bounty":
+      return {
+        actionLabel: "Submit result",
+        submittedLabel: "Result submitted ✓",
+        composerTitle: "Submit bounty result",
+        placeholder:
+          "Describe the completed result and supporting evidence…",
+        submitButton: "Submit Result →",
+        approveButton: "Approve result",
+        revisionButton: "Request revision",
+        rejectButton: "Reject",
+      };
+
+    case "digital_goods":
+      return {
+        actionLabel: "Deliver files",
+        submittedLabel: "Delivery submitted ✓",
+        composerTitle: "Deliver digital goods",
+        placeholder:
+          "Describe the delivered files, keys, links, or notes…",
+        submitButton: "Deliver Files →",
+        approveButton: "Accept delivery",
+        revisionButton: "Request changes",
+        rejectButton: "Reject delivery",
+      };
+
+    case "goods":
+      return {
+        actionLabel: "Delivery proof",
+        submittedLabel: "Delivery evidence ✓",
+        composerTitle: "Submit delivery evidence",
+        placeholder:
+          "Add tracking, handover, receipt, or delivery details…",
+        submitButton: "Submit Evidence →",
+        approveButton: "Confirm received",
+        revisionButton: "Report issue",
+        rejectButton: "Reject delivery",
+      };
+
+    default:
+      return {
+        actionLabel: "Submit evidence",
+        submittedLabel: "Evidence submitted ✓",
+        composerTitle: "Submit deal evidence",
+        placeholder:
+          "Describe the delivery or evidence for this deal…",
+        submitButton: "Submit Evidence →",
+        approveButton: "Approve",
+        revisionButton: "Request changes",
+        rejectButton: "Reject",
+      };
+  }
+}
+
+function supportsDealEvidence(
+  dealType?: DealType,
+): boolean {
+  return (
+    dealType !== "otc" &&
+    dealType !== "nft"
+  );
+}
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -49,9 +148,17 @@ interface DirectConversationPanelProps {
   ) => Promise<Blob>;
   onSubmitWork: (input: {
     custodyCommitment: string;
+    dealType?: DealType;
     note: string;
     file?: File | null;
   }) => Promise<boolean>;
+  onReviewWork: (input: {
+    custodyCommitment: string;
+    submissionLocator: string;
+    decision: WorkReviewDecision;
+    note?: string;
+  }) => Promise<boolean>;
+  onOpenEscrowReview: () => void;
   onCreateOffer: () => void;
   onAddEscrow: () => void;
   onAcceptOffer: (
@@ -112,6 +219,8 @@ export function DirectConversationPanel({
   onSendAttachment,
   onLoadAttachment,
   onSubmitWork,
+  onReviewWork,
+  onOpenEscrowReview,
   onCreateOffer,
   onAddEscrow,
   onAcceptOffer,
@@ -287,7 +396,7 @@ export function DirectConversationPanel({
       .sort()
       .join("|");
 
-  const fundedFreelanceEntry =
+  const fundedDealEntry =
     (():
       | ConversationEntry
       | null => {
@@ -323,11 +432,7 @@ export function DirectConversationPanel({
               ),
           );
 
-        if (
-          termsEntry
-            ?.offerAction
-            ?.dealType !== "freelance"
-        ) {
+        if (!termsEntry?.offerAction) {
           continue;
         }
 
@@ -350,18 +455,79 @@ export function DirectConversationPanel({
       return null;
     })();
 
-  // Current freelance flow: the wallet that starts Rekber is the payer.
-  // The counterparty becomes the work submitter after funding is confirmed.
-  const canSubmitWork =
-    Boolean(
-      fundedFreelanceEntry,
-    ) &&
-    !sameStarknetAddress(
-      fundedFreelanceEntry
-        ?.offerAction
-        ?.senderAddress,
+  const activeDealType =
+    fundedDealEntry
+      ?.offerAction
+      ?.dealType;
+
+  const evidenceUi =
+    evidenceUiForDealType(
+      activeDealType,
+    );
+
+  const currentPayerAddress =
+    fundedDealEntry
+      ?.offerAction
+      ?.senderAddress;
+
+  const currentCustody =
+    fundedDealEntry
+      ?.offerAction
+      ?.custodyCommitment;
+
+  const isCurrentPayer =
+    sameStarknetAddress(
+      currentPayerAddress,
       walletAddress,
     );
+
+  const canSubmitWork =
+    Boolean(
+      fundedDealEntry &&
+      supportsDealEvidence(
+        activeDealType,
+      ),
+    ) &&
+    !isCurrentPayer;
+
+  const canReviewWork =
+    Boolean(
+      fundedDealEntry &&
+      supportsDealEvidence(
+        activeDealType,
+      ),
+    ) &&
+    isCurrentPayer;
+
+  const latestReviewBySubmission =
+    new Map<
+      string,
+      Extract<
+        WorkEvidence,
+        {
+          type: "work_review";
+        }
+      >
+    >();
+
+  for (const item of pairEntries) {
+    const review =
+      item.workEvidence;
+
+    if (
+      review?.type !==
+      "work_review"
+    ) {
+      continue;
+    }
+
+    latestReviewBySubmission.set(
+      normalizeLocator(
+        review.submissionLocator,
+      ),
+      review,
+    );
+  }
 
   useEffect(() => {
     if (!preparedCustodyFingerprint) {
@@ -643,6 +809,52 @@ export function DirectConversationPanel({
                     entry.actionLocator
                   ];
 
+                const entryUi =
+                  evidenceUiForDealType(
+                    evidence.dealType ??
+                      activeDealType,
+                  );
+
+                const review =
+                  latestReviewBySubmission.get(
+                    normalizeLocator(
+                      entry.actionLocator,
+                    ),
+                  );
+
+                const matchesCurrentCustody =
+                  canonicalCustodyKey(
+                    evidence
+                      .custodyCommitment,
+                  ) ===
+                  canonicalCustodyKey(
+                    currentCustody,
+                  );
+
+                const submitReview =
+                  async (
+                    decision:
+                      WorkReviewDecision,
+                  ) => {
+                    const sent =
+                      await onReviewWork({
+                        custodyCommitment:
+                          evidence
+                            .custodyCommitment,
+                        submissionLocator:
+                          entry.actionLocator,
+                        decision,
+                      });
+
+                    if (
+                      sent &&
+                      decision ===
+                        "approved"
+                    ) {
+                      onOpenEscrowReview();
+                    }
+                  };
+
                 return (
                   <li
                     key={`work:${entry.actionLocator}`}
@@ -655,7 +867,7 @@ export function DirectConversationPanel({
                     <div className="w-[88%] max-w-sm border border-amber-400/30 bg-amber-400/[0.04] p-4">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-display text-[9px] uppercase tracking-[0.14em] text-amber-300">
-                          Work submitted ✓
+                          {entryUi.submittedLabel}
                         </span>
 
                         <span className="text-[9px] text-paper/25">
@@ -671,7 +883,21 @@ export function DirectConversationPanel({
                         </p>
                       )}
 
-                      {evidence.fileName && (
+                      {entry.attachment && (
+                        <div className="mt-3">
+                          <EncryptedAttachmentPreview
+                            attachment={
+                              entry.attachment
+                            }
+                            onLoad={
+                              onLoadAttachment
+                            }
+                          />
+                        </div>
+                      )}
+
+                      {!entry.attachment &&
+                        evidence.fileName && (
                         <div className="mt-3 border border-wire bg-black/10 p-3">
                           <p className="break-all text-xs text-paper/65">
                             {evidence.fileName}
@@ -751,6 +977,80 @@ export function DirectConversationPanel({
                           )}
                         </div>
                       )}
+
+                      {review && (
+                        <div className="mt-3 border border-wire bg-black/10 px-3 py-2.5">
+                          <p className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/35">
+                            Review
+                          </p>
+
+                          <p
+                            className={
+                              review.decision ===
+                              "approved"
+                                ? "mt-1 text-[11px] text-signal"
+                                : review.decision ===
+                                    "revision_requested"
+                                  ? "mt-1 text-[11px] text-amber-300"
+                                  : "mt-1 text-[11px] text-danger"
+                            }
+                          >
+                            {review.decision ===
+                            "approved"
+                              ? "Approved ✓"
+                              : review.decision ===
+                                  "revision_requested"
+                                ? "Revision requested"
+                                : "Rejected"}
+                          </p>
+                        </div>
+                      )}
+
+                      {!ownWork &&
+                        canReviewWork &&
+                        matchesCurrentCustody &&
+                        !review && (
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void submitReview(
+                                  "revision_requested",
+                                )
+                              }
+                              className="border border-amber-400/25 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-amber-300 disabled:opacity-30"
+                            >
+                              {entryUi.revisionButton}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void submitReview(
+                                  "rejected",
+                                )
+                              }
+                              className="border border-danger/30 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-danger disabled:opacity-30"
+                            >
+                              {entryUi.rejectButton}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void submitReview(
+                                  "approved",
+                                )
+                              }
+                              className="col-span-2 border border-signal/35 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+                            >
+                              {entryUi.approveButton}
+                            </button>
+                          </div>
+                        )}
 
                       <div className="mt-3 flex items-center justify-between border-t border-wire/60 pt-3">
                         <span className="text-[9px] text-paper/30">
@@ -914,6 +1214,9 @@ export function DirectConversationPanel({
                 )
             : undefined
         }
+        submitEvidenceLabel={
+          evidenceUi.actionLabel
+        }
       />
 
       <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
@@ -948,13 +1251,13 @@ export function DirectConversationPanel({
         />
         {showWorkComposer &&
           canSubmitWork &&
-          fundedFreelanceEntry
+          fundedDealEntry
             ?.offerAction
             ?.custodyCommitment && (
           <div className="mb-2 border border-signal/25 bg-signal/[0.025] p-3">
             <div className="flex items-center justify-between gap-3">
               <span className="font-display text-[9px] uppercase tracking-widest text-signal">
-                Submit work evidence
+                {evidenceUi.composerTitle}
               </span>
 
               <button
@@ -979,7 +1282,9 @@ export function DirectConversationPanel({
                   event.target.value,
                 )
               }
-              placeholder="Describe what was completed, link, delivery note…"
+              placeholder={
+                evidenceUi.placeholder
+              }
               rows={3}
               disabled={busy}
               className="mt-3 w-full resize-none border border-wire bg-transparent px-3 py-2 text-xs text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
@@ -1012,7 +1317,7 @@ export function DirectConversationPanel({
 
             {workFile && (
               <p className="mt-1 text-[9px] text-paper/25">
-                File stays on this device. VINSS records only its encrypted fingerprint.
+                File is encrypted before upload and can be opened only by the two deal participants.
               </p>
             )}
 
@@ -1027,9 +1332,11 @@ export function DirectConversationPanel({
                 const submitted =
                   await onSubmitWork({
                     custodyCommitment:
-                      fundedFreelanceEntry
+                      fundedDealEntry
                         .offerAction!
                         .custodyCommitment!,
+                    dealType:
+                      activeDealType,
                     note:
                       workNote,
                     file:
@@ -1050,7 +1357,7 @@ export function DirectConversationPanel({
             >
               {busy
                 ? "Waiting for Ready X…"
-                : "Submit Work →"}
+                : evidenceUi.submitButton}
             </button>
           </div>
         )}

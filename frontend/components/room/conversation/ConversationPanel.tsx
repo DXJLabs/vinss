@@ -25,7 +25,11 @@ import type {
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
-import type { AttachmentRef } from "@/types/deal-room";
+import type {
+  AttachmentRef,
+  DealType,
+  WorkReviewDecision,
+} from "@/types/deal-room";
 
 export type {
   ConversationEntry,
@@ -71,9 +75,17 @@ interface ConversationPanelProps {
   ) => Promise<Blob>;
   onSubmitWork: (input: {
     custodyCommitment: string;
+    dealType?: DealType;
     note: string;
     file?: File | null;
   }) => Promise<boolean>;
+  onReviewWork: (input: {
+    custodyCommitment: string;
+    submissionLocator: string;
+    decision: WorkReviewDecision;
+    note?: string;
+  }) => Promise<boolean>;
+  onOpenEscrowReview: () => void;
   onCreateOffer: () => void;
   onAddEscrow: () => void;
   onRefresh:
@@ -119,6 +131,8 @@ export function ConversationPanel({
   onSendAttachment,
   onLoadAttachment,
   onSubmitWork,
+  onReviewWork,
+  onOpenEscrowReview,
   onCreateOffer,
   onAddEscrow,
   onRefresh,
@@ -272,6 +286,12 @@ export function ConversationPanel({
           }
           onSubmitWork={
             onSubmitWork
+          }
+          onReviewWork={
+            onReviewWork
+          }
+          onOpenEscrowReview={
+            onOpenEscrowReview
           }
           onCreateOffer={
             onCreateOffer

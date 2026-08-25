@@ -33,47 +33,6 @@ export interface AttachmentRef {
   sha256: string;
 }
 
-export interface WorkEvidence {
-  type: "work_submission";
-
-  // Links this submission to the funded Rekber without exposing it outside
-  // the encrypted Message payload.
-  custodyCommitment: string;
-
-  note: string;
-
-  // File bytes stay on user devices. Only the fingerprint and metadata are
-  // encrypted into the on-chain message ciphertext.
-  fileName?: string;
-  fileType?: string;
-  fileSize?: number;
-  fileSha256?: string;
-}
-
-export interface MessagePayload {
-  kind: MessageKind;
-  scope?: MessageScope;
-  body: string;
-
-  /**
-   * Encrypted application metadata.
-   * None of these fields are exposed by MessageHelper V2.
-   */
-  senderIdentity?: MessageSenderIdentity;
-  recipientAddress?: string;
-
-  // Group id is encrypted with the payload. The public helper still sees only
-  // opaque routing tags and ciphertext.
-  groupId?: string;
-
-  attachmentUri?: string;
-  attachment?: AttachmentRef;
-  workEvidence?: WorkEvidence;
-  sentAt: string; // ISO timestamp, part of the encrypted payload by choice —
-  // block timestamp is already public, but an app-level timestamp lets the
-  // UI show "sent at" without depending on indexer latency.
-}
-
 export type DealType =
   | "otc"
   | "freelance"
@@ -82,6 +41,65 @@ export type DealType =
   | "bounty"
   | "nft"
   | "other";
+
+export type WorkReviewDecision =
+  | "approved"
+  | "revision_requested"
+  | "rejected";
+
+export interface WorkSubmissionEvidence {
+  type: "work_submission";
+
+  // Links this private evidence to one funded Rekber custody.
+  custodyCommitment: string;
+  dealType?: DealType;
+  note: string;
+
+  // Metadata is encrypted inside the Message payload.
+  // Actual file bytes are separately encrypted and referenced by AttachmentRef.
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileSha256?: string;
+}
+
+export interface WorkReviewEvidence {
+  type: "work_review";
+  custodyCommitment: string;
+
+  // Immutable message locator of the exact submission being reviewed.
+  submissionLocator: string;
+
+  decision: WorkReviewDecision;
+  note?: string;
+}
+
+export type WorkEvidence =
+  | WorkSubmissionEvidence
+  | WorkReviewEvidence;
+
+export interface MessagePayload {
+  kind: MessageKind;
+  scope?: MessageScope;
+  body: string;
+
+  /**
+   * Encrypted application metadata.
+   * None of these fields are exposed by MessageHelper.
+   */
+  senderIdentity?: MessageSenderIdentity;
+  recipientAddress?: string;
+
+  // Group id remains inside encrypted payload.
+  groupId?: string;
+
+  attachmentUri?: string;
+  attachment?: AttachmentRef;
+  workEvidence?: WorkEvidence;
+
+  // ISO timestamp lives inside encrypted payload.
+  sentAt: string;
+}
 
 export type OfferActionKind =
   | "create"

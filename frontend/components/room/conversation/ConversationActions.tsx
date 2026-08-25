@@ -9,6 +9,7 @@ interface ConversationActionsProps {
   onAddOffer?: () => void;
   onAddEscrow?: () => void;
   onSubmitWork?: () => void;
+  submitEvidenceLabel?: string;
 }
 
 export function ConversationActions({
@@ -18,6 +19,7 @@ export function ConversationActions({
   onAddOffer,
   onAddEscrow,
   onSubmitWork,
+  submitEvidenceLabel = "Submit evidence",
 }: ConversationActionsProps) {
   const [open, setOpen] =
     useState(false);
@@ -80,7 +82,9 @@ export function ConversationActions({
                 <span className="text-signal/55">
                   📎
                 </span>
-                <span>Submit work</span>
+                <span>
+                  {submitEvidenceLabel}
+                </span>
               </button>
             )}
 

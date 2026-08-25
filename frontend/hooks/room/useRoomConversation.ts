@@ -246,6 +246,8 @@ export function useRoomConversation({
       direct.loadDirectAttachment,
     sendDirectWorkSubmission:
       direct.sendDirectWorkSubmission,
+    sendDirectWorkReview:
+      direct.sendDirectWorkReview,
     handleRefresh,
   };
 }

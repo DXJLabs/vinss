@@ -27,7 +27,13 @@ import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
-import type { AttachmentRef, MessagePayload, WorkEvidence } from "@/types/deal-room";
+import type {
+  AttachmentRef,
+  DealType,
+  MessagePayload,
+  WorkEvidence,
+  WorkReviewDecision,
+} from "@/types/deal-room";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { humanizeError } from "@/lib/errors/uiError";
 import {
@@ -68,8 +74,15 @@ interface UseDirectConversationResult {
   ) => Promise<Blob>;
   sendDirectWorkSubmission: (input: {
     custodyCommitment: string;
+    dealType?: DealType;
     note: string;
     file?: File | null;
+  }) => Promise<boolean>;
+  sendDirectWorkReview: (input: {
+    custodyCommitment: string;
+    submissionLocator: string;
+    decision: WorkReviewDecision;
+    note?: string;
   }) => Promise<boolean>;
   refreshDirect: (silent?: boolean) => Promise<void>;
 }
@@ -153,10 +166,15 @@ export function useDirectConversation({
   const chatEndRef =
     useRef<HTMLDivElement | null>(null);
 
-  // Prevent network discovery from replacing a fuller encrypted local
-  // history while the cache is still being decrypted after a reload.
-  const historyHydratedRef =
-    useRef(false);
+  /*
+   * Serialize encrypted history writes. Multiple discovery/send callbacks
+   * can finish out of order on mobile; every write must merge with the
+   * latest persisted snapshot instead of replacing it.
+   */
+  const historyWriteChainRef =
+    useRef<Promise<void>>(
+      Promise.resolve(),
+    );
 
   const peerKey = peerAddress
     ? canonicalStarknetAddress(peerAddress)
@@ -404,11 +422,7 @@ export function useDirectConversation({
             new Date(right.sentAt).getTime(),
         );
 
-        // During reload, encrypted local history may still be decrypting.
-        // Do not let a partial discovery result overwrite that fuller cache.
-        if (historyHydratedRef.current) {
-          void persistHistory(next);
-        }
+        void persistHistory(next);
 
         return next;
       });
@@ -453,32 +467,139 @@ export function useDirectConversation({
     );
   }
 
-  function historyStorageKey(): string | null {
-    if (!roomId || !session || !selectedPeer) {
+  function historyStorageKey():
+    string | null {
+    if (
+      !roomId ||
+      !session ||
+      !selectedPeer
+    ) {
+      return null;
+    }
+
+    return (
+      `vinss:direct-history:v2:${roomId}:` +
+      `${canonicalStarknetAddress(
+        session.account.address,
+      )}:` +
+      canonicalStarknetAddress(
+        selectedPeer.address,
+      )
+    );
+  }
+
+  function legacyHistoryStorageKey():
+    string | null {
+    if (
+      !roomId ||
+      !session ||
+      !selectedPeer
+    ) {
       return null;
     }
 
     return (
       `vinss:direct-history:v1:${roomId}:` +
-      `${canonicalStarknetAddress(session.account.address)}:` +
-      canonicalStarknetAddress(selectedPeer.address)
+      `${canonicalStarknetAddress(
+        session.account.address,
+      )}:` +
+      canonicalStarknetAddress(
+        selectedPeer.address,
+      )
     );
   }
 
   async function persistHistory(
     nextEntries: ConversationEntry[],
   ): Promise<void> {
-    const storageKey = historyStorageKey();
-    if (!storageKey) return;
+    const storageKey =
+      historyStorageKey();
 
-    const directKey = await resolveDirectKey();
-    if (!directKey) return;
+    const historyKey =
+      channelKey;
 
-    await saveEncryptedLocalJson(storageKey, directKey, {
-      version: 1,
-      savedAt: Date.now(),
-      entries: nextEntries,
-    });
+    if (
+      !storageKey ||
+      !historyKey
+    ) {
+      return;
+    }
+
+    /*
+     * Capture key + storage key now. The selected peer can change before
+     * an earlier queued encryption finishes.
+     */
+    historyWriteChainRef.current =
+      historyWriteChainRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const cached =
+            await loadEncryptedLocalJson<{
+              version: 1;
+              savedAt: number;
+              entries:
+                ConversationEntry[];
+            }>(
+              storageKey,
+              historyKey,
+            );
+
+          const byLocator =
+            new Map<
+              string,
+              ConversationEntry
+            >();
+
+          for (const entry of [
+            ...(cached?.entries ?? []),
+            ...nextEntries,
+          ]) {
+            const locator =
+              entry.actionLocator
+                .replace(/^0x/, "")
+                .toLowerCase();
+
+            const existing =
+              byLocator.get(locator);
+
+            byLocator.set(
+              locator,
+              {
+                ...existing,
+                ...entry,
+                readAt:
+                  entry.readAt ??
+                  existing?.readAt,
+              },
+            );
+          }
+
+          const merged =
+            [...byLocator.values()]
+              .sort(
+                (left, right) =>
+                  new Date(
+                    left.sentAt,
+                  ).getTime() -
+                  new Date(
+                    right.sentAt,
+                  ).getTime(),
+              );
+
+          await saveEncryptedLocalJson(
+            storageKey,
+            historyKey,
+            {
+              version: 1,
+              savedAt:
+                Date.now(),
+              entries:
+                merged,
+            },
+          );
+        });
+
+    await historyWriteChainRef.current;
   }
 
   async function sendDirectMessage():
@@ -1092,6 +1213,7 @@ export function useDirectConversation({
   async function sendDirectWorkSubmission(
     input: {
       custodyCommitment: string;
+      dealType?: DealType;
       note: string;
       file?: File | null;
     },
@@ -1106,15 +1228,12 @@ export function useDirectConversation({
       return false;
     }
 
-    const note =
-      input.note.trim();
-
-    const file =
-      input.file ?? null;
+    const note = input.note.trim();
+    const file = input.file ?? null;
 
     if (!note && !file) {
       setError(
-        "Add a work note or select a file first.",
+        "Add a delivery note or select an evidence file first.",
       );
       return false;
     }
@@ -1143,26 +1262,319 @@ export function useDirectConversation({
       return false;
     }
 
+    let attachment:
+      AttachmentRef | undefined;
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      if (file) {
+        attachment =
+          await uploadDirectAttachment(
+            BACKEND_URL,
+            directKey,
+            file,
+          );
+      }
+
+      const evidence:
+        WorkEvidence = {
+          type: "work_submission",
+          custodyCommitment,
+          dealType: input.dealType,
+          note,
+          ...(attachment
+            ? {
+                fileName:
+                  attachment.fileName,
+                fileType:
+                  attachment.mimeType,
+                fileSize:
+                  attachment.size,
+                fileSha256:
+                  attachment.sha256,
+              }
+            : {}),
+        };
+
+      const sentAt =
+        new Date().toISOString();
+
+      const route:
+        MessageRoute = {
+          recipientIdentity:
+            selectedPeer.address,
+          encryptionKey:
+            directKey,
+          routingKey:
+            directKey,
+        };
+
+      const body =
+        note ||
+        attachment?.fileName ||
+        "Evidence submitted";
+
+      const payload:
+        MessagePayload = {
+          kind: attachment
+            ? "attachment_ref"
+            : "system_note",
+          scope: "direct",
+          body,
+          senderIdentity: {
+            address:
+              session.account.address,
+            messagingPublicKey:
+              messagingIdentity.publicKey,
+          },
+          recipientAddress:
+            selectedPeer.address,
+          attachment,
+          workEvidence:
+            evidence,
+          sentAt,
+        };
+
+      let preparedLocator:
+        string | null = null;
+
+      try {
+        const sendPromise =
+          sendMessage(
+            session.account,
+            channelKey,
+            payload,
+            route,
+            (prepared) => {
+              preparedLocator =
+                prepared.actionLocator
+                  .toString(16);
+
+              setEntries(
+                (previous) => {
+                  const next:
+                    ConversationEntry[] = [
+                      ...previous.filter(
+                        (entry) =>
+                          entry.actionLocator !==
+                          preparedLocator,
+                      ),
+                      {
+                        id:
+                          `direct:${preparedLocator}`,
+                        kind:
+                          "message",
+                        summary:
+                          body,
+                        transactionHash:
+                          "",
+                        actionLocator:
+                          preparedLocator!,
+                        sentAt,
+                        scope:
+                          "direct",
+                        senderAddress:
+                          session.account.address,
+                        recipientAddress:
+                          selectedPeer.address,
+                        workEvidence:
+                          evidence,
+                        attachment,
+                      },
+                    ];
+
+                  void persistHistory(
+                    next,
+                  );
+
+                  return next;
+                },
+              );
+            },
+          );
+
+        const result =
+          await Promise.race([
+            sendPromise,
+            new Promise<never>(
+              (_, reject) => {
+                window.setTimeout(
+                  () =>
+                    reject(
+                      new Error(
+                        "VINSS_WORK_CALLBACK_TIMEOUT",
+                      ),
+                    ),
+                  25_000,
+                );
+              },
+            ),
+          ]);
+
+        const confirmedLocator =
+          result.actionLocator
+            .toString(16);
+
+        setEntries(
+          (previous) => {
+            const next =
+              previous.map(
+                (entry) =>
+                  entry.actionLocator ===
+                  confirmedLocator
+                    ? {
+                        ...entry,
+                        transactionHash:
+                          result.transactionHash,
+                      }
+                    : entry,
+              );
+
+            void persistHistory(next);
+            return next;
+          },
+        );
+
+        void refreshDirect(true);
+
+        return true;
+      } catch (err) {
+        const raw =
+          err instanceof Error
+            ? err.message
+            : String(err);
+
+        const definitelyFailed =
+          /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
+            raw,
+          );
+
+        if (definitelyFailed) {
+          if (preparedLocator) {
+            setEntries(
+              (previous) =>
+                previous.filter(
+                  (entry) =>
+                    entry.actionLocator !==
+                    preparedLocator,
+                ),
+            );
+          }
+
+          setError(
+            humanizeError(
+              err,
+              "Evidence submission could not be sent.",
+            ),
+          );
+
+          return false;
+        }
+
+        if (preparedLocator) {
+          console.warn(
+            "[VINSS EVIDENCE CALLBACK DELAYED]",
+            {
+              actionLocator:
+                preparedLocator,
+            },
+          );
+
+          setError(null);
+          void refreshDirect(true);
+
+          return true;
+        }
+
+        setError(
+          humanizeError(
+            err,
+            "Evidence submission could not be sent.",
+          ),
+        );
+
+        return false;
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendDirectWorkReview(
+    input: {
+      custodyCommitment: string;
+      submissionLocator: string;
+      decision: WorkReviewDecision;
+      note?: string;
+    },
+  ): Promise<boolean> {
+    if (
+      !roomId ||
+      !session ||
+      !channelKey ||
+      !messagingIdentity ||
+      !selectedPeer
+    ) {
+      return false;
+    }
+
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      setError(
+        "This private chat is not ready yet.",
+      );
+      return false;
+    }
+
+    let custodyCommitment: string;
+
+    try {
+      custodyCommitment =
+        `0x${BigInt(
+          input.custodyCommitment,
+        ).toString(16)}`;
+    } catch {
+      setError(
+        "The Rekber custody reference is invalid.",
+      );
+      return false;
+    }
+
+    const submissionLocator =
+      input.submissionLocator
+        .replace(/^0x/, "")
+        .toLowerCase();
+
+    if (!submissionLocator) {
+      setError(
+        "The evidence reference is missing.",
+      );
+      return false;
+    }
+
+    const label =
+      input.decision === "approved"
+        ? "Evidence approved"
+        : input.decision ===
+            "revision_requested"
+          ? "Revision requested"
+          : "Evidence rejected";
+
     const evidence:
       WorkEvidence = {
-        type: "work_submission",
+        type: "work_review",
         custodyCommitment,
-        note,
+        submissionLocator,
+        decision:
+          input.decision,
+        note:
+          input.note?.trim() ||
+          undefined,
       };
-
-    if (file) {
-      evidence.fileName =
-        file.name;
-      evidence.fileType =
-        file.type ||
-        "application/octet-stream";
-      evidence.fileSize =
-        file.size;
-      evidence.fileSha256 =
-        await sha256FileHex(
-          file,
-        );
-    }
 
     const sentAt =
       new Date().toISOString();
@@ -1179,13 +1591,12 @@ export function useDirectConversation({
 
     const payload:
       MessagePayload = {
-        kind: file
-          ? "attachment_ref"
-          : "system_note",
+        kind: "system_note",
         scope: "direct",
         body:
-          note ||
-          "Work submitted",
+          input.note?.trim()
+            ? `${label}: ${input.note.trim()}`
+            : label,
         senderIdentity: {
           address:
             session.account.address,
@@ -1232,8 +1643,7 @@ export function useDirectConversation({
                       kind:
                         "message",
                       summary:
-                        note ||
-                        "Work submitted",
+                        payload.body,
                       transactionHash:
                         "",
                       actionLocator:
@@ -1269,7 +1679,7 @@ export function useDirectConversation({
                 () =>
                   reject(
                     new Error(
-                      "VINSS_WORK_CALLBACK_TIMEOUT",
+                      "VINSS_WORK_REVIEW_CALLBACK_TIMEOUT",
                     ),
                   ),
                 25_000,
@@ -1283,18 +1693,23 @@ export function useDirectConversation({
           .toString(16);
 
       setEntries(
-        (previous) =>
-          previous.map(
-            (entry) =>
-              entry.actionLocator ===
-              confirmedLocator
-                ? {
-                    ...entry,
-                    transactionHash:
-                      result.transactionHash,
-                  }
-                : entry,
-          ),
+        (previous) => {
+          const next =
+            previous.map(
+              (entry) =>
+                entry.actionLocator ===
+                confirmedLocator
+                  ? {
+                      ...entry,
+                      transactionHash:
+                        result.transactionHash,
+                    }
+                  : entry,
+            );
+
+          void persistHistory(next);
+          return next;
+        },
       );
 
       void refreshDirect(true);
@@ -1311,12 +1726,8 @@ export function useDirectConversation({
           raw,
         );
 
-      if (
-        definitelyFailed
-      ) {
-        if (
-          preparedLocator
-        ) {
+      if (definitelyFailed) {
+        if (preparedLocator) {
           setEntries(
             (previous) =>
               previous.filter(
@@ -1330,36 +1741,23 @@ export function useDirectConversation({
         setError(
           humanizeError(
             err,
-            "Work submission could not be sent.",
+            "Evidence review could not be sent.",
           ),
         );
 
         return false;
       }
 
-      // Ready X can lose the browser callback after the encrypted message
-      // transaction is already submitted. Discovery reconciles the locator.
-      if (
-        preparedLocator
-      ) {
-        console.warn(
-          "[VINSS WORK SUBMISSION CALLBACK DELAYED]",
-          {
-            actionLocator:
-              preparedLocator,
-          },
-        );
-
+      if (preparedLocator) {
         setError(null);
         void refreshDirect(true);
-
         return true;
       }
 
       setError(
         humanizeError(
           err,
-          "Work submission could not be sent.",
+          "Evidence review could not be sent.",
         ),
       );
 
@@ -1564,86 +1962,141 @@ export function useDirectConversation({
     entries,
   ]);
 
-  // Hydrate encrypted local history before allowing discovery to persist.
-  // Cache and network state are complementary: discovery must enrich history,
-  // never replace messages already decrypted on this device.
+  /*
+   * Direct history v2 is encrypted with the stable room channel key.
+   *
+   * v1 used the current ECDH direct key, so a participant identity change
+   * could make that cache unreadable. Keep v1 as a best-effort migration
+   * source without ever deleting it after a failed decrypt.
+   */
   useEffect(() => {
     if (
       !active ||
       !roomId ||
       !session ||
+      !channelKey ||
       !selectedPeer ||
       !messagingIdentity
     ) {
       return;
     }
 
-    historyHydratedRef.current = false;
-
     let cancelled = false;
 
     const hydrate = async () => {
-      const storageKey = historyStorageKey();
+      const stableStorageKey =
+        historyStorageKey();
 
-      if (!storageKey) {
-        historyHydratedRef.current = true;
+      if (!stableStorageKey) {
         return;
       }
 
-      const directKey = await resolveDirectKey();
+      const stable =
+        await loadEncryptedLocalJson<{
+          version: 1;
+          savedAt: number;
+          entries:
+            ConversationEntry[];
+        }>(
+          stableStorageKey,
+          channelKey,
+        );
 
-      if (!directKey || cancelled) {
-        if (!cancelled) {
-          historyHydratedRef.current = true;
-        }
+      if (cancelled) {
         return;
       }
 
-      const cached = await loadEncryptedLocalJson<{
-        version: 1;
-        savedAt: number;
-        entries: ConversationEntry[];
-      }>(storageKey, directKey);
+      let legacyEntries:
+        ConversationEntry[] = [];
 
-      if (cancelled) return;
+      const legacyStorageKey =
+        legacyHistoryStorageKey();
 
-      if (cached?.entries?.length) {
-        setEntries((previous) => {
-          const byLocator =
-            new Map<string, ConversationEntry>();
+      const directKey =
+        await resolveDirectKey();
 
-          // Cache first, then current/discovered state so confirmed network
-          // metadata can enrich the cached entry without dropping history.
-          for (const entry of [
-            ...cached.entries,
-            ...previous,
-          ]) {
-            const locator =
-              entry.actionLocator
-                .replace(/^0x/, "")
-                .toLowerCase();
+      if (
+        legacyStorageKey &&
+        directKey &&
+        !cancelled
+      ) {
+        const legacy =
+          await loadEncryptedLocalJson<{
+            version: 1;
+            savedAt: number;
+            entries:
+              ConversationEntry[];
+          }>(
+            legacyStorageKey,
+            directKey,
+          );
 
-            const existing =
-              byLocator.get(locator);
+        legacyEntries =
+          legacy?.entries ?? [];
+      }
 
-            byLocator.set(locator, {
+      if (cancelled) {
+        return;
+      }
+
+      const cachedEntries = [
+        ...legacyEntries,
+        ...(stable?.entries ?? []),
+      ];
+
+      if (
+        cachedEntries.length === 0
+      ) {
+        return;
+      }
+
+      setEntries((previous) => {
+        const byLocator =
+          new Map<
+            string,
+            ConversationEntry
+          >();
+
+        for (const entry of [
+          ...cachedEntries,
+          ...previous,
+        ]) {
+          const locator =
+            entry.actionLocator
+              .replace(/^0x/, "")
+              .toLowerCase();
+
+          const existing =
+            byLocator.get(locator);
+
+          byLocator.set(
+            locator,
+            {
               ...existing,
               ...entry,
               readAt:
                 entry.readAt ??
                 existing?.readAt,
-            });
-          }
-
-          return [...byLocator.values()].sort(
-            (left, right) =>
-              new Date(left.sentAt).getTime() -
-              new Date(right.sentAt).getTime(),
+            },
           );
-        });
-      }
+        }
 
-      historyHydratedRef.current = true;
+        const next =
+          [...byLocator.values()]
+            .sort(
+              (left, right) =>
+                new Date(
+                  left.sentAt,
+                ).getTime() -
+                new Date(
+                  right.sentAt,
+                ).getTime(),
+            );
+
+        void persistHistory(next);
+
+        return next;
+      });
     };
 
     void hydrate().catch((err) => {
@@ -1651,10 +2104,6 @@ export function useDirectConversation({
         "[VINSS DIRECT HISTORY HYDRATE ERROR]",
         err,
       );
-
-      if (!cancelled) {
-        historyHydratedRef.current = true;
-      }
     });
 
     return () => {
@@ -1663,6 +2112,7 @@ export function useDirectConversation({
   }, [
     active,
     roomId,
+    channelKey,
     session?.account.address,
     peerKey,
     selectedPeer?.publicKey,
@@ -2105,6 +2555,7 @@ export function useDirectConversation({
     sendDirectAttachment,
     loadDirectAttachment,
     sendDirectWorkSubmission,
+    sendDirectWorkReview,
     refreshDirect,
   };
 }

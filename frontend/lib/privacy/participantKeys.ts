@@ -25,6 +25,17 @@ interface StoredIdentity {
   privateKey: CryptoKey;
 }
 
+/*
+ * Several room hooks request the same wallet identity during one mount.
+ * Share one in-flight request so they cannot generate independent ECDH
+ * identities for the same room + wallet.
+ */
+const identityRequests =
+  new Map<
+    string,
+    Promise<MessagingIdentity>
+  >();
+
 /**
  * Normalize Starknet addresses numerically instead of only lower-casing text.
  *
@@ -146,19 +157,66 @@ async function readAllIdentities(): Promise<
   });
 }
 
-async function writeIdentity(
+async function writeIdentityIfAbsent(
   identity: StoredIdentity,
-): Promise<void> {
+): Promise<boolean> {
   const db = await openDb();
 
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
+  return new Promise(
+    (resolve, reject) => {
+      const tx = db.transaction(
+        STORE_NAME,
+        "readwrite",
+      );
 
-    tx.objectStore(STORE_NAME).put(identity);
+      const request =
+        tx
+          .objectStore(STORE_NAME)
+          .add(identity);
 
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+      let inserted = false;
+      let conflict = false;
+
+      request.onsuccess = () => {
+        inserted = true;
+      };
+
+      request.onerror = (event) => {
+        if (
+          request.error?.name ===
+          "ConstraintError"
+        ) {
+          /*
+           * Another hook/tab created the same room identity first.
+           * Keep that winner instead of overwriting it with a second key.
+           */
+          conflict = true;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        reject(request.error);
+      };
+
+      tx.oncomplete = () =>
+        resolve(
+          inserted && !conflict,
+        );
+
+      tx.onerror = () => {
+        if (!conflict) {
+          reject(tx.error);
+        }
+      };
+
+      tx.onabort = () => {
+        if (!conflict) {
+          reject(tx.error);
+        }
+      };
+    },
+  );
 }
 
 /**
@@ -167,7 +225,7 @@ async function writeIdentity(
  * The private ECDH key is stored as a non-exportable CryptoKey in IndexedDB.
  * It is never sent to VINSS backend or written on-chain.
  */
-export async function getOrCreateMessagingIdentity(
+async function getOrCreateMessagingIdentityUnlocked(
   roomId: string,
   walletAddress: string,
 ): Promise<MessagingIdentity> {
@@ -203,9 +261,25 @@ export async function getOrCreateMessagingIdentity(
       walletAddress: address,
     };
 
-    await writeIdentity(migrated);
+    const inserted =
+      await writeIdentityIfAbsent(
+        migrated,
+      );
 
-    return migrated;
+    if (inserted) {
+      return migrated;
+    }
+
+    const winner =
+      await readIdentity(id);
+
+    if (winner) {
+      return winner;
+    }
+
+    throw new Error(
+      "Messaging identity migration raced without a persisted winner.",
+    );
   }
 
   // Generate extractable only temporarily so the public key can be exported.
@@ -252,9 +326,70 @@ export async function getOrCreateMessagingIdentity(
     privateKey,
   };
 
-  await writeIdentity(identity);
+  const inserted =
+    await writeIdentityIfAbsent(
+      identity,
+    );
 
-  return identity;
+  if (inserted) {
+    return identity;
+  }
+
+  /*
+   * A concurrent caller won the IndexedDB add().
+   * Always use its persisted identity so Chat, Offer and Escrow
+   * cannot leave this mount with different ECDH keys.
+   */
+  const winner =
+    await readIdentity(id);
+
+  if (!winner) {
+    throw new Error(
+      "Messaging identity creation raced without a persisted winner.",
+    );
+  }
+
+  return winner;
+}
+
+export async function getOrCreateMessagingIdentity(
+  roomId: string,
+  walletAddress: string,
+): Promise<MessagingIdentity> {
+  const id =
+    `${roomId}:` +
+    canonicalStarknetAddress(
+      walletAddress,
+    );
+
+  const running =
+    identityRequests.get(id);
+
+  if (running) {
+    return running;
+  }
+
+  const request =
+    getOrCreateMessagingIdentityUnlocked(
+      roomId,
+      walletAddress,
+    );
+
+  identityRequests.set(
+    id,
+    request,
+  );
+
+  try {
+    return await request;
+  } finally {
+    if (
+      identityRequests.get(id) ===
+      request
+    ) {
+      identityRequests.delete(id);
+    }
+  }
 }
 
 /**
