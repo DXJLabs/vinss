@@ -13,6 +13,7 @@ export const openApiDocument = {
     { name: "Presence" },
     { name: "Agent" },
     { name: "Loyalty" },
+    { name: "Feedback" },
   ],
   paths: {
     "/health": {
@@ -186,6 +187,95 @@ export const openApiDocument = {
         },
       },
     },
+    "/feedback": {
+      post: {
+        tags: ["Feedback"],
+        summary: "Submit optional settlement feedback",
+        description:
+          "Stores privacy-safe product feedback after a released or refunded Rekber settlement. Wallet addresses, room secrets, messages, and evidence are not accepted.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "outcome",
+                  "role",
+                  "network",
+                  "rating",
+                ],
+                additionalProperties: false,
+                properties: {
+                  outcome: {
+                    type: "string",
+                    enum: [
+                      "released",
+                      "refunded",
+                    ],
+                  },
+                  role: {
+                    type: "string",
+                    enum: [
+                      "payer",
+                      "payee",
+                      "unknown",
+                    ],
+                  },
+                  dealType: {
+                    type: "string",
+                    enum: [
+                      "otc",
+                      "freelance",
+                      "goods",
+                      "digital_goods",
+                      "bounty",
+                      "nft",
+                      "other",
+                    ],
+                  },
+                  network: {
+                    type: "string",
+                    enum: [
+                      "sepolia",
+                      "mainnet",
+                    ],
+                  },
+                  rating: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 5,
+                  },
+                  comment: {
+                    type: "string",
+                    maxLength: 2000,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description:
+              "Feedback stored successfully",
+          },
+          "400": {
+            description:
+              "Invalid feedback",
+          },
+          "429": {
+            description:
+              "Too many feedback requests",
+          },
+          "500": {
+            description:
+              "Feedback storage failed",
+          },
+        },
+      },
+    },
+
     "/presence/publish": {
       post: {
         tags: ["Presence"],

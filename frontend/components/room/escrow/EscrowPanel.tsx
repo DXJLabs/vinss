@@ -72,6 +72,9 @@ import {
   EscrowPriceBreakdown,
 } from "@/components/room/escrow/EscrowPricing";
 import {
+  SettlementFeedback,
+} from "@/components/room/escrow/SettlementFeedback";
+import {
   explorerUrl,
   shortAddress,
 } from "@/components/room/conversation/chatFormat";
@@ -2081,7 +2084,7 @@ export function EscrowPanel({
               <EscrowPriceBreakdown
                 amount={accepted.amount}
                 asset={accepted.asset}
-                feeBps={100}
+                feeBps={VINSS_FEES.rekber.bps}
               />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
                 <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the {VINSS_FEES.rekber.percent}% VINSS fee and locks it in the Escrow contract.
@@ -2234,25 +2237,64 @@ export function EscrowPanel({
                   : "rounded-xl bg-amber/[0.055] p-4 ring-1 ring-amber/20"
               }
             >
-              <p
-                className={
-                  released
-                    ? "text-[9px] uppercase tracking-[0.13em] text-signal"
-                    : "text-[9px] uppercase tracking-[0.13em] text-amber"
-                }
-              >
-                {released
-                  ? "Settlement released"
-                  : "Escrow refunded"}
-              </p>
-              <p className="mt-2 text-sm text-paper/70">
-                {released
-                  ? "The payee claimed the secured payment."
-                  : "The payer recovered the payment after the timeout."}
-              </p>
-              <p className="mt-2 text-[9px] text-paper/28">
-                Settled {formatDeadline(custodyState?.settledAt ?? 0)}
-              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p
+                    className={
+                      released
+                        ? "text-[9px] font-medium uppercase tracking-[0.14em] text-signal"
+                        : "text-[9px] font-medium uppercase tracking-[0.14em] text-amber"
+                    }
+                  >
+                    {released
+                      ? "Settled"
+                      : "Refunded"}
+                  </p>
+
+                  <p className="mt-2 text-3xl font-semibold text-paper">
+                    {accepted.amount}
+                    <span className="ml-2 text-base font-normal text-paper/45">
+                      {accepted.asset}
+                    </span>
+                  </p>
+
+                  <p className="mt-2 text-xs leading-relaxed text-paper/48">
+                    {released
+                      ? "Payment released to the Payee. This Escrow is now closed."
+                      : "Principal returned to the Payer. This Escrow is now closed."}
+                  </p>
+                </div>
+
+                <span
+                  className={
+                    released
+                      ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-signal text-sm text-ink"
+                      : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber text-sm text-ink"
+                  }
+                >
+                  {released ? "✓" : "↩"}
+                </span>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-wire/45 pt-3">
+                <span className="text-[9px] text-paper/28">
+                  Escrow closed
+                </span>
+
+                <span className="text-[9px] text-paper/40">
+                  {formatDeadline(
+                    custodyState?.settledAt ??
+                      0,
+                  )}
+                </span>
+              </div>
+
+              {!released && (
+                <p className="mt-3 text-[9px] leading-relaxed text-paper/30">
+                  The {VINSS_FEES.rekber.percent}% VINSS fee paid during funding is not part of the principal refund.
+                </p>
+              )}
+
               {settlementProofTx && (
                 <a
                   href={explorerUrl(
@@ -2262,7 +2304,7 @@ export function EscrowPanel({
                   rel="noreferrer"
                   className="mt-3 inline-block text-[10px] text-signal"
                 >
-                  Settlement evidence ↗
+                  View transaction ↗
                 </a>
               )}
             </div>
@@ -2363,10 +2405,20 @@ export function EscrowPanel({
                 )}
               </div>
             )}
+
+            <SettlementFeedback
+              outcome={
+                released
+                  ? "released"
+                  : "refunded"
+              }
+              role={role}
+              dealType={
+                accepted.dealType
+              }
+            />
           </div>
         )}
-
-
 
         {custodyCommitment && (
           <details className="group rounded-xl bg-paper/[0.015] p-3">

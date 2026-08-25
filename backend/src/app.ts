@@ -24,6 +24,7 @@ import { createAttachmentRouter } from "./routes/attachments.js";
 import { createActivityRouter } from "./routes/activity.js";
 import { createDiscoverRouter } from "./routes/discover.js";
 import { createHealthRouter } from "./routes/health.js";
+import { createFeedbackRouter } from "./routes/feedback.js";
 import { presenceRouter } from "./routes/presence.js";
 import { createRekberRouter } from "./routes/rekber.js";
 
@@ -94,6 +95,20 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(createDiscoverRouter(dependencies.store, dependencies.definitions));
 
   app.use(createRekberRouter(dependencies.rekberStore, dependencies.config));
+
+  app.use(
+    "/feedback",
+    createFixedWindowRateLimit({
+      limit: 5,
+      windowMs: 60_000,
+      scope: "feedback",
+    }),
+  );
+  app.use(
+    createFeedbackRouter(
+      dependencies.database,
+    ),
+  );
 
   app.use(
     createActivityRouter(
