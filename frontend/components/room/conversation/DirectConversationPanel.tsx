@@ -793,6 +793,107 @@ export function DirectConversationPanel({
                   "message" &&
                 entry.workEvidence
                   ?.type ===
+                  "work_review"
+              ) {
+                const review =
+                  entry.workEvidence;
+
+                const ownReview =
+                  sameStarknetAddress(
+                    entry.senderAddress,
+                    walletAddress,
+                  );
+
+                const reviewTitle =
+                  review.decision ===
+                  "approved"
+                    ? ownReview
+                      ? "You approved the submission"
+                      : activeDealType ===
+                          "freelance"
+                        ? "Work approved by employer"
+                        : "Submission approved by payer"
+                    : review.decision ===
+                        "revision_requested"
+                      ? ownReview
+                        ? "You requested a revision"
+                        : activeDealType ===
+                            "freelance"
+                          ? "Employer requested a revision"
+                          : "Payer requested a revision"
+                      : ownReview
+                        ? "You rejected the submission"
+                        : activeDealType ===
+                            "freelance"
+                          ? "Work rejected by employer"
+                          : "Submission rejected by payer";
+
+                return (
+                  <li
+                    key={`work-review:${entry.actionLocator}`}
+                    className="flex justify-center"
+                  >
+                    <div className="w-[92%] max-w-sm border border-wire bg-black/15 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/35">
+                          Work review
+                        </p>
+
+                        <span className="text-[8px] text-paper/25">
+                          Encrypted
+                        </span>
+                      </div>
+
+                      <p
+                        className={
+                          review.decision ===
+                          "approved"
+                            ? "mt-2 text-xs text-signal"
+                            : review.decision ===
+                                "revision_requested"
+                              ? "mt-2 text-xs text-amber-300"
+                              : "mt-2 text-xs text-danger"
+                        }
+                      >
+                        {review.decision ===
+                        "approved"
+                          ? "✓ "
+                          : review.decision ===
+                              "revision_requested"
+                            ? "↻ "
+                            : "✕ "}
+                        {reviewTitle}
+                      </p>
+
+                      {review.note && (
+                        <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-paper/55">
+                          {review.note}
+                        </p>
+                      )}
+
+                      {entry.transactionHash && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProofEntry(
+                              entry,
+                            )
+                          }
+                          className="mt-3 font-display text-[8px] uppercase tracking-[0.12em] text-signal/60"
+                        >
+                          TX Proof ↗
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              }
+
+              if (
+                entry.kind ===
+                  "message" &&
+                entry.workEvidence
+                  ?.type ===
                   "work_submission"
               ) {
                 const evidence =
