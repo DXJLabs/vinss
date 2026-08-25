@@ -128,7 +128,7 @@ Other
 
 The deal classification, participant fields, asset, amount, payment terms, conditions, expiry, and Offer relationships can stay inside encrypted application payloads rather than being published as plaintext helper state.
 
-**Status:** ✅ **testnet on-chain verified.**
+**Status:** 🟡 previous build testnet-verified; current fee build requires redeployment and fresh evidence.
 
 ---
 
@@ -166,7 +166,7 @@ what was settled
 
 A deal should not end with only a green “Completed” label.
 
-VINSS is designed to produce **Settlement Evidence** and then issue an **NFT Settlement Certificate to each party**.
+VINSS implements optional **NFT Settlement Certificates** that each party claims independently after a successful release.
 
 ```text
 Successful Settlement
@@ -185,7 +185,7 @@ Its purpose is:
 
 The certificate must not re-expose private chat history, private Offer terms, channel keys, Escrow Rekber secrets, or other sensitive data protected earlier in the flow.
 
-**Status:** 🟡 pending completion and verification of the Escrow Rekber settlement path.
+**Status:** 🟡 contract and frontend implemented/Cairo-tested; deployment and E2E verification pending.
 
 ---
 
@@ -233,7 +233,7 @@ VINSS encrypts Message payloads on the client before they are submitted through 
 The objective is not “Web3 chat.”
 The objective is to keep deal context private from public observers and connect that context to the rest of the deal lifecycle.
 
-**Status:** ✅ **testnet on-chain verified.**
+**Status:** 🟡 previous build testnet-verified; current fee build requires redeployment and fresh evidence.
 
 ---
 
@@ -250,7 +250,6 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 Current deal types:
@@ -265,7 +264,7 @@ NFT
 Other
 ```
 
-**Status:** ✅ **testnet on-chain verified.**
+**Status:** 🟡 previous build testnet-verified; current fee build requires redeployment and fresh evidence.
 
 The deeper product rationale behind each Offer type belongs in the VINSS Product Documentation rather than this README.
 
@@ -299,7 +298,7 @@ dispute
 resolve
 ```
 
-The current settlement implementation uses custody commitments, release/refund commitments, and client-generated secrets.
+The canonical settlement requires independent payer authorization and payee claim secrets for release, plus a payer timeout-refund secret.
 
 **Status:** 🟡 integration / end-to-end on-chain verification pending.
 
@@ -307,7 +306,7 @@ The current settlement implementation uses custody commitments, release/refund c
 
 ## Settlement Evidence + NFT Certificate
 
-After a valid settlement, VINSS plans to derive evidence from the actual settlement result and issue one settlement certificate to each party.
+After a valid release, VINSS lets each wallet claim its own optional public settlement certificate.
 
 The evidence layer should connect:
 
@@ -320,7 +319,7 @@ deal reference
 
 without publishing the private contents of the deal.
 
-**Status:** 🟡 pending.
+**Status:** 🟡 implemented and Cairo-tested; canonical deployment and E2E evidence pending.
 
 ---
 
@@ -473,18 +472,17 @@ Current status:
 
 | Component | Status |
 |---|---|
-| Encrypted Message | ✅ Testnet on-chain verified |
-| Structured Offer | ✅ Testnet on-chain verified |
+| Encrypted Message | 🟡 Current 7 STRK build redeploy/E2E pending |
+| Structured Offer | 🟡 Current 10 STRK build redeploy/E2E pending |
 | Ciphertext-only discovery | ✅ Implemented |
 | Client-side decryption | ✅ Implemented |
 | Escrow Rekber coordination | 🟡 Integration / verification pending |
 | Escrow Rekber funding | 🟡 On-chain E2E verification pending |
 | Escrow Rekber release / refund | 🟡 On-chain E2E verification pending |
-| Settlement Evidence | 🟡 Pending |
-| NFT Settlement Certificate for each party | 🟡 Pending |
+| NFT Settlement Certificate for each party | 🟡 Implemented/Cairo-tested; deployment pending |
 | Mainnet sprint evidence | 🟡 Pending |
 
-Message and Offer are not “just proposals”: they have already been proven on-chain on testnet.
+Earlier Message and Offer builds have testnet evidence; the current fee builds require fresh deployment evidence.
 
 Escrow Rekber and settlement certificates are not promoted to “verified” until that evidence exists.
 
@@ -502,7 +500,7 @@ Public research can show that fraud, impersonation, irreversible transfers, frag
 
 On-chain tests can prove that a VINSS primitive works.
 
-Message and Offer already have testnet on-chain evidence.
+Earlier Message and Offer builds have testnet evidence; current fee builds are not yet re-verified.
 
 ### Customer evidence
 

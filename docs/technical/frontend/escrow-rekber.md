@@ -2,151 +2,90 @@
 
 ## Status
 
-**Implemented / integration stage. End-to-end on-chain verification is still pending.**
+The canonical frontend flow is implemented. Cairo tests pass, while a fresh Sepolia deployment and two-wallet release/refund E2E run remain required.
 
-## Objective
-
-Escrow Rekber connects accepted deal state to custody and settlement.
-
-The frontend module contains two different technical layers:
+## Source boundary
 
 ```text
-encrypted coordination
-+
-public commitment-based custody/settlement
+frontend/lib/deal-room/escrow.ts
+  encrypted coordination and accepted-Offer mapping
+
+frontend/lib/deal-room/settlement.ts
+  custody, release, refund, proofs, and certificates
 ```
 
-They are layers of one product feature.
-
-## 1. Encrypted coordination
-
-Current coordination actions include:
+There is no legacy custody fallback and no separate `V2` address. The only frontend contract variable is:
 
 ```text
-create
-fund_intent
-accept
-fund_confirm
-cancel
-refund
-dispute
-resolve
+NEXT_PUBLIC_ESCROW_REKBER_ADDRESS
 ```
 
-The coordination payload is encrypted before submission.
+## Coordination
 
-The public envelope contains:
+The payer and payee exchange encrypted Rekber setup/acceptance payloads. Each wallet signs the exact private Offer terms with SNIP-12 before funding is enabled.
+
+The payer owns:
 
 ```text
-version
-action locator
-sender tag
-recipient tag
-payload commitment
-ciphertext
+release authorization secret
+refund secret
+payer certificate secret
 ```
 
-not the plaintext coordination action.
-
-## 2. Client-generated settlement secrets
-
-The frontend generates:
-
-```ts
-export function generateEscrowSecrets() {
-  return {
-    releaseSecret: randomFelt(),
-    refundSecret: randomFelt(),
-  };
-}
-```
-
-The custody identifier is generated independently:
-
-```ts
-export function generateCustodyCommitment(): bigint {
-  return randomFelt();
-}
-```
-
-Release/refund commitments bind the secret to that custody commitment:
-
-```ts
-Poseidon(custodyCommitment, releaseSecret)
-Poseidon(custodyCommitment, refundSecret)
-```
-
-## 3. Deposit
-
-Current deposit calldata conceptually carries:
+The payee owns:
 
 ```text
-deposit
-custody commitment
-release commitment
-refund commitment
-refund-after timestamp
-token
-principal amount
+payee claim secret
+payee certificate secret
 ```
 
-The frontend withdraws `principal + fee`, routes the fee to treasury through the OPEN note path, and deposits principal into Escrow Rekber.
+Secrets are stored only in the encrypted local Rekber cache and encrypted direct coordination payloads.
 
-Current code:
+## Funding
 
-```ts
-const principal = params.amount;
-const fee = principal / 50n;
-const total = principal + fee;
-```
-
-So the current implementation uses a **2% Rekber fee**.
-
-## 4. Release / refund
-
-Release:
+The payer funds only after both signatures and all commitments match the accepted Offer.
 
 ```text
-custody commitment
-+ release secret
-+ output note id
+principal = accepted Offer amount in token base units
+fee       = principal / 50
+withdraw  = principal + fee
 ```
 
-Refund:
+Deposit submits the two release commitments, refund commitment, both certificate commitments, refund boundary, token, principal, and revenue open-note placeholder.
 
-```text
-custody commitment
-+ refund secret
-+ output note id
-```
+## Release
 
-The secrets are client-sensitive material.
+The payer sends the release-authorization preimage through encrypted coordination. The payee combines it with the locally held claim preimage. The contract requires both before returning principal to the payee's wallet-created private output note.
 
-They must not be sent to:
+## Refund
 
-- backend discovery;
-- logs;
-- analytics;
-- remote Agent context.
+At or after the refund boundary, the payer can return principal to a wallet-created private output note using the locally held refund preimage. Early refund and replay are rejected by the contract.
 
-## 5. Privacy boundary
+## Settlement Certificate
 
-The current settlement path must not be described as fully private.
+After a successful release, each party may separately claim an optional public ERC-721 certificate. Certificate ownership is public; certificate secrets and private Offer terms are not included in metadata.
 
-Current code exposes the settlement token and amount on the Rekber contract path.
+## Privacy boundary
 
-The private part is primarily the deal context and coordination state.
+Private:
+
+- Offer/deal semantics;
+- participant coordination;
+- unused settlement and certificate secrets.
+
+Public:
+
+- token and principal amount;
+- refund boundary;
+- commitments and custody state;
+- used settlement preimages in transaction calldata;
+- optional certificate ownership.
 
 ## Verification gate
 
-Do not change status to testnet on-chain verified until this succeeds end-to-end:
+Do not mark Rekber E2E-verified until one two-wallet Sepolia run records both branches:
 
 ```text
-accepted Offer
-→ linked Escrow Rekber
-→ funding
-→ custody
-→ release OR refund
-→ expected recipient outcome
-→ recorded transaction evidence
+accepted Offer → signed setup → funding → release → certificate
+accepted Offer → signed setup → funding → timeout refund
 ```

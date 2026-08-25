@@ -129,15 +129,17 @@ public participant relationship
 Before settlement:
 
 ```text
-release_secret / refund_secret
+payer release authorization secret
+payee claim secret
+payer refund secret
   = client-held authorization preimages
 ```
 
-At settlement, the selected preimage is passed in public `privacy_invoke` calldata:
+At settlement, the used preimages are passed in public `privacy_invoke` calldata:
 
 ```text
 release:
-[2, custody_commitment, release_secret, output_note_id]
+[2, custody_commitment, payer_release_secret, payee_claim_secret, output_note_id]
 
 refund:
 [3, custody_commitment, refund_secret, output_note_id]
@@ -148,11 +150,12 @@ So the selected secret becomes observable after use.
 Security depends on:
 
 - domain-separated commitment validation;
+- independent payer/payee release authority;
 - custody being unconsumed before settlement;
 - the valid time window;
 - atomic custody consumption.
 
-The unused alternate secret should still be treated as sensitive client material.
+Unused secrets remain sensitive client material.
 
 ## Metadata claim
 

@@ -3,34 +3,24 @@
 ## Source
 
 ```text
-contracts/src/escrow_rekber/vinss_escrow_rekber.cairo
+contracts/src/escrow_rekber/
+├── commitments.cairo
+├── errors.cairo
+├── events.cairo
+├── interfaces.cairo
+├── types.cairo
+└── vinss_escrow_rekber.cairo
 ```
 
-Supporting modules:
-
-```text
-escrow_rekber_interfaces.cairo
-escrow_rekber_types.cairo
-escrow_rekber_commitments.cairo
-escrow_rekber_events.cairo
-escrow_rekber_errors.cairo
-```
+`VinssEscrowRekber` is the single supported ERC-20 custody contract. The removed legacy implementation allowed unilateral release; the canonical contract requires independent payer authorization and payee claim secrets.
 
 ## Status
 
-**Implemented / integration stage. End-to-end on-chain settlement verification is still pending.**
+Implemented and Cairo-tested. A fresh Sepolia deployment and two-wallet release/refund E2E evidence are still required.
 
-## Objective
+## Write authority
 
-`VinssEscrowRekber` is the actual ERC-20 custody and settlement layer for Escrow Rekber.
-
-Unlike the encrypted coordination helpers, it intentionally stores public token/amount/timeout state needed by the current custody design.
-
-## Privacy Pool authorization
-
-Only the configured Privacy Pool may call `privacy_invoke`.
-
-The contract also uses an OpenZeppelin reentrancy guard around action execution.
+Only the configured STRK20 Privacy Pool may call `privacy_invoke`. The contract uses a reentrancy guard and tracks reserved principal per token.
 
 ## Actions
 
@@ -42,14 +32,15 @@ The contract also uses an OpenZeppelin reentrancy guard around action execution.
 
 ## Deposit
 
-Calldata:
-
 ```text
 [
   1,
   custody_commitment,
-  release_commitment,
+  release_authorization_commitment,
+  payee_claim_commitment,
   refund_commitment,
+  payer_certificate_commitment,
+  payee_certificate_commitment,
   refund_after,
   token,
   principal,
@@ -57,81 +48,44 @@ Calldata:
 ]
 ```
 
-The contract validates:
+The contract requires unique non-zero commitments, a future refund boundary, sufficient token balance, and zero stale Pool allowance.
 
-- unique non-zero custody commitment;
-- non-zero release/refund commitments;
-- release commitment != refund commitment;
-- non-zero token/principal/revenue note;
-- future refund boundary;
-- sufficient contract token balance;
-- zero stale Pool allowance.
-
-### Fee / principal invariant
-
-Current fee:
+VINSS charges 2% at funding:
 
 ```text
 fee = principal / 50
-    = 2%
+wallet input = principal + fee
+reserved custody = full principal
 ```
 
-Fee must be non-zero.
-
-The wallet/pool path must place:
-
-```text
-principal + fee
-```
-
-into the contract balance.
-
-The contract reserves **full principal** and returns the fee as one `OpenNoteDeposit`.
-
-It does not deduct the fee from the principal custody amount.
+The returned `OpenNoteDeposit` routes only the fee. Principal remains reserved for release or refund.
 
 ## Release
 
-Valid only while:
-
-```text
-now < refund_after
-```
-
-Calldata:
+Release is valid only before `refund_after` and requires both parties' independent preimages:
 
 ```text
 [
   2,
   custody_commitment,
-  release_secret,
+  release_authorization_secret,
+  payee_claim_secret,
   output_note_id
 ]
 ```
 
-The contract checks:
+Commitments use the immutable domains:
 
 ```text
-Poseidon(
-  VINSS_ESCROW_RELEASE_V1,
-  custody_commitment,
-  release_secret
-)
-==
-stored release_commitment
+VINSS_RELEASE_AUTH_V2
+VINSS_PAYEE_CLAIM_V2
 ```
 
-Then it consumes the custody and returns the full principal as an `OpenNoteDeposit` for `output_note_id`.
+The full principal is returned to the wallet-created private output note.
 
 ## Refund
 
-Valid only while:
-
-```text
-now >= refund_after
-```
-
-Calldata:
+Refund is valid at or after `refund_after` and requires the payer's refund preimage:
 
 ```text
 [
@@ -142,48 +96,11 @@ Calldata:
 ]
 ```
 
-Validation:
+The commitment domain is `VINSS_ESCROW_REFUND_V2`. A released or refunded custody cannot be consumed again.
 
-```text
-Poseidon(
-  VINSS_ESCROW_REFUND_V1,
-  custody_commitment,
-  refund_secret
-)
-==
-stored refund_commitment
-```
+## Public state
 
-It consumes the custody, marks `refunded = true`, and returns the full principal as an output note.
-
-## One-time settlement
-
-Both paths require:
-
-```text
-custody.consumed == false
-```
-
-Before approving output, the contract updates custody/reserve state and requires exact Pool allowance for the principal.
-
-## Public custody state
-
-`EscrowRekberCustody` exposes:
-
-```text
-custody_commitment
-release_commitment
-refund_commitment
-token
-amount
-refund_after
-consumed
-refunded
-created_at
-settled_at
-```
-
-No buyer/seller address or plaintext Deal Room terms are stored.
+`EscrowRekberCustody` exposes commitments, token, amount, refund boundary, creation/settlement timestamps, and consumed/refunded flags. Participant addresses and plaintext deal terms are not stored by this contract.
 
 ## Events
 
@@ -193,37 +110,20 @@ EscrowRekberCustodyReleased
 EscrowRekberCustodyRefunded
 ```
 
-Funding event exposes token, amount, refund boundary, and timestamp.
+## Settlement Certificate
 
-Settlement events expose custody commitment, output note ID, and timestamp.
+Each custody includes payer and payee certificate commitments. After a successful release, each wallet may independently claim one public `VinssSettlementCertificate`. Refunded custody cannot mint a success certificate.
 
-## Secret disclosure boundary
+## Cairo coverage
 
-Release/refund secrets are client-held before use.
+Dedicated tests cover:
 
-The selected secret becomes public when included in `privacy_invoke` calldata.
+- full-principal reservation and 2% fee output;
+- two-secret release and full-principal output;
+- payer/payee secret separation;
+- successful timeout refund;
+- early-refund rejection;
+- replay rejection after release;
+- certificate claim timing, ownership binding, refund rejection, and replay rejection.
 
-It must therefore be treated as a **one-time authorization preimage**, not permanent secret on-chain state.
-
-## Current test coverage
-
-Current dedicated Cairo test verifies the deposit-side invariant:
-
-```text
-principal remains intact
-2% fee returned
-principal reserve correct
-Pool allowance equals fee
-```
-
-The current dedicated test file does **not** yet provide equivalent release/refund unit coverage.
-
-Release/refund E2E behavior must not be claimed verified from this test alone.
-
-## Current integration blocker
-
-The contract commitment formula includes domain separators.
-
-Current frontend release/refund commitment calculation now mirrors the Cairo domain-separated formulas.
-
-The commitment formulas are now aligned; deployed release/refund evidence is still pending.
+Cairo tests do not replace wallet, Privacy Pool, browser, or two-user testnet E2E verification.

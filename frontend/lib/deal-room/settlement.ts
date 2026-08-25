@@ -1,17 +1,4 @@
-/**
- * VINSS Rekber V2 settlement boundary.
- *
- * V2 deliberately separates authority from receipt:
- *
- * - the payer owns a release-authorization secret;
- * - the payee owns an independent claim secret;
- * - release requires both secrets;
- * - timeout refund requires only the payer's refund secret.
- *
- * Coordination secrets are exchanged only inside encrypted direct payloads.
- * Token, amount, timeout, commitments and settlement events remain public in
- * the current custody design.
- */
+/** Rekber custody, release, refund, and Settlement Certificate operations. */
 
 import type { WalletAccountV6 } from "starknet";
 import { hash, num } from "starknet";
@@ -23,6 +10,7 @@ import {
 } from "@/lib/privacy/envelope";
 import { VINSS_FEES } from "@/lib/fees";
 
+// Domain tags are immutable: changing them would invalidate saved secrets.
 const RELEASE_AUTH_DOMAIN =
   "VINSS_RELEASE_AUTH_V2";
 const PAYEE_CLAIM_DOMAIN =
@@ -49,7 +37,7 @@ export interface PayeeSettlementSecrets {
   certificateSecret: bigint;
 }
 
-export interface RekberV2CustodyState {
+export interface RekberCustodyState {
   custodyCommitment: bigint;
   releaseAuthorizationCommitment: bigint;
   payeeClaimCommitment: bigint;
@@ -65,7 +53,7 @@ export interface RekberV2CustodyState {
   settledAt: number;
 }
 
-export interface RekberV2Proof {
+export interface RekberProof {
   kind: "funded" | "released" | "refunded";
   transactionHash: string;
   blockNumber: number;
@@ -129,7 +117,7 @@ export function generatePayeeSettlementSecrets(): PayeeSettlementSecrets {
   };
 }
 
-export function generateRekberV2CustodyCommitment(): bigint {
+export function generateRekberCustodyCommitment(): bigint {
   return randomFelt();
 }
 
@@ -153,7 +141,7 @@ export function computePayeeClaimCommitment(
   );
 }
 
-export function computeRekberV2RefundCommitment(
+export function computeRekberRefundCommitment(
   custodyCommitment: bigint,
   secret: bigint,
 ): bigint {
@@ -193,17 +181,17 @@ export function computeCertificateTokenId(
   );
 }
 
-function requireRekberV2Address(): string {
-  if (!CONTRACTS.escrowRekberV2) {
+function requireRekberAddress(): string {
+  if (!CONTRACTS.escrowRekber) {
     throw new Error(
-      "Secure Rekber V2 is not configured for this network.",
+      "Rekber is not configured for this network.",
     );
   }
 
-  return CONTRACTS.escrowRekberV2;
+  return CONTRACTS.escrowRekber;
 }
 
-export async function depositEscrowV2(
+export async function depositEscrow(
   account: WalletAccountV6,
   params: {
     custodyCommitment: bigint;
@@ -218,7 +206,7 @@ export async function depositEscrowV2(
   },
 ): Promise<{ transactionHash: string }> {
   const escrow =
-    requireRekberV2Address();
+    requireRekberAddress();
   const rawTreasury =
     process.env
       .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
@@ -311,13 +299,13 @@ async function invokeSettlement(
   );
 
   const custody =
-    await getRekberV2Custody(
+    await getRekberCustody(
       custodyCommitment,
     );
 
   if (!custody) {
     throw new Error(
-      "Rekber V2 custody could not be loaded.",
+      "Rekber custody could not be loaded.",
     );
   }
 
@@ -344,7 +332,7 @@ async function invokeSettlement(
       {
         type: "invoke",
         contract:
-          requireRekberV2Address(),
+          requireRekberAddress(),
         calldata: [
           toFelt(calldata.length),
           ...calldata,
@@ -358,7 +346,7 @@ async function invokeSettlement(
   };
 }
 
-export async function releaseEscrowV2(
+export async function releaseEscrow(
   account: WalletAccountV6,
   params: {
     custodyCommitment: bigint;
@@ -376,7 +364,7 @@ export async function releaseEscrowV2(
   ]);
 }
 
-export async function refundEscrowV2(
+export async function refundEscrow(
   account: WalletAccountV6,
   params: {
     custodyCommitment: bigint;
@@ -390,10 +378,10 @@ export async function refundEscrowV2(
   ]);
 }
 
-export async function getRekberV2Custody(
+export async function getRekberCustody(
   custodyCommitment: bigint,
-): Promise<RekberV2CustodyState | null> {
-  if (!CONTRACTS.escrowRekberV2) {
+): Promise<RekberCustodyState | null> {
+  if (!CONTRACTS.escrowRekber) {
     return null;
   }
 
@@ -401,7 +389,7 @@ export async function getRekberV2Custody(
     const result =
       await getProvider().callContract({
         contractAddress:
-          CONTRACTS.escrowRekberV2,
+          CONTRACTS.escrowRekber,
         entrypoint: "get_custody",
         calldata: [
           toFelt(custodyCommitment),
@@ -451,25 +439,25 @@ export async function getRekberV2Custody(
   }
 }
 
-export async function getRekberV2Proof(
+export async function getRekberProof(
   custodyCommitment: bigint,
-  kind: RekberV2Proof["kind"],
-): Promise<RekberV2Proof | null> {
-  if (!CONTRACTS.escrowRekberV2) {
+  kind: RekberProof["kind"],
+): Promise<RekberProof | null> {
+  if (!CONTRACTS.escrowRekber) {
     return null;
   }
 
   const eventName =
     kind === "funded"
-      ? "EscrowRekberV2CustodyFunded"
+      ? "EscrowRekberCustodyFunded"
       : kind === "released"
-        ? "EscrowRekberV2CustodyReleased"
-        : "EscrowRekberV2CustodyRefunded";
+        ? "EscrowRekberCustodyReleased"
+        : "EscrowRekberCustodyRefunded";
 
   const result =
     await getProvider().getEvents({
       address:
-        CONTRACTS.escrowRekberV2,
+        CONTRACTS.escrowRekber,
       from_block: {
         block_number: 0,
       },

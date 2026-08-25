@@ -16,8 +16,10 @@ contracts/src/
 │   └── VinssOfferHelper
 ├── private_escrow/
 │   └── VinssPrivateEscrowHelper
-└── escrow_rekber/
-    └── VinssEscrowRekber
+├── escrow_rekber/
+│   └── VinssEscrowRekber
+└── settlement_certificate/
+    └── VinssSettlementCertificate
 ```
 
 All are exported by `contracts/src/lib.cairo`.
@@ -35,6 +37,7 @@ flowchart LR
     O["VinssOfferHelper"]
     C["VinssPrivateEscrowHelper"]
     R["VinssEscrowRekber"]
+    S["VinssSettlementCertificate"]
 
     F --> W --> P
     P --> I
@@ -42,9 +45,10 @@ flowchart LR
     P --> O
     P --> C
     P --> R
+    W --> S
 ```
 
-Each current `privacy_invoke` implementation checks that:
+Each `privacy_invoke` implementation checks that:
 
 ```cairo
 get_caller_address() == configured_privacy_pool
@@ -111,14 +115,17 @@ Escrow Rekber is the custody layer:
 ```text
 DEPOSIT
   → custody commitment
-  → release commitment
+  → payer release authorization commitment
+  → payee claim commitment
   → refund commitment
+  → payer/payee certificate commitments
   → token + principal + refund boundary
   → reserve principal
   → return fee OpenNoteDeposit
 
 RELEASE before refund boundary
-  → verify release preimage
+  → verify payer authorization preimage
+  → verify payee claim preimage
   → consume custody
   → return principal OpenNoteDeposit
 
@@ -138,6 +145,9 @@ Private Escrow Helper
 
 Escrow Rekber
   = actual ERC-20 custody / settlement
+
+Settlement Certificate
+  = optional, non-transferable proof issued after a successful release
 ```
 
 They are technical layers of one Escrow Rekber product flow, not separate product features.

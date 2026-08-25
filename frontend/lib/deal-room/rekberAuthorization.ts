@@ -1,5 +1,5 @@
 /**
- * Wallet-authenticated Rekber V2 coordination.
+ * Wallet-authenticated Rekber coordination.
  *
  * Direct room payloads use a pairwise symmetric encryption key. Encryption
  * keeps the payload private, but by itself it cannot prove which peer authored

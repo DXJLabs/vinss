@@ -1,9 +1,9 @@
 use starknet::ContractAddress;
 
 use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
-use crate::escrow_rekber_v2::types::EscrowRekberV2Custody;
+use crate::escrow_rekber::types::EscrowRekberCustody;
 
-/// Rekber V2 requires two independent release secrets.
+/// Rekber requires independent payer authorization and payee claim secrets.
 ///
 /// Deposit calldata:
 /// [1, custody, release_auth_commitment, payee_claim_commitment,
@@ -18,7 +18,7 @@ use crate::escrow_rekber_v2::types::EscrowRekberV2Custody;
 /// Refund calldata:
 /// [3, custody, refund_secret, output_note_id]
 #[starknet::interface]
-pub trait IVinssEscrowRekberV2<TState> {
+pub trait IVinssEscrowRekber<TState> {
     fn privacy_invoke(
         ref self: TState,
         calldata: Span<felt252>,
@@ -52,11 +52,10 @@ pub trait IVinssEscrowRekberV2<TState> {
     fn get_custody(
         self: @TState,
         custody_commitment: felt252,
-    ) -> EscrowRekberV2Custody;
+    ) -> EscrowRekberCustody;
 
     fn get_reserved_amount(
         self: @TState,
         token: ContractAddress,
     ) -> u128;
 }
-

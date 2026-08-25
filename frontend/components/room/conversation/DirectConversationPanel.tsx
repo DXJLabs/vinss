@@ -17,12 +17,8 @@ import {
 } from "@/components/room/conversation/chatFormat";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 import {
-  escrowCustodyExists,
-  getEscrowFundedProof,
-} from "@/lib/deal-room/escrow";
-import {
-  getRekberV2Custody,
-} from "@/lib/deal-room/settlementV2";
+  getRekberCustody,
+} from "@/lib/deal-room/settlement";
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
@@ -170,17 +166,6 @@ export function DirectConversationPanel({
     ...offerEntries,
   ]
     .filter((entry) => {
-      // V2 setup is carried by the private escrow channel. Older builds also
-      // emitted a paid OfferHelper `prepare_escrow` action; hide that duplicate
-      // artifact so it cannot look like a new Offer in the conversation.
-      if (
-        entry.offerAction?.kind ===
-          "prepare_escrow" &&
-        entry.offerAction.rekberVersion === 2
-      ) {
-        return false;
-      }
-
       if (
         (entry.scope ?? "group") !==
         "direct"
@@ -247,7 +232,7 @@ export function DirectConversationPanel({
       : "";
   }
 
-  const v2CreateActions =
+  const rekberCreateActions =
     escrowActions.filter((item) => {
       if (
         item.action.kind !== "create" ||
@@ -278,30 +263,8 @@ export function DirectConversationPanel({
       return incoming || outgoing;
     });
 
-  const preparedCustodies = [
-    ...pairEntries
-      .filter(
-        (entry) =>
-          entry.offerAction?.kind ===
-            "prepare_escrow" &&
-          entry.offerAction.rekberVersion !== 2 &&
-          Boolean(
-            entry.offerAction
-              .custodyCommitment,
-          ),
-      )
-      .map((entry) => ({
-        key:
-          canonicalCustodyKey(
-            entry.offerAction!
-              .custodyCommitment!,
-          ),
-        custodyCommitment:
-          entry.offerAction!
-            .custodyCommitment!,
-        version: 1 as const,
-      })),
-    ...v2CreateActions
+  const preparedCustodies =
+    rekberCreateActions
       .filter((item) =>
         Boolean(
           item.action
@@ -316,52 +279,21 @@ export function DirectConversationPanel({
         custodyCommitment:
           item.action
             .custodyCommitment!,
-        version: 2 as const,
-      })),
-  ];
+      }));
 
   const preparedCustodyFingerprint =
     preparedCustodies
-      .map(
-        (item) =>
-          `${item.version}:${item.key}`,
-      )
+      .map((item) => item.key)
       .sort()
       .join("|");
 
-  const legacyFundedFreelanceEntry =
-    [...pairEntries]
-      .reverse()
-      .find((entry) => {
-        const action =
-          entry.offerAction;
-
-        if (
-          action?.kind !==
-            "prepare_escrow" ||
-          action.dealType !==
-            "freelance" ||
-          !action.custodyCommitment
-        ) {
-          return false;
-        }
-
-        return Boolean(
-          fundedCustodies[
-            canonicalCustodyKey(
-              action.custodyCommitment,
-            )
-          ],
-        );
-      });
-
-  const v2FundedFreelanceEntry =
+  const fundedFreelanceEntry =
     (():
       | ConversationEntry
       | null => {
       for (
         const item of [
-          ...v2CreateActions,
+          ...rekberCreateActions,
         ].reverse()
       ) {
         const custody =
@@ -418,10 +350,6 @@ export function DirectConversationPanel({
       return null;
     })();
 
-  const fundedFreelanceEntry =
-    legacyFundedFreelanceEntry ??
-    v2FundedFreelanceEntry;
-
   // Current freelance flow: the wallet that starts Rekber is the payer.
   // The counterparty becomes the work submitter after funding is confirmed.
   const canSubmitWork =
@@ -477,20 +405,13 @@ export function DirectConversationPanel({
               continue;
             }
 
-            const exists =
-              item.version === 2
-                ? Boolean(
-                    await getRekberV2Custody(
-                      BigInt(
-                        item.custodyCommitment,
-                      ),
-                    ),
-                  )
-                : await escrowCustodyExists(
-                    BigInt(
-                      item.custodyCommitment,
-                    ),
-                  );
+            const exists = Boolean(
+              await getRekberCustody(
+                BigInt(
+                  item.custodyCommitment,
+                ),
+              ),
+            );
 
             if (
               stopped ||
@@ -582,23 +503,7 @@ export function DirectConversationPanel({
 
   const preparedAgreementLocators =
     new Set([
-      ...pairEntries
-        .filter(
-          (entry) =>
-            entry.offerAction?.kind ===
-              "prepare_escrow" &&
-            Boolean(
-              entry.offerAction
-                .parentOfferLocator,
-            ),
-        )
-        .map((entry) =>
-          normalizeLocator(
-            entry.offerAction
-              ?.parentOfferLocator,
-          ),
-        ),
-      ...v2CreateActions.map(
+      ...rekberCreateActions.map(
         (item) =>
           normalizeLocator(
             item.action
@@ -887,134 +792,6 @@ export function DirectConversationPanel({
                       setProofEntry
                     }
                   />
-                );
-              }
-
-              if (
-                entry.offerAction?.kind ===
-                  "prepare_escrow" &&
-                entry.offerAction
-                  .custodyCommitment
-              ) {
-                const custodyKey =
-                  canonicalCustodyKey(
-                    entry.offerAction
-                      .custodyCommitment,
-                  );
-
-                const funded =
-                  Boolean(
-                    fundedCustodies[
-                      custodyKey
-                    ],
-                  );
-
-                const statusLabel =
-                  funded
-                    ? "Payment secured"
-                    : "Escrow ready";
-
-                const statusDetail =
-                  funded
-                    ? "Funds locked in VINSS Escrow"
-                    : "Ready to secure payment";
-
-                return (
-                  <li
-                    key={`rekber:${entry.actionLocator}`}
-                    className="flex justify-center py-1"
-                  >
-                    <div className="w-full max-w-md rounded-2xl bg-signal/[0.035] px-3.5 py-3 ring-1 ring-signal/20">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-signal/[0.08] text-[10px] text-signal ring-1 ring-signal/20">
-                            ✓
-                          </span>
-
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium text-signal/78">
-                              {statusLabel}
-                            </p>
-
-                            <p className="mt-0.5 truncate text-[9px] text-paper/28">
-                              {entry.offerAction.dealType
-                                ?.replace(/_/g, " ") ??
-                                "Deal"}
-                              {" · "}
-                              {statusDetail}
-                            </p>
-                          </div>
-                        </div>
-
-                        <p className="shrink-0 text-right text-[12px] font-medium text-paper/68">
-                          {entry.offerAction.amount}{" "}
-                          {entry.offerAction.asset}
-                        </p>
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-4 border-t border-wire/45 pt-2.5">
-                        {entry.transactionHash && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setProofEntry(entry)
-                            }
-                            className="text-[9px] text-signal/55 transition hover:text-signal"
-                          >
-                            Agreement proof ↗
-                          </button>
-                        )}
-
-                        {funded && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const proof =
-                                await getEscrowFundedProof(
-                                  BigInt(
-                                    entry.offerAction!
-                                      .custodyCommitment!,
-                                  ),
-                                );
-
-                              if (!proof) {
-                                return;
-                              }
-
-                              setProofEntry({
-                                id:
-                                  `rekber-funded:${custodyKey}`,
-                                kind:
-                                  "offer",
-                                summary:
-                                  `Payment secured — ${entry.offerAction!.amount} ${entry.offerAction!.asset}`,
-                                transactionHash:
-                                  proof.transactionHash,
-                                actionLocator:
-                                  `0x${custodyKey}`,
-                                sentAt:
-                                  proof.timestamp
-                                    ? new Date(
-                                        proof.timestamp *
-                                          1000,
-                                      ).toISOString()
-                                    : entry.sentAt,
-                                scope:
-                                  "direct",
-                                senderAddress:
-                                  entry.senderAddress,
-                                recipientAddress:
-                                  entry.recipientAddress,
-                              });
-                            }}
-                            className="text-[9px] text-signal/65 transition hover:text-signal"
-                          >
-                            Funding proof ↗
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </li>
                 );
               }
 

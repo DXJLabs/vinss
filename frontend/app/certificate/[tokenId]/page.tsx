@@ -8,11 +8,11 @@ import {
   useState,
 } from "react";
 import {
-  getRekberV2Proof,
+  getRekberProof,
   getSettlementCertificate,
-  type RekberV2Proof,
+  type RekberProof,
   type SettlementCertificateRecord,
-} from "@/lib/deal-room/settlementV2";
+} from "@/lib/deal-room/settlement";
 import {
   NETWORK,
 } from "@/lib/starknet/constants";
@@ -55,7 +55,7 @@ export default function CertificatePage() {
     );
 
   const [proof, setProof] =
-    useState<RekberV2Proof | null>(null);
+    useState<RekberProof | null>(null);
 
   const [status, setStatus] =
     useState<
@@ -87,7 +87,7 @@ export default function CertificatePage() {
         setStatus("ready");
 
         const settlementProof =
-          await getRekberV2Proof(
+          await getRekberProof(
             next.custodyCommitment,
             "released",
           );

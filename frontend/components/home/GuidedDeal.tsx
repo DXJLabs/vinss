@@ -75,7 +75,7 @@ const STEPS: GuideStep[] = [
     eyebrow: "Step 6 · Secure payment",
     title: "Payer starts, payee accepts, payer funds.",
     body:
-      "Rekber V2 creates separate private keys for payer authorization and payee claim. Both wallets sign the exact private terms before funding can start.",
+      "Rekber creates separate private keys for payer authorization and payee claim. Both wallets sign the exact private terms before funding can start.",
     truth: "Wallet signatures stay encrypted; token, amount, timeout and commitments remain public in the current custody design.",
     status: "TESTNET GATE",
     target: "workflow",

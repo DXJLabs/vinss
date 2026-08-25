@@ -142,13 +142,23 @@ InviteConsumed
 
 ## Escrow Rekber commitment/event family
 
-Release:
+Payer release authorization:
 
 ```text
 Poseidon(
-  VINSS_ESCROW_RELEASE_V1,
+  VINSS_RELEASE_AUTH_V2,
   custody_commitment,
-  release_secret
+  payer_release_secret
+)
+```
+
+Payee claim:
+
+```text
+Poseidon(
+  VINSS_PAYEE_CLAIM_V2,
+  custody_commitment,
+  payee_claim_secret
 )
 ```
 
@@ -156,7 +166,7 @@ Refund:
 
 ```text
 Poseidon(
-  VINSS_ESCROW_REFUND_V1,
+  VINSS_ESCROW_REFUND_V2,
   custody_commitment,
   refund_secret
 )

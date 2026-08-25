@@ -12,7 +12,8 @@ They do not replace the Privacy Pool. They define how VINSS persists encrypted c
 | **VinssMessageHelper** | Persist encrypted Message envelopes and return 7 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
 | **VinssOfferHelper** | Persist immutable encrypted Offer actions and return 10 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
 | **VinssPrivateEscrowHelper** | Persist encrypted Escrow Rekber coordination actions | Implemented + Cairo tested |
-| **VinssEscrowRekber** | ERC-20 custody, 2% fee path, release/refund to private output note | 🟡 New fee build; redeploy + E2E pending |
+| **VinssEscrowRekber** | ERC-20 custody, 2% fee, two-party release, timeout refund | Canonical build; redeploy + E2E pending |
+| **VinssSettlementCertificate** | Optional public ERC-721 evidence after successful release | Implemented + Cairo tested; redeploy pending |
 | **Mainnet deployment/evidence** | Live STRK20 contract execution evidence | 🟡 Pending |
 
 ## Contract architecture
@@ -52,11 +53,14 @@ These contracts:
 ```text
 VinssInvite
 VinssEscrowRekber
+VinssSettlementCertificate
 ```
 
 `VinssInvite` stores a one-time Invite commitment with expiry/consumption state.
 
 `VinssEscrowRekber` stores public custody commitments and ERC-20 settlement state. It is intentionally **not** a ciphertext-only contract because custody requires public token/amount state in the current implementation.
+
+`VinssSettlementCertificate` reads canonical Rekber custody and allows each party to claim its own optional public certificate after release.
 
 ## Privacy boundary at a glance
 
@@ -82,20 +86,17 @@ Escrow Rekber:
 
 VINSS therefore reduces plaintext and direct participant relationship exposure; it does not claim that all metadata or all settlement data is hidden.
 
-## Important current compatibility finding
+## Rekber commitment compatibility
 
-The current Escrow Rekber Cairo contract computes release/refund commitments with explicit domains:
+The active frontend and Cairo contract share these immutable domains:
 
 ```text
-VINSS_ESCROW_RELEASE_V1
-VINSS_ESCROW_REFUND_V1
+VINSS_RELEASE_AUTH_V2
+VINSS_PAYEE_CLAIM_V2
+VINSS_ESCROW_REFUND_V2
 ```
 
-The frontend and Cairo now use the same domain-separated release/refund commitments.
-
-The previously identified release/refund commitment mismatch has been corrected in the frontend.
-
-Escrow Rekber remains E2E-pending until release/refund tests and deployed testnet evidence are completed.
+The canonical source has dedicated release/refund tests. Deployed two-wallet E2E evidence is still pending.
 
 See [Frontend Compatibility](./frontend-compatibility.md).
 

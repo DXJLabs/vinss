@@ -16,9 +16,8 @@ on:
           - VinssOfferHelper
           - VinssPrivateEscrowHelper
           - VinssEscrowRekber
-          - VinssEscrowRekberV2
           - VinssSettlementCertificate
-      escrow_rekber_v2_address:
+      escrow_rekber_address:
         description: "Required only when deploying VinssSettlementCertificate"
         required: false
         type: string
@@ -70,7 +69,7 @@ jobs:
         continue-on-error: true
         env:
           CONTRACT_NAME: ${{ inputs.contract }}
-          ESCROW_REKBER_V2_ADDRESS: ${{ inputs.escrow_rekber_v2_address }}
+          ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
           CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
         run: |
           set -e
@@ -125,12 +124,12 @@ jobs:
             VinssMessageHelper|VinssOfferHelper|VinssInvite)
               DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
               ;;
-            VinssPrivateEscrowHelper|VinssEscrowRekber|VinssEscrowRekberV2)
+            VinssPrivateEscrowHelper|VinssEscrowRekber)
               DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
               ;;
             VinssSettlementCertificate)
-              if ! [[ "$ESCROW_REKBER_V2_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
-                echo "A valid escrow_rekber_v2_address is required for the certificate contract"
+              if ! [[ "$ESCROW_REKBER_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "A valid escrow_rekber_address is required for the certificate contract"
                 exit 1
               fi
 
@@ -139,7 +138,7 @@ jobs:
                 exit 1
               fi
 
-              DEPLOY_ARGS="$ESCROW_REKBER_V2_ADDRESS, \"$CERTIFICATE_BASE_URI\""
+              DEPLOY_ARGS="$ESCROW_REKBER_ADDRESS, \"$CERTIFICATE_BASE_URI\""
               ;;
             *)
               echo "Unsupported contract: $CONTRACT_NAME"

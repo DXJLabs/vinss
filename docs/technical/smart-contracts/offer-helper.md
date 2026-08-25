@@ -68,7 +68,6 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 Nor does it parse:

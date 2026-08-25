@@ -46,15 +46,10 @@ export const CONTRACTS = {
   privateEscrowHelper: normalizeAddress(
     process.env.NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS ?? "",
   ),
+  // Principal can leave custody only with both the payer authorization and
+  // the payee claim, or through the payer's timeout refund path.
   escrowRekber: normalizeAddress(
     process.env.NEXT_PUBLIC_ESCROW_REKBER_ADDRESS ?? "",
-  ),
-  // Secure two-party settlement path. V2 requires both the payer's release
-  // authorization and the payee's private claim secret before principal can
-  // leave custody. Do not fall back to the V1 address: the calldata and
-  // security model are intentionally different.
-  escrowRekberV2: normalizeAddress(
-    process.env.NEXT_PUBLIC_ESCROW_REKBER_V2_ADDRESS ?? "",
   ),
   settlementCertificate: normalizeAddress(
     process.env.NEXT_PUBLIC_SETTLEMENT_CERTIFICATE_ADDRESS ?? "",

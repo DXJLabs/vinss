@@ -299,23 +299,6 @@ export const expireOffer = (
     onPrepared,
   );
 
-export const prepareEscrowFromOffer = (
-  account: WalletAccountV6,
-  channelKey: ChannelKey,
-  payload: Omit<OfferActionPayload, "kind">,
-  route?: MessageRoute,
-  onPrepared?: (
-    prepared: PreparedOfferSend,
-  ) => void | Promise<void>,
-) =>
-  sendOfferAction(
-    account,
-    channelKey,
-    { ...payload, kind: "prepare_escrow" },
-    route,
-    onPrepared,
-  );
-
 /**
  * Discover Offer ciphertext and decrypt only records matching one of the
  * caller's private routing contexts.

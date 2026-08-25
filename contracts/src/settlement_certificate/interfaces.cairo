@@ -16,7 +16,7 @@ pub trait IVinssSettlementCertificate<TState> {
         secret: felt252,
     ) -> felt252;
 
-    fn get_escrow_rekber_v2(self: @TState) -> ContractAddress;
+    fn get_escrow_rekber(self: @TState) -> ContractAddress;
 
     fn is_claimed(
         self: @TState,

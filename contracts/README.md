@@ -1,75 +1,46 @@
 # VINSS Smart Contracts
 
-VINSS smart contracts are the Cairo application layer used by the current private Chat and Offer flows on Starknet.
+VINSS contracts are the Cairo application layer invoked through the configured STRK20 Privacy Pool.
 
-VINSS does **not** replace or modify the STRK20 Privacy Pool. The Privacy Pool remains the privacy/execution substrate. VINSS helper contracts receive application-specific encrypted calldata through the configured Privacy Pool.
+## Contracts
 
-## Current documented scope
-
-This README and `docs/technical/smart-contracts/` currently document:
-
+- `VinssInvite`
 - `VinssMessageHelper`
 - `VinssOfferHelper`
+- `VinssPrivateEscrowHelper`
+- `VinssEscrowRekber`
+- `VinssSettlementCertificate`
 
-Other contract modules may exist in the repository but are outside this documentation scope and are not presented here as completed MVP functionality.
+`VinssMessageHelper`, `VinssOfferHelper`, and `VinssPrivateEscrowHelper` persist encrypted envelopes without plaintext application semantics. `VinssEscrowRekber` is the single supported custody contract. `VinssSettlementCertificate` provides optional public ERC-721 evidence after a successful Rekber release.
 
-## Source structure
-
-```text
-src/
-├── messaging/
-│   ├── messaging_events.cairo
-│   ├── messaging_interfaces.cairo
-│   ├── messaging_types.cairo
-│   ├── messaging_validation.cairo
-│   ├── timeline_payload_hash.cairo
-│   └── vinss_message_helper.cairo
-│
-├── offers/
-│   ├── offer_commitments.cairo
-│   ├── offer_events.cairo
-│   ├── offer_interfaces.cairo
-│   ├── offer_types.cairo
-│   ├── offer_validation.cairo
-│   └── vinss_offer.cairo
-│
-├── interfaces/
-├── utils/
-└── tests/
-```
-
-## Core boundary
-
-Both current helpers:
-
-- accept writes only from the Privacy Pool address pinned at deployment;
-- store public encrypted-envelope structure and ciphertext;
-- do not receive plaintext message or Offer terms;
-- do not receive public wallet addresses as sender/recipient fields;
-- use one-time opaque routing tags;
-- validate a domain-separated Poseidon commitment;
-- reject locator reuse;
-- expose read methods used by ciphertext discovery.
-
-## Current revenue behavior
+## Rekber source
 
 ```text
-VinssMessageHelper   7 STRK per submitted private message
-VinssOfferHelper     10 STRK per submitted Offer action
-VinssEscrowRekberV2  2% of the secured ERC-20 principal at funding
+src/escrow_rekber/
+├── commitments.cairo
+├── errors.cairo
+├── events.cairo
+├── interfaces.cairo
+├── types.cairo
+└── vinss_escrow_rekber.cairo
 ```
 
-The frontend constructs the corresponding STRK20 action bundle. The helper returns an `OpenNoteDeposit` for the configured revenue token and amount.
+The canonical Rekber requires the payer release-authorization secret and the independent payee claim secret. Timeout refund remains a payer recovery path. The removed legacy unilateral-release implementation is not compiled.
+
+## Revenue
+
+```text
+VinssMessageHelper  7 STRK per private message
+VinssOfferHelper    10 STRK per Offer action
+VinssEscrowRekber   2% of secured principal at funding
+```
 
 ## Build and test
 
 ```bash
 cd ~/vinss/contracts
-
 scarb build
 snforge test
 ```
 
-## Technical documentation
-
-Start at [`../docs/technical/smart-contracts/README.md`](../docs/technical/smart-contracts/README.md).
+See [`../docs/technical/smart-contracts/README.md`](../docs/technical/smart-contracts/README.md) for boundaries and verification status.

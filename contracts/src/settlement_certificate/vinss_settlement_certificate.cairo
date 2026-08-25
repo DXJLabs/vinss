@@ -21,9 +21,9 @@ pub mod VinssSettlementCertificate {
     };
 
     use super::IVinssSettlementCertificate;
-    use crate::escrow_rekber_v2::interfaces::{
-        IVinssEscrowRekberV2Dispatcher,
-        IVinssEscrowRekberV2DispatcherTrait,
+    use crate::escrow_rekber::interfaces::{
+        IVinssEscrowRekberDispatcher,
+        IVinssEscrowRekberDispatcherTrait,
     };
     use crate::settlement_certificate::commitments::{
         compute_certificate_claim_commitment,
@@ -62,7 +62,7 @@ pub mod VinssSettlementCertificate {
         erc721: ERC721Component::Storage,
         #[substorage(v0)]
         src5: SRC5Component::Storage,
-        escrow_rekber_v2: ContractAddress,
+        escrow_rekber: ContractAddress,
         claimed: Map<(felt252, u8), bool>,
         certificates: Map<felt252, SettlementCertificateRecord>,
         certificate_exists: Map<felt252, bool>,
@@ -81,12 +81,12 @@ pub mod VinssSettlementCertificate {
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        escrow_rekber_v2: ContractAddress,
+        escrow_rekber: ContractAddress,
         base_uri: ByteArray,
     ) {
-        assert_non_zero_address(escrow_rekber_v2);
+        assert_non_zero_address(escrow_rekber);
 
-        self.escrow_rekber_v2.write(escrow_rekber_v2);
+        self.escrow_rekber.write(escrow_rekber);
         self.erc721.initializer(
             "VINSS Settlement Certificate",
             "VINSS-CERT",
@@ -115,8 +115,8 @@ pub mod VinssSettlementCertificate {
                 ALREADY_CLAIMED,
             );
 
-            let escrow = IVinssEscrowRekberV2Dispatcher {
-                contract_address: self.escrow_rekber_v2.read(),
+            let escrow = IVinssEscrowRekberDispatcher {
+                contract_address: self.escrow_rekber.read(),
             };
             let custody = escrow.get_custody(custody_commitment);
             assert(custody.consumed, NOT_RELEASED);
@@ -172,8 +172,8 @@ pub mod VinssSettlementCertificate {
             token_id
         }
 
-        fn get_escrow_rekber_v2(self: @ContractState) -> ContractAddress {
-            self.escrow_rekber_v2.read()
+        fn get_escrow_rekber(self: @ContractState) -> ContractAddress {
+            self.escrow_rekber.read()
         }
 
         fn is_claimed(

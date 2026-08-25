@@ -17,6 +17,7 @@ test_vinss_offer_helper.cairo
 test_vinss_private_escrow_helper.cairo
 test_vinss_invite.cairo
 test_vinss_escrow_rekber.cairo
+test_vinss_settlement_certificate.cairo
 ```
 
 ## Message Helper
@@ -33,7 +34,7 @@ Current tests cover contract-level behavior including:
 - event structure;
 - 7 STRK revenue OpenNoteDeposit.
 
-The product flow is also currently marked testnet on-chain verified.
+The 7 STRK build requires redeployment and fresh E2E evidence.
 
 ## Offer Helper
 
@@ -50,7 +51,7 @@ Current tests verify:
 - locator replay rejection;
 - event routing tags.
 
-The Offer product flow is currently marked testnet on-chain verified.
+The 10 STRK build requires redeployment and fresh E2E evidence.
 
 ## Private Escrow Helper
 
@@ -84,40 +85,17 @@ Current tests cover:
 
 ## Escrow Rekber
 
-Current dedicated test coverage is narrower.
+Current tests cover full-principal reservation, 2% fee output, two-secret release, secret-role separation, timeout refund, early-refund rejection, and replay rejection after release.
 
-The existing test verifies deposit-side economics/invariants:
+## Settlement Certificate
 
-```text
-wallet-equivalent balance = principal + 2%
-returned fee note         = 2%
-stored custody amount     = full principal
-reserved amount           = full principal
-Pool allowance            = fee
-```
+Current tests cover successful payer/payee claims, pre-settlement rejection, refunded-custody rejection, caller-address binding, and claim replay rejection.
 
-The dedicated test file currently does **not** cover release and refund execution paths.
+## Cross-layer guard
 
-## Missing high-value tests
+`scripts/test-privacy-boundaries.mjs` compares the active frontend settlement domains with the canonical Cairo commitment module. It also rejects reintroduction of the paid legacy `prepare_escrow` Offer path.
 
-Before Escrow Rekber E2E verification, add/verify:
-
-- release commitment success;
-- wrong release secret rejection;
-- release after refund boundary rejection;
-- refund success at/after boundary;
-- early refund rejection;
-- wrong refund secret rejection;
-- double settlement rejection;
-- reserve accounting after settlement;
-- exact allowance reset/pull behavior;
-- cross-layer frontend/Cairo commitment vectors.
-
-## Current known cross-layer failure
-
-A cross-layer regression guard now requires the frontend and Cairo release/refund commitment domains to remain aligned.
-
-This alignment removes the previous integration blocker but does not replace deployed E2E evidence.
+High-value remaining work is deployed two-wallet E2E evidence for release, refund, Ready X output-note construction, and certificate rendering.
 
 ## Test boundary
 

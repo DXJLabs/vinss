@@ -35,21 +35,12 @@ pub mod private_escrow {
 }
 
 pub mod escrow_rekber {
-    pub mod escrow_rekber_commitments;
-    pub mod escrow_rekber_errors;
-    pub mod escrow_rekber_events;
-    pub mod escrow_rekber_interfaces;
-    pub mod escrow_rekber_types;
-    pub mod vinss_escrow_rekber;
-}
-
-pub mod escrow_rekber_v2 {
     pub mod commitments;
     pub mod errors;
     pub mod events;
     pub mod interfaces;
     pub mod types;
-    pub mod vinss_escrow_rekber_v2;
+    pub mod vinss_escrow_rekber;
 }
 
 pub mod settlement_certificate {

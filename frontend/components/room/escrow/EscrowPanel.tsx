@@ -31,20 +31,20 @@ import {
   computeCertificateClaimCommitment,
   computeCertificateTokenId,
   computePayeeClaimCommitment,
-  computeRekberV2RefundCommitment,
+  computeRekberRefundCommitment,
   computeReleaseAuthorizationCommitment,
-  depositEscrowV2,
+  depositEscrow,
   generatePayeeSettlementSecrets,
   generatePayerSettlementSecrets,
-  generateRekberV2CustodyCommitment,
-  getRekberV2Custody,
-  getRekberV2Proof,
+  generateRekberCustodyCommitment,
+  getRekberCustody,
+  getRekberProof,
   isSettlementCertificateClaimed,
-  refundEscrowV2,
-  releaseEscrowV2,
-  type RekberV2CustodyState,
+  refundEscrow,
+  releaseEscrow,
+  type RekberCustodyState,
   type SettlementRole,
-} from "@/lib/deal-room/settlementV2";
+} from "@/lib/deal-room/settlement";
 import {
   loadRekberSecrets,
   saveRekberSecrets,
@@ -189,7 +189,7 @@ export function EscrowPanel({
   const [localRelease, setLocalRelease] =
     useState<LocalCoordination | null>(null);
   const [custodyState, setCustodyState] =
-    useState<RekberV2CustodyState | null>(null);
+    useState<RekberCustodyState | null>(null);
   const [fundingProofTx, setFundingProofTx] =
     useState("");
   const [settlementProofTx, setSettlementProofTx] =
@@ -297,31 +297,6 @@ export function EscrowPanel({
         ? "payee"
         : null;
 
-  const legacyPrepared = useMemo(
-    () =>
-      [...offerEntries]
-        .reverse()
-        .find((entry) => {
-          const action = entry.offerAction;
-
-          return (
-            action?.kind === "prepare_escrow" &&
-            action.rekberVersion !== 2 &&
-            Boolean(action.custodyCommitment) &&
-            canonicalLocator(
-              action.parentOfferLocator,
-            ) ===
-              canonicalLocator(
-                acceptedOffer?.actionLocator,
-              )
-          );
-        }) ?? null,
-    [
-      acceptedOffer?.actionLocator,
-      offerEntries,
-    ],
-  );
-
   const discoveredCreate = useMemo(
     () =>
       [...escrowActions]
@@ -369,10 +344,6 @@ export function EscrowPanel({
     localCreate ?? discoveredCreate;
   const createAction =
     createRecord?.action ?? null;
-  const legacyDeal = Boolean(
-    legacyPrepared &&
-      !createAction,
-  );
 
   const discoveredAccept = useMemo(
     () =>
@@ -663,7 +634,7 @@ export function EscrowPanel({
         localRefundSecret &&
         custodyState &&
         !custodyState.consumed &&
-        computeRekberV2RefundCommitment(
+        computeRekberRefundCommitment(
           custodyCommitment,
           localRefundSecret,
         ) ===
@@ -677,8 +648,8 @@ export function EscrowPanel({
   );
   const released =
     settled && !custodyState?.refunded;
-  const v2Configured = Boolean(
-    CONTRACTS.escrowRekberV2,
+  const rekberConfigured = Boolean(
+    CONTRACTS.escrowRekber,
   );
   const certificateConfigured =
     Boolean(
@@ -768,7 +739,7 @@ export function EscrowPanel({
   useEffect(() => {
     if (
       !custodyCommitment ||
-      !v2Configured
+      !rekberConfigured
     ) {
       setCustodyState(null);
       return;
@@ -778,7 +749,7 @@ export function EscrowPanel({
 
     const sync = async () => {
       const next =
-        await getRekberV2Custody(
+        await getRekberCustody(
           custodyCommitment,
         );
 
@@ -787,7 +758,7 @@ export function EscrowPanel({
 
       if (next) {
         const funding =
-          await getRekberV2Proof(
+          await getRekberProof(
             custodyCommitment,
             "funded",
           );
@@ -807,7 +778,7 @@ export function EscrowPanel({
           ? "refunded"
           : "released";
         const proof =
-          await getRekberV2Proof(
+          await getRekberProof(
             custodyCommitment,
             outcome,
           );
@@ -835,7 +806,7 @@ export function EscrowPanel({
     };
   }, [
     custodyCommitment,
-    v2Configured,
+    rekberConfigured,
   ]);
 
   useEffect(() => {
@@ -914,7 +885,6 @@ export function EscrowPanel({
       !acceptedOffer ||
       !accepted ||
       !peerAddress ||
-      legacyDeal ||
       createAction ||
       role !== "payer"
     ) {
@@ -949,7 +919,7 @@ export function EscrowPanel({
         );
 
         const custody =
-          generateRekberV2CustodyCommitment();
+          generateRekberCustodyCommitment();
         const secrets =
           generatePayerSettlementSecrets();
         const refundAt =
@@ -993,7 +963,7 @@ export function EscrowPanel({
               secrets.releaseAuthorizationSecret,
             ).toString(),
           refundCommitment:
-            computeRekberV2RefundCommitment(
+            computeRekberRefundCommitment(
               custody,
               secrets.refundSecret,
             ).toString(),
@@ -1356,7 +1326,7 @@ export function EscrowPanel({
           settlementAsset.decimals,
         );
       const result =
-        await depositEscrowV2(
+        await depositEscrow(
           session.account,
           {
             custodyCommitment,
@@ -1376,7 +1346,7 @@ export function EscrowPanel({
         result.transactionHash,
       );
       setCustodyState(
-        await getRekberV2Custody(
+        await getRekberCustody(
           custodyCommitment,
         ),
       );
@@ -1521,7 +1491,7 @@ export function EscrowPanel({
 
     try {
       const result =
-        await releaseEscrowV2(
+        await releaseEscrow(
           session.account,
           {
             custodyCommitment,
@@ -1537,7 +1507,7 @@ export function EscrowPanel({
       );
 
       setCustodyState(
-        await getRekberV2Custody(
+        await getRekberCustody(
           custodyCommitment,
         ),
       );
@@ -1583,7 +1553,7 @@ export function EscrowPanel({
 
     try {
       const result =
-        await refundEscrowV2(
+        await refundEscrow(
           session.account,
           {
             custodyCommitment,
@@ -1597,7 +1567,7 @@ export function EscrowPanel({
         result.transactionHash,
       );
       setCustodyState(
-        await getRekberV2Custody(
+        await getRekberCustody(
           custodyCommitment,
         ),
       );
@@ -1759,24 +1729,13 @@ export function EscrowPanel({
           />
         )}
 
-        {accepted && legacyDeal && (
-          <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
-            <p className="text-xs font-medium text-amber">
-              Existing Escrow V1 deal
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
-              This agreement may already hold funds in the legacy Escrow contract. It cannot be migrated into V2. Do not fund it again; create a new Offer when testing V2 settlement.
-            </p>
-          </div>
-        )}
-
-        {accepted && !legacyDeal && !v2Configured && (
+        {accepted && !rekberConfigured && (
           <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
             <p className="text-xs font-medium text-amber">
               Secure settlement is not deployed on this network
             </p>
             <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
-              Configure NEXT_PUBLIC_ESCROW_REKBER_V2_ADDRESS after the V2 contract passes testnet release and refund verification.
+              Configure NEXT_PUBLIC_ESCROW_REKBER_ADDRESS after the contract passes testnet release and refund verification.
             </p>
           </div>
         )}
@@ -1838,7 +1797,7 @@ export function EscrowPanel({
           </div>
         )}
 
-        {accepted && !legacyDeal && v2Configured && !createAction && (
+        {accepted && rekberConfigured && !createAction && (
           <div className="space-y-3">
             <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
               <p className="text-[9px] uppercase tracking-[0.12em] text-signal/70">
@@ -1955,7 +1914,7 @@ export function EscrowPanel({
         )}
 
         {accepted &&
-          v2Configured &&
+          rekberConfigured &&
           createAction &&
           !acceptAction &&
           role === "payee" && (
@@ -1994,7 +1953,7 @@ export function EscrowPanel({
           )}
 
         {accepted &&
-          v2Configured &&
+          rekberConfigured &&
           createAction &&
           !acceptAction &&
           role === "payer" && (
@@ -2010,7 +1969,7 @@ export function EscrowPanel({
           )}
 
         {accepted &&
-          v2Configured &&
+          rekberConfigured &&
           acceptAction &&
           !funded &&
           role === "payer" && (
@@ -2054,7 +2013,7 @@ export function EscrowPanel({
           )}
 
         {accepted &&
-          v2Configured &&
+          rekberConfigured &&
           acceptAction &&
           !funded &&
           role === "payee" && (

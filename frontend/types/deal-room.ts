@@ -89,8 +89,7 @@ export type OfferActionKind =
   | "accept"
   | "reject"
   | "cancel"
-  | "expire"
-  | "prepare_escrow";
+  | "expire";
 
 export interface OfferActionPayload {
   kind: OfferActionKind;
@@ -116,10 +115,7 @@ export interface OfferActionPayload {
   expiresAt?: string;
   reason?: string;
 
-  // Rekber setup commitment. This stays inside encrypted Offer ciphertext.
-  // It lets prepare_escrow establish PAYMENT READY without invoking a
-  // second privacy helper in the same STRK20 transaction.
-  rekberVersion?: 2;
+  // Used locally when an accepted Offer is associated with Rekber custody.
   custodyCommitment?: string;
 }
 
@@ -181,7 +177,7 @@ export interface EscrowActionPayload {
   rootEscrowLocator?: string;
   parentEscrowLocator?: string;
   custodyCommitment?: string;
-  // Rekber V2 uses two independent settlement preimages. The payer keeps the
+  // Rekber uses two independent settlement preimages. The payer keeps the
   // release authorization secret; the payee keeps the claim secret. Only the
   // commitments are shared before funding.
   releaseAuthorizationCommitment?: string;

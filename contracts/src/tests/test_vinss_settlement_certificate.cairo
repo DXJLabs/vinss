@@ -17,14 +17,14 @@ use snforge_std::{
 };
 use starknet::ContractAddress;
 
-use crate::escrow_rekber_v2::commitments::{
+use crate::escrow_rekber::commitments::{
     compute_payee_claim_commitment,
     compute_refund_commitment,
     compute_release_authorization_commitment,
 };
-use crate::escrow_rekber_v2::interfaces::{
-    IVinssEscrowRekberV2Dispatcher,
-    IVinssEscrowRekberV2DispatcherTrait,
+use crate::escrow_rekber::interfaces::{
+    IVinssEscrowRekberDispatcher,
+    IVinssEscrowRekberDispatcherTrait,
 };
 use crate::settlement_certificate::commitments::{
     compute_certificate_claim_commitment,
@@ -74,7 +74,7 @@ fn deploy_contracts() -> (ContractAddress, ContractAddress, ContractAddress) {
         .contract_class();
     let (token_address, _) = token_class.deploy(@array![]).unwrap();
 
-    let rekber_class = declare("VinssEscrowRekberV2")
+    let rekber_class = declare("VinssEscrowRekber")
         .unwrap()
         .contract_class();
     let (rekber_address, _) = rekber_class
@@ -98,7 +98,7 @@ fn deploy_contracts() -> (ContractAddress, ContractAddress, ContractAddress) {
 }
 
 fn fund_custody(
-    rekber: @IVinssEscrowRekberV2Dispatcher,
+    rekber: @IVinssEscrowRekberDispatcher,
     token: @IMockClaimERC20Dispatcher,
     rekber_address: ContractAddress,
     token_address: ContractAddress,
@@ -151,7 +151,7 @@ fn consume_fee_allowance(
 }
 
 fn release_custody(
-    rekber: @IVinssEscrowRekberV2Dispatcher,
+    rekber: @IVinssEscrowRekberDispatcher,
     rekber_address: ContractAddress,
 ) {
     start_cheat_block_timestamp(rekber_address, RELEASE_TIME);
@@ -182,7 +182,7 @@ fn released_settlement_allows_one_certificate_per_party() {
     let (rekber_address, certificate_address, token_address) =
         deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
-    let rekber = IVinssEscrowRekberV2Dispatcher {
+    let rekber = IVinssEscrowRekberDispatcher {
         contract_address: rekber_address,
     };
     let certificate = IVinssSettlementCertificateDispatcher {
@@ -223,7 +223,7 @@ fn certificate_cannot_be_claimed_before_settlement() {
     let (rekber_address, certificate_address, token_address) =
         deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
-    let rekber = IVinssEscrowRekberV2Dispatcher {
+    let rekber = IVinssEscrowRekberDispatcher {
         contract_address: rekber_address,
     };
     let certificate = IVinssSettlementCertificateDispatcher {
@@ -240,7 +240,7 @@ fn refunded_rekber_cannot_mint_success_certificate() {
     let (rekber_address, certificate_address, token_address) =
         deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
-    let rekber = IVinssEscrowRekberV2Dispatcher {
+    let rekber = IVinssEscrowRekberDispatcher {
         contract_address: rekber_address,
     };
     let certificate = IVinssSettlementCertificateDispatcher {
@@ -262,7 +262,7 @@ fn certificate_claim_is_bound_to_the_calling_wallet() {
     let (rekber_address, certificate_address, token_address) =
         deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
-    let rekber = IVinssEscrowRekberV2Dispatcher {
+    let rekber = IVinssEscrowRekberDispatcher {
         contract_address: rekber_address,
     };
     let certificate = IVinssSettlementCertificateDispatcher {
@@ -287,7 +287,7 @@ fn certificate_claim_cannot_be_replayed() {
     let (rekber_address, certificate_address, token_address) =
         deploy_contracts();
     let token = IMockClaimERC20Dispatcher { contract_address: token_address };
-    let rekber = IVinssEscrowRekberV2Dispatcher {
+    let rekber = IVinssEscrowRekberDispatcher {
         contract_address: rekber_address,
     };
     let certificate = IVinssSettlementCertificateDispatcher {

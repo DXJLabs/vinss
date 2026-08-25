@@ -212,9 +212,9 @@ console.log(
   "ciphertext-only discovery boundary checks: PASS",
 );
 
-const escrowFrontend = await readFile(
+const settlementFrontend = await readFile(
   new URL(
-    "../frontend/lib/deal-room/escrow.ts",
+    "../frontend/lib/deal-room/settlement.ts",
     import.meta.url,
   ),
   "utf8",
@@ -235,18 +235,19 @@ const escrowPanel = await readFile(
 );
 const escrowCommitments = await readFile(
   new URL(
-    "../contracts/src/escrow_rekber/escrow_rekber_commitments.cairo",
+    "../contracts/src/escrow_rekber/commitments.cairo",
     import.meta.url,
   ),
   "utf8",
 );
 
 for (const domain of [
-  "VINSS_ESCROW_RELEASE_V1",
-  "VINSS_ESCROW_REFUND_V1",
+  "VINSS_RELEASE_AUTH_V2",
+  "VINSS_PAYEE_CLAIM_V2",
+  "VINSS_ESCROW_REFUND_V2",
 ]) {
   assert.equal(
-    escrowFrontend.includes(domain),
+    settlementFrontend.includes(domain),
     true,
     `frontend Rekber commitment must include ${domain}`,
   );
@@ -258,7 +259,7 @@ for (const domain of [
 }
 
 assert.match(
-  escrowFrontend,
+  escrowPanel,
   /parseSettlementAmount/,
   "accepted Offer decimal amount must be converted to token base units",
 );
@@ -266,17 +267,17 @@ assert.match(
 assert.equal(
   roomEscrowHook.includes("prepareEscrowFromOffer"),
   false,
-  "Rekber V2 setup must not create a paid OfferHelper prepare action",
+  "Rekber setup must not create a paid OfferHelper prepare action",
 );
 assert.equal(
   roomEscrowHook.includes("startDirectRekber"),
   false,
-  "Rekber V2 setup must use only the private escrow coordination channel",
+  "Rekber setup must use only the private escrow coordination channel",
 );
 assert.equal(
   escrowPanel.includes("onStartRekber"),
   false,
-  "Rekber setup UI must not invoke the legacy paid preparation callback",
+  "Rekber setup UI must not invoke the removed paid preparation callback",
 );
 assert.match(
   escrowPanel,

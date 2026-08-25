@@ -51,7 +51,6 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 ## Private Escrow coordination discovery

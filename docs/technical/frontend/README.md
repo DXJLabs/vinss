@@ -13,8 +13,8 @@ The backend is intentionally **not** the plaintext trust authority.
 | Capability | Technical role | Status |
 |---|---|---|
 | **Invite** | Encrypted Deal Room bootstrap with on-chain commitment, expiry, and one-time consumption | Implemented |
-| **Private Chat** | Pairwise encrypted Message flow with opaque routing and STRK20 submission | ✅ Testnet on-chain verified |
-| **Structured Offer** | Immutable encrypted Offer lifecycle with parent/root relationships | ✅ Testnet on-chain verified |
+| **Private Chat** | Pairwise encrypted Message flow with opaque routing and STRK20 submission | Current fee build redeploy pending |
+| **Structured Offer** | Immutable encrypted Offer lifecycle with parent/root relationships | Current fee build redeploy pending |
 | **Escrow Rekber** | Encrypted coordination + commitment-based custody/release/refund path | 🟡 E2E on-chain verification pending |
 | **Wallet & STRK20** | Wallet capability detection, user authorization, `strk20InvokeTransaction()` execution | Implemented |
 | **Participant / Key Management** | Per-room ECDH identity, pairwise key derivation, participant discovery | Implemented |
@@ -40,9 +40,7 @@ Structured Offer
   ↓
 Accept / Counter / Reject
   ↓
-prepare_escrow
-  ↓
-Escrow Rekber
+Encrypted Rekber setup
   ↓
 Settlement
 ```

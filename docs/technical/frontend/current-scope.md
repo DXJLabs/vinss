@@ -17,9 +17,8 @@ This page prevents implemented foundations, tested behavior, and verified on-cha
 | Ciphertext-only Offer discovery | Implemented |
 | Invite V3 encryption/commitment | Implemented |
 | Escrow Rekber coordination | Implemented / integration stage |
-| Escrow Rekber deposit/release/refund frontend path | Implemented / E2E verification pending |
-| Settlement Evidence | Pending |
-| NFT Settlement Certificate | Pending |
+| Canonical Rekber deposit/release/refund path | Implemented / Cairo tested / E2E pending |
+| NFT Settlement Certificate | Implemented / Cairo tested / deployment pending |
 | Mainnet STRK20 proof | Pending |
 
 ## Current privacy boundary

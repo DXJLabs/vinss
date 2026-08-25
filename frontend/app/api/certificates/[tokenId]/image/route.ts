@@ -1,6 +1,6 @@
 import {
   getSettlementCertificate,
-} from "@/lib/deal-room/settlementV2";
+} from "@/lib/deal-room/settlement";
 import {
   NETWORK,
 } from "@/lib/starknet/constants";

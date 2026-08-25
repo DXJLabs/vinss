@@ -1,189 +1,86 @@
 # Frontend Compatibility
 
-Contract and frontend encoding must match exactly.
+Contract and frontend encoding must match exactly. A Cairo build alone does not verify browser calldata or commitments.
 
-A successful Cairo build does not prove that the browser constructs the same commitment/calldata.
-
-## Message — compatible
-
-Contract:
+## Message
 
 ```text
 version = 2
 domain  = VINSS_MSG_COMMIT_V2
-header  = 6 felts
+fee     = 7 STRK
 ```
 
-Frontend:
+The helper and frontend commit the domain, version, locator, sender tag, recipient tag, chunk count, and ciphertext.
 
-```text
-frontend/lib/privacy/messageRouting.ts
-frontend/lib/deal-room/messaging.ts
-```
-
-Both commit:
-
-```text
-domain
-version
-locator
-sender_tag
-recipient_tag
-chunk_count
-ciphertext
-```
-
-Current application revenue also matches:
-
-```text
-contract  7 STRK
-frontend  7 STRK
-```
-
-## Offer — compatible
-
-Contract:
+## Offer
 
 ```text
 version = 2
 domain  = VINSS_OFFER_COMMIT_V2
-header  = 6 felts
+fee     = 10 STRK per lifecycle action
 ```
 
-Frontend:
+Offer plaintext and participant fields stay encrypted.
 
-```text
-frontend/lib/deal-room/offers.ts
-```
+## Private Rekber coordination
 
-Current commitment order and 10 STRK revenue path match the helper.
+`VinssPrivateEscrowHelper` and `frontend/lib/deal-room/escrow.ts` use the same six-field encrypted envelope header and `VINSS_PRIVATE_ESCROW_COMMIT_V2` domain.
 
-## Private Escrow coordination — executable code compatible
+## Rekber funding
 
-Contract executable V2 layout:
-
-```text
-version
-locator
-sender_tag
-recipient_tag
-commitment
-chunk_count
-ciphertext
-```
-
-Frontend:
-
-```text
-frontend/lib/deal-room/escrow.ts
-```
-
-Frontend and executable Cairo commitment code both include:
-
-```text
-VINSS_PRIVATE_ESCROW_COMMIT_V2
-version
-locator
-sender_tag
-recipient_tag
-chunk_count
-ciphertext
-```
-
-### Stale source-comment warning
-
-Some Cairo comments and the leading comment in `frontend/lib/deal-room/escrow.ts` still show an older header without sender/recipient tags.
-
-The executable code and current tests use the V2 six-field shape above.
-
-## Invite — compatible at contract-call level
-
-Create:
-
-```text
-frontend [0, commitment, expires_at]
-contract [0, commitment, expires_at]
-```
-
-Consume:
-
-```text
-frontend [1, secret]
-contract [1, secret]
-```
-
-Both derive commitment from:
-
-```text
-VINSS_INVITE_V1 + secret
-```
-
-The contract itself returns no OpenNoteDeposit.
-
-## Escrow Rekber deposit — shape and fee compatible
-
-Frontend deposit constructs:
+The canonical frontend submits:
 
 ```text
 1
 custody commitment
-release commitment
+release authorization commitment
+payee claim commitment
 refund commitment
+payer certificate commitment
+payee certificate commitment
 refund-after
 token
 principal
+revenue open-note ID
 ```
 
-and appends the revenue OpenNote ID through the Wallet API open-note placeholder.
-
-The contract receives eight felts including that final note ID.
-
-Both frontend and contract currently use:
+Frontend and Cairo both compute:
 
 ```text
 fee = principal / 50
 ```
 
-## Escrow Rekber release/refund — code aligned, E2E pending
+## Rekber release/refund commitments
 
-Frontend and Cairo now use the same domain-separated formulas:
-
-```text
-Poseidon(
-  VINSS_ESCROW_RELEASE_V1,
-  custody_commitment,
-  release_secret
-)
-
-Poseidon(
-  VINSS_ESCROW_REFUND_V1,
-  custody_commitment,
-  refund_secret
-)
-```
-
-The frontend also converts the accepted Offer's human-readable decimal amount
-to the selected settlement token's exact base units before funding.
-
-This removes the previously identified commitment mismatch.
-
-It does **not** by itself upgrade Escrow Rekber to E2E verified. Release/refund
-contract tests and deployed testnet execution evidence are still required.
-
-## Compatibility verification rule
-
-For every envelope/commitment change, verify:
+Frontend `settlement.ts` and Cairo `commitments.cairo` share these immutable domains:
 
 ```text
-domain
-version
-field order
-felt encoding
-chunk count
-open-note placeholder position
-fee/output amount
-frontend hash
-Cairo hash
+Poseidon(VINSS_RELEASE_AUTH_V2, custody, payer_secret)
+Poseidon(VINSS_PAYEE_CLAIM_V2, custody, payee_secret)
+Poseidon(VINSS_ESCROW_REFUND_V2, custody, refund_secret)
 ```
 
-with a cross-layer test vector where practical.
+Release calldata contains both release preimages. Refund calldata contains only the payer refund preimage. The wallet appends the output open-note ID.
+
+## Settlement Certificate
+
+The certificate constructor receives the canonical Rekber address. Frontend and Cairo share the certificate claim/token domains and role encoding:
+
+```text
+payer = 1
+payee = 2
+```
+
+## Environment
+
+There is one custody address variable:
+
+```text
+NEXT_PUBLIC_ESCROW_REKBER_ADDRESS
+```
+
+The backend indexer uses `ESCROW_REKBER_ADDRESS` and the canonical event selectors only.
+
+## Compatibility checklist
+
+For every change, verify domain, version, field order, felt encoding, open-note placeholder position, fee/output amount, event selector, frontend hash, and Cairo hash.

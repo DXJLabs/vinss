@@ -9,7 +9,7 @@ import {
 } from "@/lib/privacy/participantKeys";
 import type {
   SettlementRole,
-} from "@/lib/deal-room/settlementV2";
+} from "@/lib/deal-room/settlement";
 
 export interface StoredRekberSecrets {
   version: 2;

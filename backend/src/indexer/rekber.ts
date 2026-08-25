@@ -9,18 +9,9 @@ import type {
 import { RekberStore } from "./rekberStore.js";
 
 const EVENT_NAMES: Record<RekberEventKind, readonly string[]> = {
-  funded: [
-    "EscrowRekberCustodyFunded",
-    "EscrowRekberV2CustodyFunded",
-  ],
-  released: [
-    "EscrowRekberCustodyReleased",
-    "EscrowRekberV2CustodyReleased",
-  ],
-  refunded: [
-    "EscrowRekberCustodyRefunded",
-    "EscrowRekberV2CustodyRefunded",
-  ],
+  funded: ["EscrowRekberCustodyFunded"],
+  released: ["EscrowRekberCustodyReleased"],
+  refunded: ["EscrowRekberCustodyRefunded"],
 };
 
 function sleep(milliseconds: number): Promise<void> {

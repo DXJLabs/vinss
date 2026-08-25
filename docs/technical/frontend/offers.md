@@ -2,7 +2,7 @@
 
 ## Status
 
-**Testnet on-chain verified.**
+Previous build testnet-verified. The current 10 STRK build requires redeployment and fresh evidence.
 
 ## Objective
 
@@ -35,7 +35,6 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 Each action receives its own fresh locator.
@@ -128,7 +127,7 @@ The frontend:
 
 `rootOfferLocator` and `parentOfferLocator` preserve Offer relationships inside encrypted state.
 
-`prepare_escrow` is the transition used to connect the accepted agreement to Escrow Rekber.
+The accepted Offer locator is carried into an encrypted Rekber `create` coordination action. Rekber setup does not submit another paid Offer action.
 
 ## Mobile wallet recovery
 

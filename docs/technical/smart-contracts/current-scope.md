@@ -1,104 +1,35 @@
 # Current Smart Contract Scope
 
-This page separates existing Cairo modules, contract-level tests, product-level verification, and pending settlement work.
+This page separates source availability, Cairo coverage, and deployed product evidence.
 
-## Status
-
-| Contract/capability | Contract code | Cairo tests | Product/E2E status |
+| Contract/capability | Source | Cairo tests | Current deployment status |
 |---|---:|---:|---|
-| `VinssInvite` | ✅ | ✅ | Implemented/frontend-integrated |
-| `VinssMessageHelper` | ✅ | ✅ | ✅ Testnet on-chain verified |
-| `VinssOfferHelper` | ✅ | ✅ | ✅ Testnet on-chain verified |
-| `VinssPrivateEscrowHelper` | ✅ | ✅ | 🟡 Escrow integration stage |
-| `VinssEscrowRekber` deposit | ✅ | ✅ deposit invariant | 🟡 E2E pending |
-| `VinssEscrowRekber` release/refund | ✅ | ⚠️ dedicated coverage incomplete | 🔴 current frontend commitment mismatch |
-| Settlement Evidence contract | — | — | Pending |
-| NFT Settlement Certificate contract | — | — | Pending |
-| Mainnet contract evidence | — | — | Pending |
+| `VinssInvite` | ✅ | ✅ | Existing deployment |
+| `VinssMessageHelper` · 7 STRK | ✅ | ✅ | Redeploy + E2E pending |
+| `VinssOfferHelper` · 10 STRK | ✅ | ✅ | Redeploy + E2E pending |
+| `VinssPrivateEscrowHelper` | ✅ | ✅ | Existing deployment |
+| `VinssEscrowRekber` · 2% | ✅ | ✅ deposit/release/refund | Canonical redeploy + E2E pending |
+| `VinssSettlementCertificate` | ✅ | ✅ | Redeploy after Rekber + E2E pending |
+| Mainnet evidence | — | — | Pending |
 
-## Message Helper
+## Canonical Rekber
 
-```text
-encrypted V2 envelope
-opaque routing tags
-ciphertext storage
-commitment validation
-one-time locator/commitment guards
-Privacy-Pool-only invocation
-7 STRK application revenue output
-```
-
-## Offer Helper
+Only the two-party authorization implementation remains in source. It provides:
 
 ```text
-encrypted V2 action envelope
-opaque routing tags
-ciphertext storage
-commitment validation
-one-time locator/commitment guards
-Privacy-Pool-only invocation
-10 STRK application revenue output
-```
-
-## Private Escrow Helper
-
-```text
-encrypted V2 coordination envelope
-opaque routing tags
-ciphertext discovery
-no ERC-20 custody
-no output OpenNoteDeposit
-```
-
-## Invite
-
-```text
-commitment create
-expiry
-one-time consume
-Privacy-Pool-only invocation
-no Invite payload storage
-```
-
-## Escrow Rekber
-
-Implemented contract mechanics:
-
-```text
-deposit principal + 2% fee
-reserve full principal
-release before refund boundary
-refund at/after boundary
+full-principal custody
+2% fee at funding
+payer authorization + payee claim release
+payer timeout refund
 one-time custody consumption
-private output note return
+private output-note settlement
+optional public certificate claims
 ```
 
-Current verification limitation:
+The legacy unilateral-release contract, fallback frontend calls, and legacy indexer selectors have been removed.
 
-```text
-deposit-side Cairo test exists
-release/refund dedicated tests incomplete
-frontend/Cairo release-refund commitment formula aligned; E2E pending
-E2E settlement evidence pending
-```
+## Verification boundary
 
-## Not claimed
+Passing Cairo tests proves contract behavior in Starknet Foundry. It does not prove Ready X request construction, Privacy Pool execution, production environment addresses, or two-user testnet outcomes.
 
-Do not describe the current contracts as:
-
-```text
-fully private settlement
-metadata-free
-mainnet verified
-production audited
-Escrow Rekber E2E verified
-Settlement Certificate implemented
-```
-
-## Source consistency issue
-
-Some Private Escrow source comments in the Cairo/frontend integration still describe an older shorter envelope header.
-
-Executable code/tests use the V2 six-field routing-tag layout.
-
-This is documentation debt in source comments, not a different runtime layout.
+Do not describe Rekber as mainnet-ready or E2E-verified until the canonical Rekber and Settlement Certificate are redeployed and both release/refund branches are recorded on Sepolia.

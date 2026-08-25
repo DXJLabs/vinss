@@ -86,14 +86,13 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 while keeping sensitive terms inside ciphertext.
 
 This creates an encrypted state machine for a deal rather than only an encrypted message stream.
 
-**Status:** ✅ testnet on-chain verified.
+**Status:** 🟡 previous build testnet-verified; current fee build requires redeployment.
 
 ---
 
@@ -328,7 +327,7 @@ VinssMessageHelper.privacy_invoke(...)
 
 The helper receives encrypted application data rather than plaintext Message content.
 
-**Verification status:** ✅ **testnet on-chain verified.**
+**Verification status:** 🟡 previous build testnet-verified; current fee build requires redeployment.
 
 ---
 
@@ -388,7 +387,6 @@ accept
 reject
 cancel
 expire
-prepare_escrow
 ```
 
 Offer payload can include encrypted:
@@ -429,7 +427,7 @@ The product rationale for each deal type belongs in Product Documentation.
 
 # 12. Offer → Escrow Rekber transition
 
-`prepare_escrow` is the transition from agreement state into settlement state.
+An encrypted Rekber `create` coordination action links the accepted agreement to settlement state. It does not create a paid OfferHelper action.
 
 Target:
 
@@ -504,10 +502,14 @@ Current settlement design uses client-generated:
 
 ```text
 custodyCommitment
-releaseSecret
+payerReleaseAuthorizationSecret
+payeeClaimSecret
 refundSecret
-releaseCommitment
+releaseAuthorizationCommitment
+payeeClaimCommitment
 refundCommitment
+payerCertificateCommitment
+payeeCertificateCommitment
 ```
 
 Conceptual actions:
@@ -518,11 +520,15 @@ Conceptual actions:
 [
   deposit,
   custody_commitment,
-  release_commitment,
+  release_authorization_commitment,
+  payee_claim_commitment,
   refund_commitment,
+  payer_certificate_commitment,
+  payee_certificate_commitment,
   refund_after,
   token,
-  amount
+  amount,
+  revenue_open_note_id
 ]
 ```
 
@@ -532,7 +538,8 @@ Conceptual actions:
 [
   release,
   custody_commitment,
-  release_secret,
+  payer_release_authorization_secret,
+  payee_claim_secret,
   output_note_id
 ]
 ```
@@ -635,7 +642,7 @@ The evidence layer must not require private deal contents to become public.
 
 # 19. NFT Settlement Certificate
 
-After a valid settlement, VINSS is designed to issue an NFT Settlement Certificate to each party.
+After a valid release, VINSS lets each party independently claim an optional NFT Settlement Certificate.
 
 ```text
 Successful Settlement
@@ -667,7 +674,7 @@ The certificate must not re-publish:
 
 The final metadata schema should be locked only after Escrow Rekber settlement is proven and the evidence model is reviewed.
 
-**Verification status:** 🟡 pending.
+**Verification status:** 🟡 contract/frontend implemented and Cairo-tested; deployment/E2E pending.
 
 ---
 
@@ -801,11 +808,10 @@ Real user behavior supports the product hypothesis.
 Current state:
 
 ```text
-Message → Testnet On-chain Verified
-Offer → Testnet On-chain Verified
-Escrow Rekber → Implemented / E2E verification pending
-Settlement Evidence → Pending
-NFT Settlement Certificate → Pending
+Message → Current 7 STRK build redeploy/E2E pending
+Offer → Current 10 STRK build redeploy/E2E pending
+Escrow Rekber → Canonical source + Cairo tests / redeploy/E2E pending
+NFT Settlement Certificate → Source + Cairo tests / deployment pending
 ```
 
 ---
@@ -843,7 +849,8 @@ For each step, record:
 
 Minimum Escrow Rekber / evidence tests:
 
-- wrong release secret fails;
+- wrong payer authorization secret fails;
+- wrong payee claim secret fails;
 - wrong refund secret fails;
 - invalid timing fails as expected;
 - wrong Offer cannot silently bind to Escrow Rekber;
@@ -874,10 +881,10 @@ Testnet proof for Message and Offer must remain labeled testnet until equivalent
 
 # 28. Documentation claim rules
 
-1. Message may be described as **testnet on-chain verified**.
-2. Offer may be described as **testnet on-chain verified**.
+1. Earlier Message builds have testnet evidence; the current 7 STRK build requires fresh evidence.
+2. Earlier Offer builds have testnet evidence; the current 10 STRK build requires fresh evidence.
 3. Escrow Rekber must not be described as E2E verified yet.
-4. NFT Settlement Certificate must not be described as live until issuance is real.
+4. NFT Settlement Certificate is implemented/Cairo-tested but not live until deployed issuance is proven.
 5. Privacy/anonymity means primarily privacy from public observers.
 6. Do not claim privacy removes compliance or lawful disclosure.
 7. Do not claim `no metadata`.
