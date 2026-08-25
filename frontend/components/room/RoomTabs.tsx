@@ -4,15 +4,22 @@ export type RoomTab =
   | "timeline"
   | "offer"
   | "escrow"
-  | "loyalty";
+  | "loyalty"
+  | "royalty";
 
-type MessageMode = "chat" | "group";
+type MessageMode =
+  | "chat"
+  | "group";
 
 interface RoomTabsProps {
   value: RoomTab;
-  onChange: (tab: RoomTab) => void;
+  onChange: (
+    tab: RoomTab,
+  ) => void;
   messageMode: MessageMode;
-  onMessageModeChange: (mode: MessageMode) => void;
+  onMessageModeChange: (
+    mode: MessageMode,
+  ) => void;
 }
 
 export function RoomTabs({
@@ -22,7 +29,8 @@ export function RoomTabs({
   onMessageModeChange,
 }: RoomTabsProps) {
   const messageSurface =
-    value !== "loyalty";
+    value !== "loyalty" &&
+    value !== "royalty";
 
   const items = [
     {
@@ -32,7 +40,9 @@ export function RoomTabs({
         messageSurface &&
         messageMode === "chat",
       onClick: () => {
-        onMessageModeChange("chat");
+        onMessageModeChange(
+          "chat",
+        );
         onChange("timeline");
       },
     },
@@ -43,7 +53,9 @@ export function RoomTabs({
         messageSurface &&
         messageMode === "group",
       onClick: () => {
-        onMessageModeChange("group");
+        onMessageModeChange(
+          "group",
+        );
         onChange("timeline");
       },
     },
@@ -55,6 +67,14 @@ export function RoomTabs({
       onClick: () =>
         onChange("loyalty"),
     },
+    {
+      key: "royalty",
+      label: "Royalty",
+      active:
+        value === "royalty",
+      onClick: () =>
+        onChange("royalty"),
+    },
   ] as const;
 
   return (
@@ -62,12 +82,24 @@ export function RoomTabs({
       aria-label="Deal room navigation"
       className="mb-3 rounded-2xl bg-vault/35 p-1 ring-1 ring-wire/65"
     >
-      <div className="grid grid-cols-3 gap-1">
+      <div
+        className="
+          flex snap-x snap-mandatory
+          gap-1 overflow-x-auto
+          overscroll-x-contain
+          [scrollbar-width:none]
+          [&::-webkit-scrollbar]:hidden
+          sm:grid sm:grid-cols-4
+          sm:overflow-visible
+        "
+      >
         {items.map((item) => (
           <button
             key={item.key}
             type="button"
-            onClick={item.onClick}
+            onClick={
+              item.onClick
+            }
             aria-current={
               item.active
                 ? "page"
@@ -75,8 +107,8 @@ export function RoomTabs({
             }
             className={
               item.active
-                ? "rounded-xl bg-signal/[0.09] px-2 py-2.5 text-[11px] font-medium text-signal ring-1 ring-signal/15"
-                : "rounded-xl px-2 py-2.5 text-[11px] font-medium text-paper/38 transition hover:bg-white/[0.02] hover:text-paper/70"
+                ? "min-w-[108px] flex-1 snap-start rounded-xl bg-signal/[0.09] px-3 py-2.5 text-[11px] font-medium text-signal ring-1 ring-signal/15 sm:min-w-0"
+                : "min-w-[108px] flex-1 snap-start rounded-xl px-3 py-2.5 text-[11px] font-medium text-paper/38 transition hover:bg-white/[0.02] hover:text-paper/70 sm:min-w-0"
             }
           >
             {item.label}

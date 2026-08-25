@@ -32,6 +32,7 @@ import {
   EncryptedAttachmentPreview,
 } from "@/components/room/conversation/EncryptedAttachmentPreview";
 import { VINSS_FEES } from "@/lib/fees";
+import { useStarkIdentity } from "@/hooks/useStarkIdentity";
 
 interface EvidenceUiCopy {
   actionLabel: string;
@@ -701,8 +702,11 @@ export function DirectConversationPanel({
         ),
     );
 
-  const peerLabel =
-    shortAddress(peerAddress);
+  const {
+    label: peerLabel,
+  } = useStarkIdentity(
+    peerAddress,
+  );
 
   useEffect(() => {
     autoScrollRef.current = true;

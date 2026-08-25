@@ -5,9 +5,9 @@ import { EncryptedAttachmentPreview } from "@/components/room/conversation/Encry
 import type { AttachmentRef } from "@/types/deal-room";
 import {
   messageTime,
-  shortAddress,
 } from "@/components/room/conversation/chatFormat";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
+import { useStarkIdentity } from "@/hooks/useStarkIdentity";
 
 interface MessageBubbleProps {
   entry: ConversationEntry;
@@ -83,11 +83,15 @@ export function MessageBubble({
     walletAddress,
   );
 
+  const {
+    label: resolvedSenderLabel,
+  } = useStarkIdentity(
+    entry.senderAddress,
+  );
+
   const senderLabel = own
     ? "You"
-    : entry.senderAddress
-      ? shortAddress(entry.senderAddress)
-      : "Participant";
+    : resolvedSenderLabel;
 
   const showSender = mode === "group";
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { shortAddress } from "@/components/room/conversation/chatFormat";
 import type { ConversationParticipant } from "@/components/room/conversation/types";
+import { StarkIdentity } from "@/components/StarkIdentity";
 
 interface DirectConversationListProps {
   roomId: string;
@@ -91,7 +92,11 @@ export function DirectConversationList({
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-paper/72">
-                    {shortAddress(participant.address)}
+                    <StarkIdentity
+                      address={
+                        participant.address
+                      }
+                    />
                   </p>
                 </div>
 

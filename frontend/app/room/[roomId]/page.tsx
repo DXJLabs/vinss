@@ -26,6 +26,7 @@ import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomTabs, type RoomTab } from "@/components/room/RoomTabs";
 import { ActivityPanel } from "@/components/room/activity/ActivityPanel";
+import { RoyaltyPanel } from "@/components/room/royalty/RoyaltyPanel";
 import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
@@ -124,7 +125,9 @@ export default function DealRoomPage() {
     roomId: room?.id ?? null,
     session,
     channelKey,
-    active: tab !== "loyalty",
+    active:
+      tab !== "loyalty" &&
+      tab !== "royalty",
     setBusy,
     setError,
   });
@@ -514,6 +517,7 @@ export default function DealRoomPage() {
         )}
 
       {tab !== "loyalty" &&
+        tab !== "royalty" &&
         !showAccessDetails && (
           <AgentPanel
             roomLabel={room?.label}
@@ -544,7 +548,8 @@ export default function DealRoomPage() {
         )}
 
       {!showAccessDetails &&
-        tab !== "loyalty" && (
+        tab !== "loyalty" &&
+        tab !== "royalty" && (
         <ConversationPanel
           roomId={room?.id ?? params.roomId}
           entries={entries}
@@ -752,6 +757,15 @@ export default function DealRoomPage() {
               ...entries,
               ...offerEntries,
             ]}
+          />
+        )}
+
+      {!showAccessDetails &&
+        tab === "royalty" && (
+          <RoyaltyPanel
+            address={
+              session?.account.address
+            }
           />
         )}
     </main>
