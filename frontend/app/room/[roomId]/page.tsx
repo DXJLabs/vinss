@@ -137,6 +137,7 @@ export default function DealRoomPage() {
     rejectDirectOffer,
     markOfferRead,
     handleOfferRefresh,
+    isOfferDiscovered,
   } = useRoomOffers({
     roomId: room?.id ?? null,
     session,
@@ -397,6 +398,9 @@ export default function DealRoomPage() {
                 "accept" &&
               isCurrentDirectEntry(
                 entry,
+              ) &&
+              isOfferDiscovered(
+                entry,
               ),
           )
           .sort(
@@ -597,7 +601,16 @@ export default function DealRoomPage() {
             setTab("offer");
           }}
           onOpenEscrow={(entry) => {
-            // The encrypted acceptance contains the final terms and accepted parent locator.
+            // A locally prepared ACCEPT is optimistic only. Agreement/Escrow
+            // becomes authoritative after encrypted discovery sees it again.
+            if (!isOfferDiscovered(entry)) {
+              setError(
+                "Offer acceptance is still confirming. Sync again before opening Escrow.",
+              );
+              void handleOfferRefresh(true);
+              return;
+            }
+
             setEscrowOfferSource(entry);
             setTab("escrow");
           }}

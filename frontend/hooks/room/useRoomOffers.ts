@@ -1369,6 +1369,18 @@ export function useRoomOffers({
     selfRoutingIdentities.join("|"),
   ]);
 
+  function isOfferDiscovered(
+    entry: ConversationEntry | null | undefined,
+  ): boolean {
+    if (!entry) {
+      return false;
+    }
+
+    return matchedOfferRoutesRef.current.has(
+      stripLocator(entry.actionLocator),
+    );
+  }
+
   return {
     offerEntries,
     createDirectOffer,
@@ -1377,5 +1389,6 @@ export function useRoomOffers({
     rejectDirectOffer,
     markOfferRead,
     handleOfferRefresh,
+    isOfferDiscovered,
   };
 }

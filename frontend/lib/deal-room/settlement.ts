@@ -12,11 +12,11 @@ import { VINSS_FEES } from "@/lib/fees";
 
 // Domain tags are immutable: changing them would invalidate saved secrets.
 const RELEASE_AUTH_DOMAIN =
-  "VINSS_RELEASE_AUTH_V2";
+  "VINSS_RELEASE_AUTH";
 const PAYEE_CLAIM_DOMAIN =
-  "VINSS_PAYEE_CLAIM_V2";
+  "VINSS_PAYEE_CLAIM";
 const REFUND_DOMAIN =
-  "VINSS_ESCROW_REFUND_V2";
+  "VINSS_ESCROW_REFUND";
 const CERTIFICATE_CLAIM_DOMAIN =
   "VINSS_CERT_CLAIM_V1";
 const CERTIFICATE_TOKEN_DOMAIN =
