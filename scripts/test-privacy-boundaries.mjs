@@ -242,9 +242,9 @@ const escrowCommitments = await readFile(
 );
 
 for (const domain of [
-  "VINSS_RELEASE_AUTH_V2",
-  "VINSS_PAYEE_CLAIM_V2",
-  "VINSS_ESCROW_REFUND_V2",
+  "VINSS_RELEASE_AUTH",
+  "VINSS_PAYEE_CLAIM",
+  "VINSS_ESCROW_REFUND",
 ]) {
   assert.equal(
     settlementFrontend.includes(domain),

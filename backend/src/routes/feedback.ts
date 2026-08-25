@@ -1,6 +1,5 @@
 import { Router } from "express";
 import type { Pool } from "pg";
-import nodemailer from "nodemailer";
 
 const DEAL_TYPES = new Set([
   "otc",
@@ -59,24 +58,12 @@ export function createFeedbackRouter(
 ): Router {
   const router = Router();
 
-  const smtpUser =
-    process.env.FEEDBACK_SMTP_USER?.trim() ?? "";
-  const smtpPassword =
-    process.env.FEEDBACK_SMTP_APP_PASSWORD?.trim() ?? "";
+  const resendApiKey =
+    process.env.RESEND_API_KEY?.trim() ?? "";
+
   const toEmail =
     process.env.FEEDBACK_TO_EMAIL?.trim() ||
     "dxjlabs@gmail.com";
-
-  const mailer =
-    smtpUser && smtpPassword
-      ? nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-            user: smtpUser,
-            pass: smtpPassword,
-          },
-        })
-      : null;
 
   router.post(
     "/feedback",
@@ -162,50 +149,78 @@ export function createFeedbackRouter(
         const stored =
           result.rows[0];
 
-        let emailDelivered = false;
-
-        if (mailer) {
-          try {
-            await mailer.sendMail({
-              from:
-                `"VINSS Feedback" <${smtpUser}>`,
-              to: toEmail,
-              subject:
-                `[VINSS] ${rating}/5 · ${outcome}`,
-              text: [
-                "VINSS Feedback",
-                "",
-                `Result: ${outcome}`,
-                `Role: ${role}`,
-                `Deal type: ${dealType || "unknown"}`,
-                `Rating: ${rating}/5`,
-                `Network: ${network}`,
-                `Time: ${
-                  stored?.created_at
-                    ? new Date(
-                        stored.created_at,
-                      ).toISOString()
-                    : new Date().toISOString()
-                }`,
-                "",
-                "Comment:",
-                comment || "(no comment)",
-              ].join("\n"),
-            });
-
-            emailDelivered = true;
-          } catch {
-            // Feedback remains safely stored even if Gmail is unavailable.
-            console.error(
-              "[feedback] Gmail notification failed",
-            );
-          }
-        }
+        const emailQueued =
+          Boolean(resendApiKey);
 
         res.status(201).json({
           ok: true,
-          emailDelivered,
+          emailQueued,
         });
+
+        /*
+         * Email notification is deliberately best-effort.
+         * Feedback is already stored in PostgreSQL, so a mail provider
+         * problem must never make the user's request hang or fail.
+         */
+        if (resendApiKey) {
+          const text = [
+            "VINSS Feedback",
+            "",
+            `Result: ${outcome}`,
+            `Role: ${role}`,
+            `Deal type: ${dealType || "unknown"}`,
+            `Rating: ${rating}/5`,
+            `Network: ${network}`,
+            `Time: ${
+              stored?.created_at
+                ? new Date(
+                    stored.created_at,
+                  ).toISOString()
+                : new Date().toISOString()
+            }`,
+            "",
+            "Comment:",
+            comment || "(no comment)",
+          ].join("\n");
+
+          void fetch(
+            "https://api.resend.com/emails",
+            {
+              method: "POST",
+              headers: {
+                Authorization:
+                  `Bearer ${resendApiKey}`,
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                from:
+                  "VINSS Feedback <onboarding@resend.dev>",
+                to: [toEmail],
+                subject:
+                  `[VINSS] ${rating}/5 · ${outcome}`,
+                text,
+              }),
+            },
+          )
+            .then((response) => {
+              if (!response.ok) {
+                console.error(
+                  `[feedback] Resend notification failed (${response.status})`,
+                );
+                return;
+              }
+
+              console.log(
+                "[feedback] email notification sent",
+              );
+            })
+            .catch(() => {
+              console.error(
+                "[feedback] Resend notification failed",
+              );
+            });
+        }
       } catch {
         console.error(
           "[feedback] storage failed",
