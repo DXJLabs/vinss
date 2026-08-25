@@ -27,6 +27,7 @@ import { createHealthRouter } from "./routes/health.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { presenceRouter } from "./routes/presence.js";
 import { createRekberRouter } from "./routes/rekber.js";
+import { createRoyaltyRouter } from "./royalty/routes.js";
 
 interface AppDependencies {
   database: Pool;
@@ -117,6 +118,17 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.certificateStore,
       dependencies.config.network,
       dependencies.config.contracts.escrowRekber,
+      dependencies.config.contracts.settlementCertificate,
+    ),
+  );
+
+  // Royalty is read-only and derived from
+  // indexed Settlement Certificate events.
+  // No client can award itself points.
+  app.use(
+    createRoyaltyRouter(
+      dependencies.certificateStore,
+      dependencies.config.network,
       dependencies.config.contracts.settlementCertificate,
     ),
   );

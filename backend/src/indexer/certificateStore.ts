@@ -300,6 +300,65 @@ export class CertificateStore {
     );
   }
 
+  async recipientStats(
+    network: StarknetNetwork,
+    contractAddress: string,
+    recipient: string,
+  ): Promise<{
+    certificateCount: number;
+    successfulSettlements: number;
+    latestIssuedAt: number | null;
+  }> {
+    const result =
+      await this.pool.query<{
+        certificate_count: string;
+        settlement_count: string;
+        latest_issued_at: string | null;
+      }>(
+        `
+          SELECT
+            COUNT(*)::text
+              AS certificate_count,
+            COUNT(
+              DISTINCT custody_commitment
+            )::text
+              AS settlement_count,
+            MAX(issued_at)::text
+              AS latest_issued_at
+          FROM settlement_certificate_events
+          WHERE network = $1
+            AND contract_address = $2
+            AND recipient = $3
+        `,
+        [
+          network,
+          contractAddress,
+          recipient,
+        ],
+      );
+
+    const row = result.rows[0];
+
+    return {
+      certificateCount:
+        Number(
+          row?.certificate_count ??
+            "0",
+        ),
+      successfulSettlements:
+        Number(
+          row?.settlement_count ??
+            "0",
+        ),
+      latestIssuedAt:
+        row?.latest_issued_at
+          ? Number(
+              row.latest_issued_at,
+            )
+          : null,
+    };
+  }
+
   async recentActivity(
     network: StarknetNetwork,
     contractAddress: string,
