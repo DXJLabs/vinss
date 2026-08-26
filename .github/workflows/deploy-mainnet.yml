@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Validate only, or perform a real Mainnet deployment"
+        description: "Validate only, or perform a real Mainnet declaration + deployment"
         required: true
         default: "validate-only"
         type: choice
@@ -49,7 +49,7 @@ jobs:
   mainnet:
     name: ${{ inputs.mode }} · ${{ inputs.contract }} · Starknet Mainnet
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     environment: mainnet
 
     defaults:
@@ -70,6 +70,13 @@ jobs:
       TREASURY_ADDRESS: ${{ vars.VINSS_MAINNET_TREASURY_ADDRESS }}
 
     steps:
+      # IMPORTANT: checkout MUST be first because this job's shell working
+      # directory is contracts/. Before checkout that directory does not exist.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
       - name: Mainnet safety gate
         run: |
           set -euo pipefail
@@ -104,9 +111,6 @@ jobs:
             exit 1
           fi
 
-          # Treasury is not a constructor argument. It is nevertheless a
-          # required mainnet application setting because VINSS revenue is
-          # routed to NEXT_PUBLIC_VINSS_TREASURY_ADDRESS by the frontend.
           if ! valid_address "$TREASURY_ADDRESS"; then
             echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
             exit 1
@@ -167,19 +171,12 @@ jobs:
 
           echo "RPC verified: Starknet Mainnet."
 
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
-
-      # Keep Forge aligned with contracts/Scarb.toml, which currently uses
-      # snforge_std 0.56.0. We deliberately do not change contract test tooling
-      # in a deployment-only workflow.
       - name: Setup Scarb
         uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
         with:
           scarb-version: 2.17.0
 
+      # Keep tests aligned with contracts/Scarb.toml (snforge_std 0.56.0).
       - name: Setup Starknet Foundry for tests
         uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
         with:
@@ -225,7 +222,6 @@ jobs:
           sha256sum "$CLASS_FILE" > "$ARTIFACT_DIR/compiled-class.sha256"
           printf '%s\n' "$CLASS_FILE" > "$ARTIFACT_DIR/compiled-class-path.txt"
 
-          echo "class_file=$CLASS_FILE" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
 
           echo "ABI exported:"
@@ -238,9 +234,8 @@ jobs:
           set -o pipefail
           snforge test 2>&1 | tee test-output.txt
 
-      # --dry-run / --detailed are available in newer sncast releases.
-      # Install 0.63.0 only after the 0.56.0 test suite has completed.
-      - name: Setup Starknet Foundry for fee estimation and deployment
+      # Newer sncast is used only after the 0.56.0 test suite completes.
+      - name: Setup Starknet Foundry for Mainnet operations
         uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
         with:
           starknet-foundry-version: 0.63.0
@@ -300,19 +295,91 @@ jobs:
 
           echo "args=$DEPLOY_ARGS" >> "$GITHUB_OUTPUT"
 
-      - name: Estimate Mainnet fee - dry run only
-        id: fee
+      # A class that is not yet declared cannot be reliably dry-run-deployed.
+      # Therefore validate-only safely estimates the DECLARE transaction.
+      - name: Estimate Mainnet declaration fee - dry run only
+        id: declare_fee
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
-          DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
         run: |
           set -euo pipefail
           set -o pipefail
 
           ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
 
-          echo "=== MAINNET DRY RUN: $CONTRACT_NAME ==="
+          echo "=== MAINNET DECLARE DRY RUN: $CONTRACT_NAME ==="
           echo "No transaction is submitted by this step."
+
+          sncast \
+            --scarb-profile dev \
+            --account vinss-mainnet-deployer \
+            declare \
+            --url "$STARKNET_RPC_URL" \
+            --contract-name "$CONTRACT_NAME" \
+            --dry-run \
+            --detailed \
+            2>&1 | tee "$ARTIFACT_DIR/declare-fee-estimate.txt"
+
+          echo ""
+          echo "=== DECLARE FEE LINES ==="
+          grep -Ei 'fee|gas|fri|strk' "$ARTIFACT_DIR/declare-fee-estimate.txt" || true
+
+      - name: Declare class on Mainnet
+        id: declare
+        if: inputs.mode == 'deploy'
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+
+          sncast \
+            --scarb-profile dev \
+            --account vinss-mainnet-deployer \
+            --wait \
+            --wait-timeout 300 \
+            declare \
+            --url "$STARKNET_RPC_URL" \
+            --contract-name "$CONTRACT_NAME" \
+            2>&1 | tee "$ARTIFACT_DIR/declare-output.txt"
+
+          CLASS_HASH="$(
+            grep -i 'Class Hash:' "$ARTIFACT_DIR/declare-output.txt" \
+            | awk '{print $3}' \
+            | tail -1
+          )"
+          DECLARE_TX="$(
+            grep -i 'Transaction Hash:' "$ARTIFACT_DIR/declare-output.txt" \
+            | awk '{print $3}' \
+            | tail -1
+          )"
+
+          if [ -z "$CLASS_HASH" ]; then
+            echo "Could not parse class hash from declaration output."
+            exit 1
+          fi
+
+          {
+            echo "class_hash=$CLASS_HASH"
+            echo "transaction_hash=$DECLARE_TX"
+          } >> "$GITHUB_OUTPUT"
+
+      # Once the class exists on Mainnet, this dry-run can estimate the actual
+      # instance deployment transaction without submitting it.
+      - name: Estimate Mainnet deployment fee - dry run only
+        id: deploy_fee
+        if: inputs.mode == 'deploy' && steps.declare.outcome == 'success'
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
+          DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
+          CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
 
           sncast \
             --scarb-profile dev \
@@ -323,26 +390,27 @@ jobs:
             --arguments "$DEPLOY_ARGS" \
             --dry-run \
             --detailed \
-            2>&1 | tee "$ARTIFACT_DIR/fee-estimate.txt"
+            2>&1 | tee "$ARTIFACT_DIR/deploy-fee-estimate.txt"
 
           echo ""
-          echo "=== FEE LINES ==="
-          grep -Ei 'fee|gas|fri|strk' "$ARTIFACT_DIR/fee-estimate.txt" || true
+          echo "=== DEPLOY FEE LINES ==="
+          grep -Ei 'fee|gas|fri|strk' "$ARTIFACT_DIR/deploy-fee-estimate.txt" || true
 
-      - name: Declare and deploy to Mainnet
+      - name: Deploy contract instance to Mainnet
         id: deploy
-        if: inputs.mode == 'deploy'
+        if: inputs.mode == 'deploy' && steps.declare.outcome == 'success' && steps.deploy_fee.outcome == 'success'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
+          CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
 
           ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
 
-          echo "=== REAL MAINNET DEPLOYMENT: $CONTRACT_NAME ==="
-
+          # Use --contract-name here so Cairo-expression constructor arguments
+          # (including the certificate ByteArray URI) are transformed using ABI.
           sncast \
             --scarb-profile dev \
             --account vinss-mainnet-deployer \
@@ -354,46 +422,25 @@ jobs:
             --arguments "$DEPLOY_ARGS" \
             2>&1 | tee "$ARTIFACT_DIR/deploy-output.txt"
 
-          CLASS_HASH="$(
-            grep -i 'Class Hash:' "$ARTIFACT_DIR/deploy-output.txt" \
-            | awk '{print $3}' \
-            | tail -1
-          )"
           CONTRACT_ADDRESS="$(
             grep -i 'Contract Address:' "$ARTIFACT_DIR/deploy-output.txt" \
             | awk '{print $3}' \
             | tail -1
           )"
-          DECLARE_TX="$(
-            grep -i 'Declare Transaction Hash:' "$ARTIFACT_DIR/deploy-output.txt" \
-            | awk '{print $4}' \
-            | tail -1
-          )"
           DEPLOY_TX="$(
-            grep -i 'Deploy Transaction Hash:' "$ARTIFACT_DIR/deploy-output.txt" \
-            | awk '{print $4}' \
+            grep -i 'Transaction Hash:' "$ARTIFACT_DIR/deploy-output.txt" \
+            | awk '{print $3}' \
             | tail -1
           )"
 
-          # Fallback for output formats that use only "Transaction Hash".
-          if [ -z "$DEPLOY_TX" ]; then
-            DEPLOY_TX="$(
-              grep -i '^Transaction Hash:' "$ARTIFACT_DIR/deploy-output.txt" \
-              | awk '{print $3}' \
-              | tail -1
-            )"
-          fi
-
-          if [ -z "$CLASS_HASH" ] || [ -z "$CONTRACT_ADDRESS" ] || [ -z "$DEPLOY_TX" ]; then
+          if [ -z "$CONTRACT_ADDRESS" ] || [ -z "$DEPLOY_TX" ]; then
             echo "Could not parse complete deployment result."
             exit 1
           fi
 
           {
-            echo "class_hash=$CLASS_HASH"
             echo "contract_address=$CONTRACT_ADDRESS"
-            echo "declare_transaction_hash=$DECLARE_TX"
-            echo "deploy_transaction_hash=$DEPLOY_TX"
+            echo "transaction_hash=$DEPLOY_TX"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create Mainnet report
@@ -421,20 +468,27 @@ jobs:
             echo "| Commit | \`$GITHUB_SHA\` |"
             echo "| Build | \`${{ steps.build.outcome }}\` |"
             echo "| Tests | \`${{ steps.test.outcome }}\` |"
-            echo "| Fee dry-run | \`${{ steps.fee.outcome }}\` |"
+            echo "| Declare fee dry-run | \`${{ steps.declare_fee.outcome }}\` |"
+            echo "| Declaration | \`${{ steps.declare.outcome }}\` |"
+            echo "| Deploy fee dry-run | \`${{ steps.deploy_fee.outcome }}\` |"
             echo "| Deployment | \`$DEPLOY_STATUS\` |"
             echo "| Deployer | \`$ACCOUNT_ADDRESS\` |"
             echo "| Treasury | \`$TREASURY_ADDRESS\` |"
             echo "| Privacy Pool | \`$PRIVACY_POOL_ADDRESS\` |"
             echo "| Open-note token | \`$OPEN_NOTE_TOKEN_ADDRESS\` |"
-            echo "| Class hash | \`${{ steps.deploy.outputs.class_hash }}\` |"
+            echo "| Class hash | \`${{ steps.declare.outputs.class_hash }}\` |"
+            echo "| Declare tx | \`${{ steps.declare.outputs.transaction_hash }}\` |"
             echo "| Contract address | \`${{ steps.deploy.outputs.contract_address }}\` |"
-            echo "| Declare tx | \`${{ steps.deploy.outputs.declare_transaction_hash }}\` |"
-            echo "| Deploy tx | \`${{ steps.deploy.outputs.deploy_transaction_hash }}\` |"
+            echo "| Deploy tx | \`${{ steps.deploy.outputs.transaction_hash }}\` |"
             echo
-            echo "## Fee estimate"
+            echo "## Declaration fee estimate"
             echo '```text'
-            tail -120 "$ARTIFACT_DIR/fee-estimate.txt" 2>/dev/null || echo "Fee estimation did not run."
+            tail -120 "$ARTIFACT_DIR/declare-fee-estimate.txt" 2>/dev/null || echo "Declaration fee estimation did not run."
+            echo '```'
+            echo
+            echo "## Deployment fee estimate"
+            echo '```text'
+            tail -120 "$ARTIFACT_DIR/deploy-fee-estimate.txt" 2>/dev/null || echo "Deployment fee estimation requires a declared class and therefore only runs in deploy mode after declaration."
             echo '```'
             echo
             echo "## Tests"
@@ -445,11 +499,11 @@ jobs:
 
           cat "$ARTIFACT_DIR/mainnet-report.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload ABI, fee estimate and deployment bundle
+      - name: Upload ABI, fee estimates and deployment bundle
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: vinss-mainnet-${{ inputs.contract }}-${{ inputs.mode }}
           path: contracts/mainnet-artifacts/${{ inputs.contract }}/
           retention-days: 90
-          if-no-files-found: error
+          if-no-files-found: warn
