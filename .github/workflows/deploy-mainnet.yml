@@ -7,13 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Validate only, or perform a real Mainnet declaration + deployment"
+        description: "Validate, deploy, or safely retry Voyager source verification"
         required: true
         default: "validate-only"
         type: choice
         options:
           - validate-only
           - deploy
+          - verify-only
       contract:
         description: "Contract to validate/deploy"
         required: true
@@ -25,6 +26,11 @@ on:
           - VinssPrivateEscrowHelper
           - VinssEscrowRekber
           - VinssSettlementCertificate
+      verify_class_hash:
+        description: "Required only for verify-only mode"
+        required: false
+        default: ""
+        type: string
       confirm_mainnet:
         description: "For deploy mode only: type DEPLOY_MAINNET"
         required: false
@@ -61,6 +67,7 @@ jobs:
       DEPLOY_MODE: ${{ inputs.mode }}
       CONTRACT_NAME: ${{ inputs.contract }}
       CONFIRM_MAINNET: ${{ inputs.confirm_mainnet }}
+      VERIFY_CLASS_HASH: ${{ inputs.verify_class_hash }}
       ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
       CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
 
@@ -96,6 +103,9 @@ jobs:
                 exit 1
               fi
               ;;
+            verify-only)
+              echo "VERIFY-ONLY MODE: no on-chain transaction will be submitted."
+              ;;
             *)
               echo "Unsupported mode: $DEPLOY_MODE"
               exit 1
@@ -106,48 +116,59 @@ jobs:
             [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
           }
 
-          if ! valid_address "$ACCOUNT_ADDRESS"; then
-            echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
-            exit 1
-          fi
+          valid_hash() {
+            [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
+          }
 
-          if ! valid_address "$TREASURY_ADDRESS"; then
-            echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
-            exit 1
-          fi
-
-          case "$CONTRACT_NAME" in
-            VinssMessageHelper|VinssOfferHelper|VinssInvite)
-              if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
-                echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
-                exit 1
-              fi
-              if ! valid_address "$OPEN_NOTE_TOKEN_ADDRESS"; then
-                echo "MAINNET_OPEN_NOTE_TOKEN_ADDRESS is missing or invalid."
-                exit 1
-              fi
-              ;;
-            VinssPrivateEscrowHelper|VinssEscrowRekber)
-              if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
-                echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
-                exit 1
-              fi
-              ;;
-            VinssSettlementCertificate)
-              if ! valid_address "$ESCROW_REKBER_ADDRESS"; then
-                echo "A valid escrow_rekber_address is required."
-                exit 1
-              fi
-              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
-                echo "certificate_base_uri must be HTTPS and end with /."
-                exit 1
-              fi
-              ;;
-            *)
-              echo "Unsupported contract: $CONTRACT_NAME"
+          if [ "$DEPLOY_MODE" = "verify-only" ]; then
+            if ! valid_hash "$VERIFY_CLASS_HASH"; then
+              echo "verify-only requires a valid verify_class_hash."
               exit 1
-              ;;
-          esac
+            fi
+          else
+            if ! valid_address "$ACCOUNT_ADDRESS"; then
+              echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
+              exit 1
+            fi
+
+            if ! valid_address "$TREASURY_ADDRESS"; then
+              echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
+              exit 1
+            fi
+
+            case "$CONTRACT_NAME" in
+              VinssMessageHelper|VinssOfferHelper|VinssInvite)
+                if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
+                  echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
+                  exit 1
+                fi
+                if ! valid_address "$OPEN_NOTE_TOKEN_ADDRESS"; then
+                  echo "MAINNET_OPEN_NOTE_TOKEN_ADDRESS is missing or invalid."
+                  exit 1
+                fi
+                ;;
+              VinssPrivateEscrowHelper|VinssEscrowRekber)
+                if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
+                  echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
+                  exit 1
+                fi
+                ;;
+              VinssSettlementCertificate)
+                if ! valid_address "$ESCROW_REKBER_ADDRESS"; then
+                  echo "A valid escrow_rekber_address is required."
+                  exit 1
+                fi
+                if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
+                  echo "certificate_base_uri must be HTTPS and end with /."
+                  exit 1
+                fi
+                ;;
+              *)
+                echo "Unsupported contract: $CONTRACT_NAME"
+                exit 1
+                ;;
+            esac
+          fi
 
       - name: Verify Starknet Mainnet RPC
         env:
@@ -248,6 +269,7 @@ jobs:
           echo "$VERSION" | grep -q '0.63.0'
 
       - name: Import dedicated deployer
+        if: inputs.mode != 'verify-only'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           PRIVATE_KEY: ${{ secrets.VINSS_MAINNET_DEPLOYER_PRIVATE_KEY }}
@@ -274,6 +296,7 @@ jobs:
 
       - name: Prepare constructor arguments
         id: constructor
+        if: inputs.mode != 'verify-only'
         run: |
           set -euo pipefail
 
@@ -299,6 +322,7 @@ jobs:
       # Therefore validate-only safely estimates the DECLARE transaction.
       - name: Estimate Mainnet declaration fee - dry run only
         id: declare_fee
+        if: inputs.mode != 'verify-only'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
         run: |
@@ -443,6 +467,57 @@ jobs:
             echo "transaction_hash=$DEPLOY_TX"
           } >> "$GITHUB_OUTPUT"
 
+      # Voyager verification is class-level. Once a class is verified, every
+      # deployed instance using that class points to the verified source.
+      # Source verification publishes the relevant Cairo workspace source.
+      - name: Submit source verification to Voyager
+        id: verify
+        if: inputs.mode == 'verify-only' || (inputs.mode == 'deploy' && steps.deploy.outcome == 'success')
+        env:
+          DEPLOYED_CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+
+          if [ "$DEPLOY_MODE" = "verify-only" ]; then
+            CLASS_HASH="$VERIFY_CLASS_HASH"
+          else
+            CLASS_HASH="$DEPLOYED_CLASS_HASH"
+          fi
+
+          if ! [[ "$CLASS_HASH" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+            echo "Verification class hash is missing or invalid."
+            exit 1
+          fi
+
+          echo "=== VOYAGER SOURCE VERIFICATION: $CONTRACT_NAME ==="
+          echo "Class hash: $CLASS_HASH"
+          echo "Network: Starknet Mainnet"
+          echo "This publishes the contract source required by the verifier."
+
+          sncast \
+            verify \
+            --class-hash "$CLASS_HASH" \
+            --contract-name "$CONTRACT_NAME" \
+            --verifier voyager \
+            --network mainnet \
+            --confirm-verification \
+            2>&1 | tee "$ARTIFACT_DIR/voyager-verification.txt"
+
+          STATUS_URL="$(
+            grep -oE 'https://[^[:space:]]+/beta/class-verify/job/[A-Za-z0-9._-]+' \
+              "$ARTIFACT_DIR/voyager-verification.txt" \
+            | tail -1 \
+            || true
+          )"
+
+          if [ -n "$STATUS_URL" ]; then
+            echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
+            echo "Voyager verification status: $STATUS_URL"
+          fi
+
       - name: Create Mainnet report
         if: always()
         run: |
@@ -451,11 +526,17 @@ jobs:
           ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
           mkdir -p "$ARTIFACT_DIR"
 
-          if [ "$DEPLOY_MODE" = "validate-only" ]; then
-            DEPLOY_STATUS="skipped (validate-only)"
-          else
-            DEPLOY_STATUS="${{ steps.deploy.outcome }}"
-          fi
+          case "$DEPLOY_MODE" in
+            validate-only)
+              DEPLOY_STATUS="skipped (validate-only)"
+              ;;
+            verify-only)
+              DEPLOY_STATUS="skipped (verify-only)"
+              ;;
+            deploy)
+              DEPLOY_STATUS="${{ steps.deploy.outcome }}"
+              ;;
+          esac
 
           {
             echo "# VINSS Starknet Mainnet Report"
@@ -472,11 +553,13 @@ jobs:
             echo "| Declaration | \`${{ steps.declare.outcome }}\` |"
             echo "| Deploy fee dry-run | \`${{ steps.deploy_fee.outcome }}\` |"
             echo "| Deployment | \`$DEPLOY_STATUS\` |"
+            echo "| Voyager verification submission | \`${{ steps.verify.outcome }}\` |"
+            echo "| Voyager verification status | \`${{ steps.verify.outputs.status_url }}\` |"
             echo "| Deployer | \`$ACCOUNT_ADDRESS\` |"
             echo "| Treasury | \`$TREASURY_ADDRESS\` |"
             echo "| Privacy Pool | \`$PRIVACY_POOL_ADDRESS\` |"
             echo "| Open-note token | \`$OPEN_NOTE_TOKEN_ADDRESS\` |"
-            echo "| Class hash | \`${{ steps.declare.outputs.class_hash }}\` |"
+            echo "| Class hash | \`${{ steps.declare.outputs.class_hash || inputs.verify_class_hash }}\` |"
             echo "| Declare tx | \`${{ steps.declare.outputs.transaction_hash }}\` |"
             echo "| Contract address | \`${{ steps.deploy.outputs.contract_address }}\` |"
             echo "| Deploy tx | \`${{ steps.deploy.outputs.transaction_hash }}\` |"
@@ -491,6 +574,11 @@ jobs:
             tail -120 "$ARTIFACT_DIR/deploy-fee-estimate.txt" 2>/dev/null || echo "Deployment fee estimation requires a declared class and therefore only runs in deploy mode after declaration."
             echo '```'
             echo
+            echo "## Voyager source verification"
+            echo '```text'
+            tail -120 "$ARTIFACT_DIR/voyager-verification.txt" 2>/dev/null || echo "Voyager verification did not run."
+            echo '```'
+            echo
             echo "## Tests"
             echo '```text'
             tail -120 test-output.txt 2>/dev/null || echo "Tests did not run."
@@ -499,7 +587,7 @@ jobs:
 
           cat "$ARTIFACT_DIR/mainnet-report.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload ABI, fee estimates and deployment bundle
+      - name: Upload ABI, fee estimates, verification and deployment bundle
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -507,3 +595,11 @@ jobs:
           path: contracts/mainnet-artifacts/${{ inputs.contract }}/
           retention-days: 90
           if-no-files-found: warn
+
+      - name: Mark verification failure
+        if: always() && ((inputs.mode == 'deploy' || inputs.mode == 'verify-only') && steps.verify.outcome != 'success')
+        run: |
+          echo "Voyager source verification was not successfully submitted."
+          echo "If the contract deployment itself succeeded, DO NOT rerun deploy mode."
+          echo "Use verify-only with the recorded class hash instead."
+          exit 1
