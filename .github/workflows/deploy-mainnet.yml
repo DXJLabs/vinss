@@ -1,0 +1,282 @@
+name: Deploy VINSS Contract - Mainnet
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      contract:
+        description: "Contract to deploy"
+        required: true
+        type: choice
+        options:
+          - VinssMessageHelper
+          - VinssInvite
+          - VinssOfferHelper
+          - VinssPrivateEscrowHelper
+          - VinssEscrowRekber
+          - VinssSettlementCertificate
+      confirm_mainnet:
+        description: "Type DEPLOY_MAINNET to confirm a real mainnet deployment"
+        required: true
+        type: string
+      escrow_rekber_address:
+        description: "Required only when deploying VinssSettlementCertificate"
+        required: false
+        type: string
+      certificate_base_uri:
+        description: "Public certificate metadata base URI"
+        required: false
+        default: "https://vinss-nu.vercel.app/api/certificates/"
+        type: string
+
+concurrency:
+  group: vinss-mainnet-contract-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.contract }} to Starknet Mainnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mainnet
+
+    defaults:
+      run:
+        working-directory: contracts
+        shell: bash
+
+    env:
+      CONTRACT_NAME: ${{ inputs.contract }}
+      CONFIRM_MAINNET: ${{ inputs.confirm_mainnet }}
+      ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
+      CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
+      ACCOUNT_ADDRESS: ${{ vars.VINSS_MAINNET_DEPLOYER_ADDRESS }}
+      PRIVACY_POOL_ADDRESS: ${{ vars.MAINNET_PRIVACY_POOL_ADDRESS }}
+      OPEN_NOTE_TOKEN_ADDRESS: ${{ vars.MAINNET_OPEN_NOTE_TOKEN_ADDRESS }}
+
+    steps:
+      - name: Mainnet confirmation gate
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "Mainnet deployments are only allowed from the main branch."
+            exit 1
+          fi
+
+          if [ "$CONFIRM_MAINNET" != "DEPLOY_MAINNET" ]; then
+            echo "Mainnet confirmation failed. Type DEPLOY_MAINNET exactly."
+            exit 1
+          fi
+
+          if ! [[ "$ACCOUNT_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+            echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
+            exit 1
+          fi
+
+          case "$CONTRACT_NAME" in
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              if ! [[ "$PRIVACY_POOL_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
+                exit 1
+              fi
+              if ! [[ "$OPEN_NOTE_TOKEN_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "MAINNET_OPEN_NOTE_TOKEN_ADDRESS is missing or invalid."
+                exit 1
+              fi
+              ;;
+            VinssPrivateEscrowHelper|VinssEscrowRekber)
+              if ! [[ "$PRIVACY_POOL_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
+                exit 1
+              fi
+              ;;
+            VinssSettlementCertificate)
+              if ! [[ "$ESCROW_REKBER_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
+                echo "A valid escrow_rekber_address is required for VinssSettlementCertificate."
+                exit 1
+              fi
+              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
+                echo "certificate_base_uri must be an HTTPS URL ending with /."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Unsupported contract: $CONTRACT_NAME"
+              exit 1
+              ;;
+          esac
+
+      - name: Verify Starknet Mainnet RPC
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$STARKNET_RPC_URL"
+
+          CHAIN_ID=$(curl --fail --silent --show-error             -H 'content-type: application/json'             --data '{"jsonrpc":"2.0","id":1,"method":"starknet_chainId","params":[]}'             "$STARKNET_RPC_URL"             | jq -r '.result // empty')
+
+          if [ "$CHAIN_ID" != "0x534e5f4d41494e" ]; then
+            echo "Refusing deployment: RPC is not Starknet Mainnet (SN_MAIN)."
+            exit 1
+          fi
+
+          echo "RPC network verified: Starknet Mainnet."
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Scarb
+        uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
+        with:
+          scarb-version: 2.17.0
+
+      - name: Setup Starknet Foundry
+        uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
+        with:
+          starknet-foundry-version: 0.56.0
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          scarb build 2>&1 | tee build-output.txt
+
+      - name: Test
+        id: test
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          snforge test 2>&1 | tee test-output.txt
+
+      - name: Declare and deploy
+        id: deploy
+        if: steps.build.outcome == 'success' && steps.test.outcome == 'success'
+        continue-on-error: true
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
+          PRIVATE_KEY: ${{ secrets.VINSS_MAINNET_DEPLOYER_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          echo "class_hash=" >> "$GITHUB_OUTPUT"
+          echo "contract_address=" >> "$GITHUB_OUTPUT"
+          echo "transaction_hash=" >> "$GITHUB_OUTPUT"
+
+          test -n "$STARKNET_RPC_URL"
+          test -n "$ACCOUNT_ADDRESS"
+          test -n "$PRIVATE_KEY"
+
+          sncast account import             --url "$STARKNET_RPC_URL"             --name vinss-mainnet-deployer             --address "$ACCOUNT_ADDRESS"             --private-key "$PRIVATE_KEY"             --type oz             --silent
+
+          echo "=== DECLARE $CONTRACT_NAME ON MAINNET ==="
+
+          OUTPUT=$(sncast             --account vinss-mainnet-deployer             --wait             --wait-timeout 300             declare             --url "$STARKNET_RPC_URL"             --contract-name "$CONTRACT_NAME" 2>&1) || true
+
+          echo "$OUTPUT" | tee declare-output.txt
+
+          CLASS_HASH=$(echo "$OUTPUT" | grep -i "Class Hash:" | awk '{print $3}' | head -1)
+
+          if [ -z "$CLASS_HASH" ]; then
+            CLASS_HASH=$(echo "$OUTPUT" | grep -oE '0x[0-9a-fA-F]{50,66}' | head -1)
+          fi
+
+          if [ -z "$CLASS_HASH" ]; then
+            echo "Could not determine class hash."
+            exit 1
+          fi
+
+          echo "class_hash=$CLASS_HASH" >> "$GITHUB_OUTPUT"
+
+          case "$CONTRACT_NAME" in
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
+              ;;
+            VinssPrivateEscrowHelper|VinssEscrowRekber)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
+              ;;
+            VinssSettlementCertificate)
+              DEPLOY_ARGS="$ESCROW_REKBER_ADDRESS, \"$CERTIFICATE_BASE_URI\""
+              ;;
+            *)
+              echo "Unsupported contract: $CONTRACT_NAME"
+              exit 1
+              ;;
+          esac
+
+          echo "=== DEPLOY $CONTRACT_NAME ON MAINNET ==="
+
+          DEPLOY_OUTPUT=$(sncast             --account vinss-mainnet-deployer             --wait             --wait-timeout 300             deploy             --url "$STARKNET_RPC_URL"             --class-hash "$CLASS_HASH"             --arguments "$DEPLOY_ARGS" 2>&1) || true
+
+          echo "$DEPLOY_OUTPUT" | tee deploy-output.txt
+
+          CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" | grep -i "Contract Address:" | awk '{print $3}' | tail -1)
+          TX_HASH=$(echo "$DEPLOY_OUTPUT" | grep -i "Transaction Hash:" | awk '{print $3}' | tail -1)
+
+          if [ -z "$CONTRACT_ADDRESS" ] || [ -z "$TX_HASH" ]; then
+            echo "Deployment did not produce a contract address and transaction hash."
+            exit 1
+          fi
+
+          echo "contract_address=$CONTRACT_ADDRESS" >> "$GITHUB_OUTPUT"
+          echo "transaction_hash=$TX_HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Create Markdown report
+        if: always()
+        run: |
+          BUILD="${{ steps.build.outcome }}"
+          TEST="${{ steps.test.outcome }}"
+          DEPLOY="${{ steps.deploy.outcome }}"
+
+          [ "$BUILD" = "success" ] && BUILD_ICON="✅" || BUILD_ICON="❌"
+          [ "$TEST" = "success" ] && TEST_ICON="✅" || TEST_ICON="❌"
+          [ "$DEPLOY" = "success" ] && DEPLOY_ICON="✅" || DEPLOY_ICON="❌"
+
+          {
+            echo "# VINSS Mainnet Deployment Report"
+            echo ""
+            echo "## $CONTRACT_NAME"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Build | $BUILD_ICON $BUILD |"
+            echo "| Tests | $TEST_ICON $TEST |"
+            echo "| Deploy | $DEPLOY_ICON $DEPLOY |"
+            echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Network | Starknet Mainnet |"
+            echo "| Class Hash | \`${{ steps.deploy.outputs.class_hash }}\` |"
+            echo "| Contract | \`${{ steps.deploy.outputs.contract_address }}\` |"
+            echo "| Transaction | \`${{ steps.deploy.outputs.transaction_hash }}\` |"
+            echo ""
+            echo "## Build log"
+            echo '```text'
+            tail -60 build-output.txt 2>/dev/null || echo "No build output"
+            echo '```'
+            echo ""
+            echo "## Test log"
+            echo '```text'
+            tail -100 test-output.txt 2>/dev/null || echo "Tests were not executed"
+            echo '```'
+          } > deploy-mainnet-report.md
+
+          cat deploy-mainnet-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Markdown report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vinss-mainnet-${{ inputs.contract }}-deployment-report
+          path: contracts/deploy-mainnet-report.md
+          retention-days: 30
+
+      - name: Fail workflow when checks or deployment fail
+        if: always() && (steps.build.outcome != 'success' || steps.test.outcome != 'success' || steps.deploy.outcome != 'success')
+        run: exit 1
