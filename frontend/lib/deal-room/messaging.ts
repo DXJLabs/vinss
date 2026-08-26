@@ -299,6 +299,14 @@ export async function discoverMessages(
           record.ciphertextChunks.map(BigInt),
         )) as MessagePayload;
 
+        console.log("[VINSS DECRYPTED MESSAGE]", {
+          actionLocator: record.actionLocator,
+          kind: message.kind,
+          body: message.body,
+          attachment: message.attachment,
+          workEvidence: message.workEvidence,
+        });
+
         // Bind the encrypted sender identity back to the public opaque tag.
         if (message.senderIdentity?.address) {
           const expectedSenderTag =

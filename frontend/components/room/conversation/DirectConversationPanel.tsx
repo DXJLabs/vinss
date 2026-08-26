@@ -627,7 +627,7 @@ export function DirectConversationPanel({
       window.setInterval(
         () =>
           void syncFundingStatus(),
-        15_000,
+        3000,
       );
 
     const onVisible =
@@ -897,11 +897,36 @@ export function DirectConversationPanel({
                         {reviewTitle}
                       </p>
 
+                      {review.decision ===
+                        "approved" && (
+                        <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
+                          Work approval is complete. Payment settlement still needs to finish in Escrow.
+                        </p>
+                      )}
+
                       {review.note && (
                         <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-paper/55">
                           {review.note}
                         </p>
                       )}
+
+                      {review.decision ===
+                        "approved" &&
+                        fundedDealEntry && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenEscrow(
+                                fundedDealEntry,
+                              )
+                            }
+                            className="mt-3 w-full border border-signal/35 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink"
+                          >
+                            {ownReview
+                              ? "Continue settlement →"
+                              : "Open Escrow for payment →"}
+                          </button>
+                        )}
 
                       {entry.transactionHash && (
                         <button
@@ -984,7 +1009,13 @@ export function DirectConversationPanel({
                       decision ===
                         "approved"
                     ) {
-                      onOpenEscrowReview();
+                      if (fundedDealEntry) {
+                        onOpenEscrow(
+                          fundedDealEntry,
+                        );
+                      } else {
+                        onOpenEscrowReview();
+                      }
                     }
                   };
 
@@ -1130,12 +1161,30 @@ export function DirectConversationPanel({
                           >
                             {review.decision ===
                             "approved"
-                              ? "Approved ✓"
+                              ? "Approved ✓ · settlement pending"
                               : review.decision ===
                                   "revision_requested"
                                 ? "Revision requested"
                                 : "Rejected"}
                           </p>
+
+                          {review.decision ===
+                            "approved" &&
+                            fundedDealEntry && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onOpenEscrow(
+                                    fundedDealEntry,
+                                  )
+                                }
+                                className="mt-2 w-full border border-signal/30 px-3 py-2 font-display text-[8px] uppercase tracking-[0.11em] text-signal transition hover:bg-signal hover:text-ink"
+                              >
+                                {isCurrentPayer
+                                  ? "Continue settlement →"
+                                  : "Open Escrow for payment →"}
+                              </button>
+                            )}
                         </div>
                       )}
 

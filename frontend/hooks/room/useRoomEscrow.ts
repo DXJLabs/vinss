@@ -372,12 +372,15 @@ export function useRoomEscrow({
 
     void sync();
 
+    // Rekber coordination is peer-to-peer UX on top of indexed
+    // encrypted actions. Poll quickly while the Escrow view is active so
+    // a completed counterparty approval appears without a long stale spinner.
     const timer =
       window.setInterval(
         () => {
           void sync();
         },
-        3000,
+        1000,
       );
 
     const onVisible =
@@ -528,7 +531,7 @@ export function useRoomEscrow({
             (resolve) =>
               window.setTimeout(
                 resolve,
-                1500,
+                1000,
               ),
           );
         }

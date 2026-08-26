@@ -103,6 +103,15 @@ type CoordinationPhase =
   | "payee-signature"
   | "payee-send";
 
+type RekberPendingAction =
+  | "setup"
+  | "accept"
+  | "fund"
+  | "release"
+  | "claim"
+  | "refund"
+  | "certificate";
+
 interface EscrowPanelProps {
   roomId: string;
   session: VinssWalletSession | null;
@@ -258,6 +267,45 @@ export function EscrowPanel({
     useState<PendingPayeeAcceptance | null>(null);
   const coordinationLockRef =
     useRef(false);
+
+  const [
+    pendingRekberAction,
+    setPendingRekberAction,
+  ] = useState<RekberPendingAction | null>(
+    null,
+  );
+
+  const pendingRekberActionRef =
+    useRef<RekberPendingAction | null>(
+      null,
+    );
+
+  function beginRekberAction(
+    action: RekberPendingAction,
+  ) {
+    pendingRekberActionRef.current =
+      action;
+    setPendingRekberAction(action);
+    setBusy(true);
+  }
+
+  function finishRekberAction(
+    action: RekberPendingAction,
+  ) {
+    // An older delayed Ready X callback must never
+    // unlock a newer Rekber action.
+    if (
+      pendingRekberActionRef.current !==
+      action
+    ) {
+      return;
+    }
+
+    pendingRekberActionRef.current =
+      null;
+    setPendingRekberAction(null);
+    setBusy(false);
+  }
 
   const acceptedAction =
     acceptedOffer?.offerAction;
@@ -761,6 +809,53 @@ export function EscrowPanel({
         )
       : null;
 
+  /*
+   * Ready X can execute an action successfully while its in-page promise
+   * remains pending. Once discovery/contract state proves the action has
+   * completed, release the UI immediately. The action ref prevents a late
+   * callback from unlocking a newer transaction.
+   */
+  useEffect(() => {
+    const action =
+      pendingRekberActionRef.current;
+
+    if (!action) {
+      return;
+    }
+
+    const completed =
+      (action === "setup" &&
+        Boolean(createAction)) ||
+      (action === "accept" &&
+        Boolean(acceptAction)) ||
+      (action === "fund" &&
+        funded) ||
+      (action === "release" &&
+        Boolean(releaseRecord)) ||
+      (action === "claim" &&
+        released) ||
+      (action === "refund" &&
+        settled &&
+        Boolean(
+          custodyState?.refunded,
+        )) ||
+      (action === "certificate" &&
+        certificateClaimed);
+
+    if (completed) {
+      finishRekberAction(action);
+    }
+  }, [
+    createAction,
+    acceptAction,
+    funded,
+    releaseRecord,
+    released,
+    settled,
+    custodyState?.refunded,
+    certificateClaimed,
+  ]);
+
   useEffect(() => {
     setCustodyCommitment(null);
     setLocalSecrets(null);
@@ -776,6 +871,16 @@ export function EscrowPanel({
     setCoordinationPhase("idle");
     setPendingPayerSetup(null);
     setPendingPayeeAcceptance(null);
+
+    if (
+      pendingRekberActionRef.current
+    ) {
+      setBusy(false);
+    }
+
+    pendingRekberActionRef.current =
+      null;
+    setPendingRekberAction(null);
     coordinationLockRef.current = false;
   }, [
     acceptedOffer?.actionLocator,
@@ -895,7 +1000,7 @@ export function EscrowPanel({
     void sync();
     const timer = window.setInterval(
       () => void sync(),
-      5000,
+      1000,
     );
 
     return () => {
@@ -1005,7 +1110,7 @@ export function EscrowPanel({
     }
 
     coordinationLockRef.current = true;
-    setBusy(true);
+    beginRekberAction("setup");
     setError(null);
 
     let pending = pendingPayerSetup;
@@ -1144,6 +1249,13 @@ export function EscrowPanel({
           peerAddress,
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "setup"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1153,7 +1265,7 @@ export function EscrowPanel({
     } finally {
       coordinationLockRef.current = false;
       setCoordinationPhase("idle");
-      setBusy(false);
+      finishRekberAction("setup");
     }
   }
 
@@ -1174,7 +1286,7 @@ export function EscrowPanel({
     }
 
     coordinationLockRef.current = true;
-    setBusy(true);
+    beginRekberAction("accept");
     setError(null);
 
     let pending =
@@ -1317,6 +1429,13 @@ export function EscrowPanel({
           peerAddress,
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "accept"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1326,7 +1445,7 @@ export function EscrowPanel({
     } finally {
       coordinationLockRef.current = false;
       setCoordinationPhase("idle");
-      setBusy(false);
+      finishRekberAction("accept");
     }
   }
 
@@ -1388,7 +1507,7 @@ export function EscrowPanel({
       return;
     }
 
-    setBusy(true);
+    beginRekberAction("fund");
     setError(null);
 
     try {
@@ -1443,11 +1562,6 @@ export function EscrowPanel({
       setFundingProofTx(
         result.transactionHash,
       );
-      setCustodyState(
-        await getRekberCustody(
-          custodyCommitment,
-        ),
-      );
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
@@ -1480,6 +1594,13 @@ export function EscrowPanel({
         );
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "fund"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1487,7 +1608,7 @@ export function EscrowPanel({
         ),
       );
     } finally {
-      setBusy(false);
+      finishRekberAction("fund");
     }
   }
 
@@ -1506,7 +1627,7 @@ export function EscrowPanel({
       return;
     }
 
-    setBusy(true);
+    beginRekberAction("release");
     setError(null);
 
     try {
@@ -1560,6 +1681,13 @@ export function EscrowPanel({
           new Date().toISOString(),
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "release"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1567,7 +1695,7 @@ export function EscrowPanel({
         ),
       );
     } finally {
-      setBusy(false);
+      finishRekberAction("release");
     }
   }
 
@@ -1584,7 +1712,7 @@ export function EscrowPanel({
       return;
     }
 
-    setBusy(true);
+    beginRekberAction("claim");
     setError(null);
 
     try {
@@ -1604,11 +1732,6 @@ export function EscrowPanel({
         result.transactionHash,
       );
 
-      setCustodyState(
-        await getRekberCustody(
-          custodyCommitment,
-        ),
-      );
 
       onSent({
         id: `escrow-release-${Date.now()}`,
@@ -1622,6 +1745,13 @@ export function EscrowPanel({
           custodyCommitment.toString(16),
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "claim"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1629,7 +1759,7 @@ export function EscrowPanel({
         ),
       );
     } finally {
-      setBusy(false);
+      finishRekberAction("claim");
     }
   }
 
@@ -1646,7 +1776,7 @@ export function EscrowPanel({
       return;
     }
 
-    setBusy(true);
+    beginRekberAction("refund");
     setError(null);
 
     try {
@@ -1664,11 +1794,6 @@ export function EscrowPanel({
       setSettlementProofTx(
         result.transactionHash,
       );
-      setCustodyState(
-        await getRekberCustody(
-          custodyCommitment,
-        ),
-      );
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
@@ -1682,6 +1807,13 @@ export function EscrowPanel({
           new Date().toISOString(),
       });
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "refund"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1689,7 +1821,7 @@ export function EscrowPanel({
         ),
       );
     } finally {
-      setBusy(false);
+      finishRekberAction("refund");
     }
   }
 
@@ -1706,7 +1838,7 @@ export function EscrowPanel({
       return;
     }
 
-    setBusy(true);
+    beginRekberAction("certificate");
     setError(null);
 
     try {
@@ -1727,6 +1859,13 @@ export function EscrowPanel({
         result.transactionHash,
       );
     } catch (error) {
+      if (
+        pendingRekberActionRef.current !==
+        "certificate"
+      ) {
+        return;
+      }
+
       setError(
         humanizeError(
           error,
@@ -1734,7 +1873,7 @@ export function EscrowPanel({
         ),
       );
     } finally {
-      setBusy(false);
+      finishRekberAction("certificate");
     }
   }
 

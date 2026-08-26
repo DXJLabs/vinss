@@ -403,10 +403,73 @@ export default function DealRoomPage() {
               isCurrentDirectEntry(
                 entry,
               ) &&
-              isOfferDiscovered(
-                entry,
+              (
+                isOfferDiscovered(
+                  entry,
+                ) ||
+                Boolean(
+                  entry.transactionHash,
+                )
               ),
           )
+          .sort(
+            (left, right) =>
+              new Date(
+                left.sentAt,
+              ).getTime() -
+              new Date(
+                right.sentAt,
+              ).getTime(),
+          )
+          .at(-1) ?? null
+      : null;
+
+  // One accepted Offer may create exactly one Rekber lifecycle.
+  // Released/refunded Rekber stays available as history, but Add Escrow
+  // must never silently reuse its accepted Offer.
+  const latestUnusedAcceptedDirectOffer =
+    directAgentPeer
+      ? [...offerEntries]
+          .filter((entry) => {
+            if (
+              entry.offerAction?.kind !==
+                "accept" ||
+              !isCurrentDirectEntry(
+                entry,
+              ) ||
+              !isOfferDiscovered(
+                entry,
+              )
+            ) {
+              return false;
+            }
+
+            const dealOfferLocator =
+              (
+                entry.offerAction
+                  .parentOfferLocator ??
+                entry.actionLocator
+              )
+                .replace(/^0x/, "")
+                .toLowerCase();
+
+            const alreadyHasRekber =
+              escrowActions.some(
+                (item) =>
+                  item.action.kind ===
+                    "create" &&
+                  (
+                    item.action
+                      .dealOfferLocator ??
+                    ""
+                  )
+                    .replace(/^0x/, "")
+                    .toLowerCase() ===
+                    dealOfferLocator,
+              );
+
+            return !alreadyHasRekber;
+          })
           .sort(
             (left, right) =>
               new Date(
@@ -596,10 +659,22 @@ export default function DealRoomPage() {
           }}
           onAddEscrow={() => {
             setCounterSource(null);
-            setEscrowOfferSource(
-              latestAcceptedDirectOffer,
-            );
             setTab("escrow");
+
+            if (
+              !latestUnusedAcceptedDirectOffer
+            ) {
+              setEscrowOfferSource(null);
+              setError(
+                "No new accepted Offer is available for Rekber. Create and accept a new Offer first.",
+              );
+              return;
+            }
+
+            setError(null);
+            setEscrowOfferSource(
+              latestUnusedAcceptedDirectOffer,
+            );
           }}
           onRefresh={async () => {
             // Manual Sync refreshes chat first, then private Offer cards.
