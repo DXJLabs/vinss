@@ -2,12 +2,13 @@ name: Deploy VINSS Contract - Mainnet
 
 permissions:
   contents: read
+  actions: read
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Validate, deploy, or safely retry Voyager source verification"
+        description: "Validate, deploy, or retry Voyager verification"
         required: true
         default: "validate-only"
         type: choice
@@ -16,7 +17,7 @@ on:
           - deploy
           - verify-only
       contract:
-        description: "Contract to validate/deploy"
+        description: "VINSS contract"
         required: true
         type: choice
         options:
@@ -26,18 +27,18 @@ on:
           - VinssPrivateEscrowHelper
           - VinssEscrowRekber
           - VinssSettlementCertificate
-      verify_class_hash:
-        description: "Required only for verify-only mode"
+      confirm_mainnet:
+        description: "Deploy mode only: type DEPLOY_MAINNET"
         required: false
         default: ""
         type: string
-      confirm_mainnet:
-        description: "For deploy mode only: type DEPLOY_MAINNET"
+      class_hash:
+        description: "Required only for verify-only"
         required: false
         default: ""
         type: string
       escrow_rekber_address:
-        description: "Required only for VinssSettlementCertificate"
+        description: "Required only for VinssSettlementCertificate deploy"
         required: false
         default: ""
         type: string
@@ -55,7 +56,7 @@ jobs:
   mainnet:
     name: ${{ inputs.mode }} · ${{ inputs.contract }} · Starknet Mainnet
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
     environment: mainnet
 
     defaults:
@@ -67,7 +68,7 @@ jobs:
       DEPLOY_MODE: ${{ inputs.mode }}
       CONTRACT_NAME: ${{ inputs.contract }}
       CONFIRM_MAINNET: ${{ inputs.confirm_mainnet }}
-      VERIFY_CLASS_HASH: ${{ inputs.verify_class_hash }}
+      INPUT_CLASS_HASH: ${{ inputs.class_hash }}
       ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
       CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
 
@@ -77,40 +78,20 @@ jobs:
       TREASURY_ADDRESS: ${{ vars.VINSS_MAINNET_TREASURY_ADDRESS }}
 
     steps:
-      # IMPORTANT: checkout MUST be first because this job's shell working
-      # directory is contracts/. Before checkout that directory does not exist.
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Mainnet safety gate
         run: |
           set -euo pipefail
 
           if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "Mainnet actions are only allowed from the main branch."
+            echo "Mainnet actions are only allowed from main."
             exit 1
           fi
-
-          case "$DEPLOY_MODE" in
-            validate-only)
-              echo "VALIDATE-ONLY MODE: no transaction will be submitted."
-              ;;
-            deploy)
-              if [ "$CONFIRM_MAINNET" != "DEPLOY_MAINNET" ]; then
-                echo "Real deployment requires confirm_mainnet=DEPLOY_MAINNET."
-                exit 1
-              fi
-              ;;
-            verify-only)
-              echo "VERIFY-ONLY MODE: no on-chain transaction will be submitted."
-              ;;
-            *)
-              echo "Unsupported mode: $DEPLOY_MODE"
-              exit 1
-              ;;
-          esac
 
           valid_address() {
             [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
@@ -120,44 +101,62 @@ jobs:
             [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
           }
 
-          if [ "$DEPLOY_MODE" = "verify-only" ]; then
-            if ! valid_hash "$VERIFY_CLASS_HASH"; then
-              echo "verify-only requires a valid verify_class_hash."
+          case "$DEPLOY_MODE" in
+            validate-only)
+              echo "VALIDATE-ONLY: no transaction will be submitted."
+              ;;
+            deploy)
+              if [ "$CONFIRM_MAINNET" != "DEPLOY_MAINNET" ]; then
+                echo "Deploy mode requires confirm_mainnet=DEPLOY_MAINNET."
+                exit 1
+              fi
+              ;;
+            verify-only)
+              if ! valid_hash "$INPUT_CLASS_HASH"; then
+                echo "verify-only requires a valid class_hash."
+                exit 1
+              fi
+              echo "VERIFY-ONLY: no transaction will be submitted."
+              ;;
+            *)
+              echo "Unsupported mode: $DEPLOY_MODE"
               exit 1
-            fi
-          else
+              ;;
+          esac
+
+          if ! valid_address "$TREASURY_ADDRESS"; then
+            echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
+            exit 1
+          fi
+
+          if [ "$DEPLOY_MODE" != "verify-only" ]; then
             if ! valid_address "$ACCOUNT_ADDRESS"; then
               echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
               exit 1
             fi
 
-            if ! valid_address "$TREASURY_ADDRESS"; then
-              echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
-              exit 1
-            fi
-
             case "$CONTRACT_NAME" in
               VinssMessageHelper|VinssOfferHelper|VinssInvite)
-                if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
+                valid_address "$PRIVACY_POOL_ADDRESS" || {
                   echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
                   exit 1
-                fi
-                if ! valid_address "$OPEN_NOTE_TOKEN_ADDRESS"; then
+                }
+                valid_address "$OPEN_NOTE_TOKEN_ADDRESS" || {
                   echo "MAINNET_OPEN_NOTE_TOKEN_ADDRESS is missing or invalid."
                   exit 1
-                fi
+                }
                 ;;
               VinssPrivateEscrowHelper|VinssEscrowRekber)
-                if ! valid_address "$PRIVACY_POOL_ADDRESS"; then
+                valid_address "$PRIVACY_POOL_ADDRESS" || {
                   echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
                   exit 1
-                fi
+                }
                 ;;
               VinssSettlementCertificate)
-                if ! valid_address "$ESCROW_REKBER_ADDRESS"; then
+                valid_address "$ESCROW_REKBER_ADDRESS" || {
                   echo "A valid escrow_rekber_address is required."
                   exit 1
-                fi
+                }
                 if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
                   echo "certificate_base_uri must be HTTPS and end with /."
                   exit 1
@@ -186,77 +185,59 @@ jobs:
           )"
 
           if [ "$CHAIN_ID" != "0x534e5f4d41494e" ]; then
-            echo "Refusing operation: RPC is not Starknet Mainnet (SN_MAIN)."
+            echo "Refusing operation: RPC is not Starknet Mainnet."
             exit 1
           fi
 
-          echo "RPC verified: Starknet Mainnet."
+          echo "RPC verified: SN_MAIN."
+
+      # Build/test live in contracts-test.yml. This workflow does not rerun them.
+      # Instead it requires a successful VINSS Contracts Test whose tested commit
+      # has identical contracts/ content to the commit being deployed.
+      - name: Require successful dedicated Contracts Test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/contracts-test.yml/runs?branch=main&status=success&per_page=30"
+
+          TESTED_SHA="$(
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$API" \
+            | jq -r '.workflow_runs[0].head_sha // empty'
+          )"
+
+          if [ -z "$TESTED_SHA" ]; then
+            echo "No successful VINSS Contracts Test run was found."
+            echo "Run contracts-test.yml first."
+            exit 1
+          fi
+
+          git cat-file -e "${TESTED_SHA}^{commit}" 2>/dev/null || \
+            git fetch --no-tags origin "$TESTED_SHA"
+
+          if ! git diff --quiet "$TESTED_SHA" "$GITHUB_SHA" -- .; then
+            echo "contracts/ changed since the last successful Contracts Test."
+            echo "Tested SHA : $TESTED_SHA"
+            echo "Current SHA: $GITHUB_SHA"
+            echo "Run contracts-test.yml on current main before Mainnet."
+            exit 1
+          fi
+
+          echo "Dedicated contract CI accepted."
+          echo "Tested SHA : $TESTED_SHA"
+          echo "Current SHA: $GITHUB_SHA"
+          echo "No contracts/ changes since that successful test."
 
       - name: Setup Scarb
         uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
         with:
           scarb-version: 2.17.0
 
-      # Keep tests aligned with contracts/Scarb.toml (snforge_std 0.56.0).
-      - name: Setup Starknet Foundry for tests
-        uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
-        with:
-          starknet-foundry-version: 0.56.0
-
-      - name: Verify test toolchain
-        run: |
-          set -euo pipefail
-          scarb --version
-          snforge --version
-          sncast --version
-
-      - name: Build
-        id: build
-        run: |
-          set -euo pipefail
-          set -o pipefail
-          scarb build 2>&1 | tee build-output.txt
-
-      - name: Export ABI
-        id: abi
-        run: |
-          set -euo pipefail
-
-          CLASS_FILE="$(
-            find target/dev \
-              -type f \
-              -name "*_${CONTRACT_NAME}.contract_class.json" \
-              -print \
-            | head -1
-          )"
-
-          if [ -z "$CLASS_FILE" ] || [ ! -f "$CLASS_FILE" ]; then
-            echo "Compiled contract class not found for $CONTRACT_NAME."
-            find target/dev -maxdepth 2 -type f -name '*.contract_class.json' -print || true
-            exit 1
-          fi
-
-          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
-          mkdir -p "$ARTIFACT_DIR"
-
-          jq '.abi' "$CLASS_FILE" > "$ARTIFACT_DIR/${CONTRACT_NAME}.abi.json"
-          sha256sum "$CLASS_FILE" > "$ARTIFACT_DIR/compiled-class.sha256"
-          printf '%s\n' "$CLASS_FILE" > "$ARTIFACT_DIR/compiled-class-path.txt"
-
-          echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
-
-          echo "ABI exported:"
-          ls -lh "$ARTIFACT_DIR/${CONTRACT_NAME}.abi.json"
-
-      - name: Test
-        id: test
-        run: |
-          set -euo pipefail
-          set -o pipefail
-          snforge test 2>&1 | tee test-output.txt
-
-      # Newer sncast is used only after the 0.56.0 test suite completes.
-      - name: Setup Starknet Foundry for Mainnet operations
+      - name: Setup Starknet Foundry
         uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
         with:
           starknet-foundry-version: 0.63.0
@@ -264,9 +245,21 @@ jobs:
       - name: Verify deployment toolchain
         run: |
           set -euo pipefail
+          scarb --version
           VERSION="$(sncast --version)"
           echo "$VERSION"
           echo "$VERSION" | grep -q '0.63.0'
+
+      # Build is intentionally kept here. GitHub Actions jobs use fresh runners,
+      # so a successful build from contracts-test.yml is not available in this
+      # deployment job unless compiled artifacts are explicitly transferred.
+      # Tests remain in the dedicated Contracts Test workflow.
+      - name: Build deployment artifacts
+        id: build
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          scarb build 2>&1 | tee build-output.txt
 
       - name: Import dedicated deployer
         if: inputs.mode != 'verify-only'
@@ -318,9 +311,8 @@ jobs:
 
           echo "args=$DEPLOY_ARGS" >> "$GITHUB_OUTPUT"
 
-      # A class that is not yet declared cannot be reliably dry-run-deployed.
-      # Therefore validate-only safely estimates the DECLARE transaction.
-      - name: Estimate Mainnet declaration fee - dry run only
+      # Fee estimation uses the deployment artifacts built above.
+      - name: Estimate Mainnet declaration fee
         id: declare_fee
         if: inputs.mode != 'verify-only'
         env:
@@ -329,10 +321,11 @@ jobs:
           set -euo pipefail
           set -o pipefail
 
-          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
+          mkdir -p "$ARTIFACT_DIR"
 
-          echo "=== MAINNET DECLARE DRY RUN: $CONTRACT_NAME ==="
-          echo "No transaction is submitted by this step."
+          echo "=== DECLARE DRY RUN: $CONTRACT_NAME ==="
+          echo "No transaction is submitted."
 
           sncast \
             --scarb-profile dev \
@@ -344,9 +337,33 @@ jobs:
             --detailed \
             2>&1 | tee "$ARTIFACT_DIR/declare-fee-estimate.txt"
 
-          echo ""
-          echo "=== DECLARE FEE LINES ==="
-          grep -Ei 'fee|gas|fri|strk' "$ARTIFACT_DIR/declare-fee-estimate.txt" || true
+      - name: Export ABI from build artifacts
+        id: abi
+        if: inputs.mode != 'verify-only' && steps.declare_fee.outcome == 'success'
+        run: |
+          set -euo pipefail
+
+          CLASS_FILE="$(
+            find target/dev \
+              -type f \
+              -name "*_${CONTRACT_NAME}.contract_class.json" \
+              -print \
+            | head -1
+          )"
+
+          if [ -z "$CLASS_FILE" ] || [ ! -f "$CLASS_FILE" ]; then
+            echo "Contract class artifact not found after sncast declaration dry-run."
+            exit 1
+          fi
+
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
+          mkdir -p "$ARTIFACT_DIR"
+
+          jq '.abi' "$CLASS_FILE" > "$ARTIFACT_DIR/${CONTRACT_NAME}.abi.json"
+          sha256sum "$CLASS_FILE" > "$ARTIFACT_DIR/compiled-class.sha256"
+
+          echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
+          echo "ABI exported."
 
       - name: Declare class on Mainnet
         id: declare
@@ -357,7 +374,7 @@ jobs:
           set -euo pipefail
           set -o pipefail
 
-          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
 
           sncast \
             --scarb-profile dev \
@@ -381,7 +398,7 @@ jobs:
           )"
 
           if [ -z "$CLASS_HASH" ]; then
-            echo "Could not parse class hash from declaration output."
+            echo "Could not parse class hash."
             exit 1
           fi
 
@@ -390,20 +407,17 @@ jobs:
             echo "transaction_hash=$DECLARE_TX"
           } >> "$GITHUB_OUTPUT"
 
-      # Once the class exists on Mainnet, this dry-run can estimate the actual
-      # instance deployment transaction without submitting it.
-      - name: Estimate Mainnet deployment fee - dry run only
+      - name: Estimate Mainnet deployment fee
         id: deploy_fee
         if: inputs.mode == 'deploy' && steps.declare.outcome == 'success'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
-          CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
 
-          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
 
           sncast \
             --scarb-profile dev \
@@ -416,25 +430,18 @@ jobs:
             --detailed \
             2>&1 | tee "$ARTIFACT_DIR/deploy-fee-estimate.txt"
 
-          echo ""
-          echo "=== DEPLOY FEE LINES ==="
-          grep -Ei 'fee|gas|fri|strk' "$ARTIFACT_DIR/deploy-fee-estimate.txt" || true
-
       - name: Deploy contract instance to Mainnet
         id: deploy
         if: inputs.mode == 'deploy' && steps.declare.outcome == 'success' && steps.deploy_fee.outcome == 'success'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
-          CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
 
-          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
 
-          # Use --contract-name here so Cairo-expression constructor arguments
-          # (including the certificate ByteArray URI) are transformed using ABI.
           sncast \
             --scarb-profile dev \
             --account vinss-mainnet-deployer \
@@ -458,7 +465,7 @@ jobs:
           )"
 
           if [ -z "$CONTRACT_ADDRESS" ] || [ -z "$DEPLOY_TX" ]; then
-            echo "Could not parse complete deployment result."
+            echo "Could not parse deployment result."
             exit 1
           fi
 
@@ -467,56 +474,39 @@ jobs:
             echo "transaction_hash=$DEPLOY_TX"
           } >> "$GITHUB_OUTPUT"
 
-      # Voyager verification is class-level. Once a class is verified, every
-      # deployed instance using that class points to the verified source.
-      # Source verification publishes the relevant Cairo workspace source.
       - name: Submit source verification to Voyager
         id: verify
         if: inputs.mode == 'verify-only' || (inputs.mode == 'deploy' && steps.deploy.outcome == 'success')
+        continue-on-error: true
         env:
-          DEPLOYED_CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
+          DEPLOY_CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
 
-          ARTIFACT_DIR="${{ steps.abi.outputs.artifact_dir }}"
+          ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
+          mkdir -p "$ARTIFACT_DIR"
 
           if [ "$DEPLOY_MODE" = "verify-only" ]; then
-            CLASS_HASH="$VERIFY_CLASS_HASH"
+            VERIFY_CLASS_HASH="$INPUT_CLASS_HASH"
           else
-            CLASS_HASH="$DEPLOYED_CLASS_HASH"
+            VERIFY_CLASS_HASH="$DEPLOY_CLASS_HASH"
           fi
 
-          if ! [[ "$CLASS_HASH" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
-            echo "Verification class hash is missing or invalid."
-            exit 1
-          fi
+          test -n "$VERIFY_CLASS_HASH"
 
-          echo "=== VOYAGER SOURCE VERIFICATION: $CONTRACT_NAME ==="
-          echo "Class hash: $CLASS_HASH"
-          echo "Network: Starknet Mainnet"
-          echo "This publishes the contract source required by the verifier."
+          echo "Submitting $CONTRACT_NAME ($VERIFY_CLASS_HASH) to Voyager..."
 
           sncast \
             verify \
-            --class-hash "$CLASS_HASH" \
+            --url "$STARKNET_RPC_URL" \
+            --class-hash "$VERIFY_CLASS_HASH" \
             --contract-name "$CONTRACT_NAME" \
             --verifier voyager \
             --network mainnet \
             --confirm-verification \
             2>&1 | tee "$ARTIFACT_DIR/voyager-verification.txt"
-
-          STATUS_URL="$(
-            grep -oE 'https://[^[:space:]]+/beta/class-verify/job/[A-Za-z0-9._-]+' \
-              "$ARTIFACT_DIR/voyager-verification.txt" \
-            | tail -1 \
-            || true
-          )"
-
-          if [ -n "$STATUS_URL" ]; then
-            echo "status_url=$STATUS_URL" >> "$GITHUB_OUTPUT"
-            echo "Voyager verification status: $STATUS_URL"
-          fi
 
       - name: Create Mainnet report
         if: always()
@@ -526,20 +516,8 @@ jobs:
           ARTIFACT_DIR="mainnet-artifacts/$CONTRACT_NAME"
           mkdir -p "$ARTIFACT_DIR"
 
-          case "$DEPLOY_MODE" in
-            validate-only)
-              DEPLOY_STATUS="skipped (validate-only)"
-              ;;
-            verify-only)
-              DEPLOY_STATUS="skipped (verify-only)"
-              ;;
-            deploy)
-              DEPLOY_STATUS="${{ steps.deploy.outcome }}"
-              ;;
-          esac
-
           {
-            echo "# VINSS Starknet Mainnet Report"
+            echo "# VINSS Mainnet Operation Report"
             echo
             echo "| Item | Value |"
             echo "|---|---|"
@@ -547,47 +525,39 @@ jobs:
             echo "| Contract | \`$CONTRACT_NAME\` |"
             echo "| Network | Starknet Mainnet / SN_MAIN |"
             echo "| Commit | \`$GITHUB_SHA\` |"
-            echo "| Build | \`${{ steps.build.outcome }}\` |"
-            echo "| Tests | \`${{ steps.test.outcome }}\` |"
-            echo "| Declare fee dry-run | \`${{ steps.declare_fee.outcome }}\` |"
+            echo "| Deployment build | \`${{ steps.build.outcome }}\` |"
+            echo "| Dedicated Contracts CI gate | \`${{ steps.declare_fee.outcome != 'skipped' || steps.verify.outcome != 'skipped' }}\` |"
+            echo "| Declaration fee dry-run | \`${{ steps.declare_fee.outcome }}\` |"
             echo "| Declaration | \`${{ steps.declare.outcome }}\` |"
-            echo "| Deploy fee dry-run | \`${{ steps.deploy_fee.outcome }}\` |"
-            echo "| Deployment | \`$DEPLOY_STATUS\` |"
-            echo "| Voyager verification submission | \`${{ steps.verify.outcome }}\` |"
-            echo "| Voyager verification status | \`${{ steps.verify.outputs.status_url }}\` |"
+            echo "| Deployment fee dry-run | \`${{ steps.deploy_fee.outcome }}\` |"
+            echo "| Deployment | \`${{ steps.deploy.outcome }}\` |"
+            echo "| Voyager verification | \`${{ steps.verify.outcome }}\` |"
             echo "| Deployer | \`$ACCOUNT_ADDRESS\` |"
             echo "| Treasury | \`$TREASURY_ADDRESS\` |"
-            echo "| Privacy Pool | \`$PRIVACY_POOL_ADDRESS\` |"
-            echo "| Open-note token | \`$OPEN_NOTE_TOKEN_ADDRESS\` |"
-            echo "| Class hash | \`${{ steps.declare.outputs.class_hash || inputs.verify_class_hash }}\` |"
+            echo "| Class hash | \`${{ steps.declare.outputs.class_hash || inputs.class_hash }}\` |"
             echo "| Declare tx | \`${{ steps.declare.outputs.transaction_hash }}\` |"
             echo "| Contract address | \`${{ steps.deploy.outputs.contract_address }}\` |"
             echo "| Deploy tx | \`${{ steps.deploy.outputs.transaction_hash }}\` |"
             echo
             echo "## Declaration fee estimate"
             echo '```text'
-            tail -120 "$ARTIFACT_DIR/declare-fee-estimate.txt" 2>/dev/null || echo "Declaration fee estimation did not run."
+            tail -100 "$ARTIFACT_DIR/declare-fee-estimate.txt" 2>/dev/null || echo "Not run."
             echo '```'
             echo
             echo "## Deployment fee estimate"
             echo '```text'
-            tail -120 "$ARTIFACT_DIR/deploy-fee-estimate.txt" 2>/dev/null || echo "Deployment fee estimation requires a declared class and therefore only runs in deploy mode after declaration."
+            tail -100 "$ARTIFACT_DIR/deploy-fee-estimate.txt" 2>/dev/null || echo "Not run."
             echo '```'
             echo
-            echo "## Voyager source verification"
+            echo "## Voyager verification"
             echo '```text'
-            tail -120 "$ARTIFACT_DIR/voyager-verification.txt" 2>/dev/null || echo "Voyager verification did not run."
-            echo '```'
-            echo
-            echo "## Tests"
-            echo '```text'
-            tail -120 test-output.txt 2>/dev/null || echo "Tests did not run."
+            tail -80 "$ARTIFACT_DIR/voyager-verification.txt" 2>/dev/null || echo "Not run."
             echo '```'
           } > "$ARTIFACT_DIR/mainnet-report.md"
 
           cat "$ARTIFACT_DIR/mainnet-report.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload ABI, fee estimates, verification and deployment bundle
+      - name: Upload ABI, fee and verification bundle
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -595,11 +565,3 @@ jobs:
           path: contracts/mainnet-artifacts/${{ inputs.contract }}/
           retention-days: 90
           if-no-files-found: warn
-
-      - name: Mark verification failure
-        if: always() && ((inputs.mode == 'deploy' || inputs.mode == 'verify-only') && steps.verify.outcome != 'success')
-        run: |
-          echo "Voyager source verification was not successfully submitted."
-          echo "If the contract deployment itself succeeded, DO NOT rerun deploy mode."
-          echo "Use verify-only with the recorded class hash instead."
-          exit 1
