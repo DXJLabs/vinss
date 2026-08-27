@@ -10,7 +10,6 @@ import type { AgentProposal } from "@/lib/agent";
 import type { RoomParticipant } from "@/lib/privacy/participantKeys";
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import type { OfferTermsInput } from "@/hooks/room/useRoomOffers";
-import { VINSS_FEES } from "@/lib/fees";
 import {
   INITIAL_TEMPLATE_VALUES,
   OFFER_TEMPLATES,
@@ -37,7 +36,7 @@ const OFFER_HELP: Record<
       "Complete the main terms first. Optional fields can be left empty when they are not important to your agreement.",
       "More Terms is for additional conditions that can make the agreement clearer, such as deadlines, acceptance requirements, revisions, delivery conditions or inspection periods.",
       "Before anything is sent, Review Offer lets you check the complete proposal. The other participant can then Accept, Reject or Counter it.",
-      `The ${VINSS_FEES.offer.strk} STRK Private Offer action fee is separate from the value of the deal. It does not fund Escrow. Pool and network fees appear separately in Ready X.`,
+      "The Private Offer action fee is quoted from VINSS FeePolicy at confirmation time. It is separate from the deal value and does not fund Escrow. Pool and network fees appear separately in Ready X.",
       "When an Offer or Counter is accepted, it becomes the agreed basis for the deal. Accepting it still does not move funds.",
       "The wallet that sends the original Offer is the Escrow Payer and deposits the agreed token. The other wallet is the Payee. Counter Offers do not swap these roles.",
       "Escrow is a separate step after agreement. Funds are only secured when Escrow is started from the accepted agreement and the funding action is completed.",
@@ -1636,7 +1635,7 @@ export function OfferPanel({
               </div>
 
               <span className="shrink-0 text-sm text-signal/75">
-                {VINSS_FEES.offer.strk} STRK
+                On-chain quote
               </span>
             </div>
 
@@ -1846,7 +1845,7 @@ export function OfferPanel({
               </div>
 
               <span className="shrink-0 text-sm text-signal/75">
-                {VINSS_FEES.offer.strk} STRK
+                On-chain quote
               </span>
             </div>
           </div>

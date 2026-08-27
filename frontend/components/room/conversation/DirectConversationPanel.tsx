@@ -31,7 +31,6 @@ import type {
 import {
   EncryptedAttachmentPreview,
 } from "@/components/room/conversation/EncryptedAttachmentPreview";
-import { VINSS_FEES } from "@/lib/fees";
 import { useStarkIdentity } from "@/hooks/useStarkIdentity";
 import {
   evidenceUiForDealType,
@@ -1693,7 +1692,7 @@ export function DirectConversationPanel({
 
         <div className="mb-1 flex items-center justify-between gap-3 px-3 font-display text-[7px] uppercase tracking-[0.1em] text-paper/25">
           <span>
-            VINSS fee · {VINSS_FEES.message.strk} STRK
+            VINSS fee · on-chain quote
           </span>
           <span>
             Pool/network fee shown in Ready X

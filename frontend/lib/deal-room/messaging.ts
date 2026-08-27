@@ -5,7 +5,7 @@
  *   privacy_invoke(calldata) with calldata =
  *     [envelope_version, message_locator, sender_tag, recipient_tag,
  *      payload_commitment, payload_chunk_count,
- *      ...ciphertext_chunks, open_note_id]
+ *      ...ciphertext_chunks, quoted_fee, open_note_id]
  *
  * The record intentionally carries no sender, recipient, reusable
  * conversation id, or plaintext kind/content — see messaging_types.cairo's
@@ -129,8 +129,8 @@ export async function sendMessage(
   // convention: the LAST felt is always the id of the open note to fill
   // (`${openNoteIds[0]}`, substituted by the wallet), everything before it
   // is the message envelope. The contract returns a single OpenNoteDeposit
-  // with 7 STRK against `messageHelperOpenNoteToken` as VINSS messaging revenue
-  // is used as the VINSS messaging revenue token for the treasury OPEN note.
+  // with the current FeePolicy-quoted STRK revenue against
+  // `messageHelperOpenNoteToken` for the treasury OPEN note.
   const calldata = [
     MESSAGE_ENVELOPE_VERSION,
     actionLocator,

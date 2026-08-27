@@ -7,7 +7,6 @@ import {
   formatUsd,
   useUsdPrice,
 } from "@/components/room/escrow/EscrowPricing";
-import { VINSS_FEES } from "@/lib/fees";
 
 interface OfferCardProps {
   entry: ConversationEntry;
@@ -902,9 +901,8 @@ export function OfferCard({
         {actionable && (
           <div className="mt-3 border-t border-wire/60 pt-3">
             <p className="mb-2 text-[8px] leading-relaxed text-paper/25">
-              Each Accept, Reject, or Counter action costs{" "}
-              {VINSS_FEES.offer.strk} STRK. Pool/network fee appears
-              separately in Ready X.
+              Accept, Reject, and Counter use the current VINSS Offer fee
+              quoted on-chain. Pool/network fee appears separately in Ready X.
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               <button
