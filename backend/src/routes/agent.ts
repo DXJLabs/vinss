@@ -7,7 +7,7 @@ import {
   isLlmSelection,
 } from "../agent/providers/registry.js";
 import {
-  isAgentSkillId,
+  isPublicAgentSkillId,
   listAgentSkills,
 } from "../agent/skills/registry.js";
 import { config } from "../config.js";
@@ -28,7 +28,11 @@ agentRouter.get(
       network: config.network,
       defaultProvider: config.agent.defaultProvider,
       configuredProviders: configuredProviders(),
-      skills: listAgentSkills(),
+      skills:
+        listAgentSkills().filter(
+          (skill) =>
+            skill !== "dispute",
+        ),
     });
   },
 );
@@ -57,7 +61,7 @@ agentRouter.post(
       });
     }
 
-    if (!isAgentSkillId(body.skill)) {
+    if (!isPublicAgentSkillId(body.skill)) {
       return res.status(400).json({
         error: "skill must be chat, offer, or escrow.",
       });

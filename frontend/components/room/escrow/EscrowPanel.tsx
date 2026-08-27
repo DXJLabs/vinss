@@ -2566,6 +2566,20 @@ export function EscrowPanel({
                   dealOfferLocator={
                     dealOfferLocator
                   }
+                  payerAddress={
+                    agreedPayerAddress
+                  }
+                  payeeAddress={
+                    agreedPayeeAddress
+                  }
+                  offerSnapshot={
+                    createAction
+                      ?.offerSnapshot ??
+                    null
+                  }
+                  escrowActions={
+                    escrowActions
+                  }
                   peerAddress={
                     peerAddress
                   }

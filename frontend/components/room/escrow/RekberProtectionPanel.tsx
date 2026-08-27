@@ -5,6 +5,7 @@ import {
 } from "react";
 import type {
   EscrowActionPayload,
+  EscrowOfferSnapshot,
   SendActionResult,
 } from "@/types/deal-room";
 import type {
@@ -20,6 +21,12 @@ import type {
 import {
   useRekberProtectionActions,
 } from "@/hooks/room/useRekberProtectionActions";
+import {
+  DisputeAgentReview,
+} from "@/components/room/escrow/DisputeAgentReview";
+import type {
+  EscrowCoordinationRecord,
+} from "@/lib/deal-room/disputeAgent";
 
 interface RekberProtectionPanelProps {
   session: VinssWalletSession | null;
@@ -28,6 +35,11 @@ interface RekberProtectionPanelProps {
   role: SettlementRole | null;
   secrets: StoredRekberSecrets | null;
   dealOfferLocator: string;
+  payerAddress: string;
+  payeeAddress: string;
+  offerSnapshot: EscrowOfferSnapshot | null;
+  escrowActions:
+    readonly EscrowCoordinationRecord[];
   peerAddress: string;
   privateDisputeAction: EscrowActionPayload | null;
   mutualRefundConsentAction: EscrowActionPayload | null;
@@ -47,6 +59,10 @@ export function RekberProtectionPanel({
   role,
   secrets,
   dealOfferLocator,
+  payerAddress,
+  payeeAddress,
+  offerSnapshot,
+  escrowActions,
   peerAddress,
   privateDisputeAction,
   mutualRefundConsentAction,
@@ -184,6 +200,39 @@ export function RekberProtectionPanel({
             Waiting for an authorized Payer/Payee resolution split.
           </p>
         )}
+
+        <DisputeAgentReview
+          session={session}
+          state={state}
+          custodyCommitment={
+            custodyCommitment
+          }
+          role={role}
+          payerAddress={
+            payerAddress
+          }
+          payeeAddress={
+            payeeAddress
+          }
+          dealOfferLocator={
+            dealOfferLocator
+          }
+          offerSnapshot={
+            offerSnapshot
+          }
+          escrowActions={
+            escrowActions
+          }
+          peerAddress={
+            peerAddress
+          }
+          onSendCoordination={
+            onSendCoordination
+          }
+          busy={busy}
+          setBusy={setBusy}
+          setError={setError}
+        />
 
         {!state.resolutionAuthorized &&
           mutualRefund}

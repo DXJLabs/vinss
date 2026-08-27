@@ -199,6 +199,28 @@ export interface EscrowOfferSnapshot {
   settlementPlan?: OfferSettlementPlan;
 }
 
+export interface DisputeAgentEvidenceItem {
+  kind:
+    | "statement"
+    | "attachment"
+    | "transaction"
+    | "tracking"
+    | "test"
+    | "other";
+  label: string;
+  value: string;
+  commitment?: string;
+}
+
+export interface DisputeAgentPartyPacket {
+  role: "payer" | "payee";
+  walletAddress: string;
+  consentToAgentReview: true;
+  statement: string;
+  evidence: DisputeAgentEvidenceItem[];
+  submittedAt: string;
+}
+
 export interface EscrowActionPayload {
   kind: EscrowActionKind;
 
@@ -264,6 +286,13 @@ export interface EscrowActionPayload {
   // authorizing a full mutual principal refund. It is sensitive and must
   // never enter logs, analytics, Agent context, or plaintext backend storage.
   payeeRefundConsentSecret?: string;
+
+  // Dispute Agent material remains inside encrypted Escrow coordination until
+  // both parties explicitly submit evidence and sign the same backend-issued
+  // SNIP-12 case challenge.
+  disputeAgentPacket?: DisputeAgentPartyPacket;
+  disputeAgentCaseCommitment?: string;
+  disputeAgentSignature?: string[];
 
   fundingTransactionHash?: string;
   settlementTransactionHash?: string;

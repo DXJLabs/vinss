@@ -119,6 +119,19 @@ test("skills expose only domain tools", () => {
   );
 
   assert.equal(escrowNames.includes("draft_message"), false);
+
+  const disputeNames =
+    toolDefinitionsForSkill(
+      getAgentSkill("dispute"),
+    ).map(
+      (tool) =>
+        tool.function.name,
+    );
+
+  assert.deepEqual(
+    disputeNames,
+    ["inspect_deal_state"],
+  );
 });
 
 test("skill boundary blocks cross-domain tool execution", () => {
@@ -137,6 +150,18 @@ test("skill boundary blocks cross-domain tool execution", () => {
     () =>
       executeSkillTool(getAgentSkill("escrow"), "draft_message", {}, {}, 25),
     /Tool not allowed for escrow skill/,
+  );
+
+  assert.throws(
+    () =>
+      executeSkillTool(
+        getAgentSkill("dispute"),
+        "prepare_escrow",
+        {},
+        {},
+        25,
+      ),
+    /Tool not allowed for dispute skill/,
   );
 });
 

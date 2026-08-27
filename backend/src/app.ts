@@ -23,6 +23,7 @@ import { agentRouter } from "./routes/agent.js";
 import { createAttachmentRouter } from "./routes/attachments.js";
 import { createActivityRouter } from "./routes/activity.js";
 import { createDiscoverRouter } from "./routes/discover.js";
+import { createDisputeRouter } from "./routes/dispute.js";
 import { createHealthRouter } from "./routes/health.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { presenceRouter } from "./routes/presence.js";
@@ -143,6 +144,20 @@ export function createApp(dependencies: AppDependencies): Express {
       }),
     );
     app.use(agentRouter);
+
+    app.use(
+      "/dispute",
+      createFixedWindowRateLimit({
+        limit: dependencies.config.rateLimits.agent,
+        windowMs: dependencies.config.rateLimits.windowMs,
+        scope: "dispute",
+      }),
+    );
+    app.use(
+      createDisputeRouter(
+        dependencies.config,
+      ),
+    );
   }
 
   // Loyalty writes are unauthenticated/in-memory today. They stay fail-closed
