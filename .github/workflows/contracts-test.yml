@@ -21,7 +21,8 @@ jobs:
       - name: Setup Scarb
         uses: software-mansion/setup-scarb@v1
         with:
-          scarb-version: 2.17.0
+          scarb-version: 2.20.1
+          cache: false
 
       - name: Setup Starknet Foundry
         uses: foundry-rs/setup-snfoundry@v3
