@@ -19,9 +19,6 @@ import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 import {
   getRekberCustody,
 } from "@/lib/deal-room/settlement";
-import {
-  REKBER_COORDINATION_VERSION,
-} from "@/lib/deal-room/rekberAuthorization";
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
@@ -41,6 +38,13 @@ import {
   supportsDealEvidence,
 } from "@/lib/deal-room/workEvidenceUi";
 import { sha256FileHex } from "@/lib/fileDigest";
+import {
+  canonicalCustodyKey,
+  normalizeLocator,
+  selectDirectPairEntries,
+  selectPreparedCustodies,
+  selectRekberCreateActions,
+} from "@/lib/deal-room/directConversationView";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -174,126 +178,25 @@ export function DirectConversationPanel({
     >
   >({});
 
-  const pairEntries = [
-    ...entries,
-    ...offerEntries,
-  ]
-    .filter((entry) => {
-      if (
-        (entry.scope ?? "group") !==
-        "direct"
-      ) {
-        return false;
-      }
-
-      const incoming =
-        sameStarknetAddress(
-          entry.senderAddress,
-          peerAddress,
-        ) &&
-        sameStarknetAddress(
-          entry.recipientAddress,
-          walletAddress,
-        );
-
-      const outgoing =
-        sameStarknetAddress(
-          entry.senderAddress,
-          walletAddress,
-        ) &&
-        sameStarknetAddress(
-          entry.recipientAddress,
-          peerAddress,
-        );
-
-      return incoming || outgoing;
-    })
-    .sort(
-      (left, right) =>
-        new Date(left.sentAt).getTime() -
-        new Date(right.sentAt).getTime(),
+  const pairEntries =
+    selectDirectPairEntries(
+      entries,
+      offerEntries,
+      walletAddress,
+      peerAddress,
     );
 
-  const canonicalCustodyKey = (
-    value: string | null | undefined,
-  ) => {
-    if (
-      typeof value !== "string" ||
-      !value.trim()
-    ) {
-      return "";
-    }
-
-    try {
-      return BigInt(value)
-        .toString(16)
-        .toLowerCase();
-    } catch {
-      return value
-        .replace(/^0x/, "")
-        .toLowerCase();
-    }
-  };
-
-  function normalizeLocator(
-    value: string | null | undefined,
-  ): string {
-    return typeof value === "string"
-      ? value
-          .replace(/^0x/, "")
-          .toLowerCase()
-      : "";
-  }
-
   const rekberCreateActions =
-    escrowActions.filter((item) => {
-      if (
-        item.action.kind !== "create" ||
-        item.action.coordinationVersion !==
-          REKBER_COORDINATION_VERSION
-      ) {
-        return false;
-      }
-
-      const incoming =
-        sameStarknetAddress(
-          item.action.senderAddress,
-          peerAddress,
-        ) &&
-        sameStarknetAddress(
-          item.action.recipientAddress,
-          walletAddress,
-        );
-      const outgoing =
-        sameStarknetAddress(
-          item.action.senderAddress,
-          walletAddress,
-        ) &&
-        sameStarknetAddress(
-          item.action.recipientAddress,
-          peerAddress,
-        );
-
-      return incoming || outgoing;
-    });
+    selectRekberCreateActions(
+      escrowActions,
+      walletAddress,
+      peerAddress,
+    );
 
   const preparedCustodies =
-    rekberCreateActions
-      .filter((item) =>
-        Boolean(
-          item.action
-            .custodyCommitment,
-        ),
-      )
-      .map((item) => ({
-        key: canonicalCustodyKey(
-          item.action
-            .custodyCommitment,
-        ),
-        custodyCommitment:
-          item.action
-            .custodyCommitment!,
-      }));
+    selectPreparedCustodies(
+      rekberCreateActions,
+    );
 
   const preparedCustodyFingerprint =
     preparedCustodies

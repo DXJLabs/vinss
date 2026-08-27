@@ -23,10 +23,6 @@ import {
   type RoomParticipant,
 } from "@/lib/privacy/participantKeys";
 import type { MessageRoute } from "@/lib/privacy/messageRouting";
-import {
-  pollPresence,
-  publishPresence,
-} from "@/lib/privacy/presence";
 import type {
   AttachmentRef,
   DealType,
@@ -49,6 +45,12 @@ import {
   uniqueIdentities,
 } from "@/lib/deal-room/directMessageRouting";
 import { sha256FileHex } from "@/lib/fileDigest";
+import {
+  useDirectPresence,
+} from "@/hooks/room/useDirectPresence";
+import {
+  computeRekberEvidenceCommitment,
+} from "@/lib/deal-room/rekberEvidence";
 
 import {
   confirmRekberFulfillment as confirmWorkOnRekber,
@@ -127,14 +129,8 @@ export function useDirectConversation({
   const [drafts, setDrafts] =
     useState<Record<string, string>>({});
 
-  const [peerTyping, setPeerTyping] =
-    useState(false);
-
   const [messagePending, setMessagePending] =
     useState(false);
-
-  const sentReadReceiptsRef =
-    useRef<Set<string>>(new Set());
 
   const chatEndRef =
     useRef<HTMLDivElement | null>(null);
@@ -1184,62 +1180,6 @@ export function useDirectConversation({
   }
 
 
-async function computeRekberEvidenceCommitment(
-  parts: string[],
-): Promise<bigint> {
-  const bytes =
-    new TextEncoder().encode(
-      parts.join("\u001f"),
-    );
-
-  const digest =
-    new Uint8Array(
-      await crypto.subtle.digest(
-        "SHA-256",
-        bytes,
-      ),
-    );
-
-  const hex =
-    Array.from(digest)
-      .map((byte) =>
-        byte
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("");
-
-  // Stay comfortably inside Starknet felt range.
-  const value =
-    BigInt(`0x${hex}`) &
-    ((1n << 250n) - 1n);
-
-  return value || 1n;
-}
-
-async function sha256WorkFile(
-  file: File,
-): Promise<string> {
-  const digest =
-    new Uint8Array(
-      await crypto.subtle.digest(
-        "SHA-256",
-        await file.arrayBuffer(),
-      ),
-    );
-
-  return (
-    "0x" +
-    Array.from(digest)
-      .map((byte) =>
-        byte
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")
-  );
-}
-
   async function sendDirectWorkSubmission(
     input: {
       custodyCommitment: string;
@@ -1329,7 +1269,7 @@ async function sha256WorkFile(
 
       const fileSha256 =
         file
-          ? await sha256WorkFile(file)
+          ? await sha256FileHex(file)
           : "";
 
       /*
@@ -2012,343 +1952,18 @@ async function sha256WorkFile(
     selfRoutingIdentities.join("|"),
   ]);
 
-  // Typing is pairwise encrypted presence and never becomes an on-chain event.
-  const hasTypingDraft =
-    Boolean(draft.trim());
-
-  useEffect(() => {
-    if (
-      !active ||
-      !session ||
-      !selectedPeer ||
-      !messagingIdentity
-    ) {
-      setPeerTyping(false);
-      return;
-    }
-
-    let stopped = false;
-    let interval: number | null = null;
-
-    const publishTyping = async (
-      typing: boolean,
-    ) => {
-      try {
-        const directKey =
-          await resolveDirectKey();
-
-        if (!directKey || stopped) {
-          return;
-        }
-
-        await publishPresence(
-          BACKEND_URL,
-          directKey,
-          {
-            version: 1,
-            type: "typing",
-            senderAddress:
-              session.account.address,
-            sentAt:
-              new Date().toISOString(),
-            active: typing,
-          },
-          typing ? 5_000 : 2_000,
-        );
-      } catch (err) {
-        console.error(
-          "[VINSS DIRECT TYPING ERROR]",
-          err,
-        );
-      }
-    };
-
-    if (hasTypingDraft) {
-      void publishTyping(true);
-
-      interval = window.setInterval(
-        () => {
-          void publishTyping(true);
-        },
-        2_000,
-      );
-    } else {
-      void publishTyping(false);
-    }
-
-    return () => {
-      stopped = true;
-
-      if (interval !== null) {
-        window.clearInterval(interval);
-      }
-    };
-  }, [
-    active,
-    session?.account.address,
-    peerKey,
-    selectedPeer?.publicKey,
-    messagingIdentity?.publicKey,
-    hasTypingDraft,
-  ]);
-
-  // Poll typing + read receipts only for the selected direct pair.
-  useEffect(() => {
-    if (
-      !active ||
-      !session ||
-      !selectedPeer ||
-      !messagingIdentity
-    ) {
-      setPeerTyping(false);
-      return;
-    }
-
-    let stopped = false;
-    let running = false;
-
-    const poll = async () => {
-      if (stopped || running) return;
-
-      running = true;
-
-      try {
-        const directKey =
-          await resolveDirectKey();
-
-        if (!directKey || stopped) {
-          return;
-        }
-
-        const events =
-          await pollPresence(
-            BACKEND_URL,
-            directKey,
-          );
-
-        if (stopped) return;
-
-        const peerEvents = events.filter(
-          (event) =>
-            sameStarknetAddress(
-              event.senderAddress,
-              selectedPeer.address,
-            ),
-        );
-
-        const latestTyping =
-          peerEvents
-            .filter(
-              (event) =>
-                event.type === "typing",
-            )
-            .sort(
-              (left, right) =>
-                new Date(
-                  right.sentAt,
-                ).getTime() -
-                new Date(
-                  left.sentAt,
-                ).getTime(),
-            )[0];
-
-        setPeerTyping(
-          Boolean(
-            latestTyping?.active &&
-            latestTyping.expiresAt >
-              Date.now(),
-          ),
-        );
-
-        const readByLocator =
-          new Map<string, string>();
-
-        for (const event of peerEvents) {
-          if (
-            event.type !== "read" ||
-            !event.messageLocator
-          ) {
-            continue;
-          }
-
-          readByLocator.set(
-            event.messageLocator
-              .replace(/^0x/, "")
-              .toLowerCase(),
-            event.sentAt,
-          );
-        }
-
-        if (readByLocator.size > 0) {
-          setEntries((previous) =>
-            previous.map((entry) => {
-              if (
-                entry.scope !== "direct" ||
-                !sameStarknetAddress(
-                  entry.senderAddress,
-                  session.account.address,
-                ) ||
-                !sameStarknetAddress(
-                  entry.recipientAddress,
-                  selectedPeer.address,
-                )
-              ) {
-                return entry;
-              }
-
-              const readAt =
-                readByLocator.get(
-                  entry.actionLocator
-                    .replace(/^0x/, "")
-                    .toLowerCase(),
-                );
-
-              return readAt
-                ? {
-                    ...entry,
-                    readAt,
-                  }
-                : entry;
-            }),
-          );
-        }
-      } catch (err) {
-        console.error(
-          "[VINSS DIRECT PRESENCE ERROR]",
-          err,
-        );
-        setPeerTyping(false);
-      } finally {
-        running = false;
-      }
-    };
-
-    void poll();
-
-    const timer = window.setInterval(
-      () => {
-        void poll();
-      },
-      1200,
-    );
-
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-      setPeerTyping(false);
-    };
-  }, [
-    active,
-    session?.account.address,
-    peerKey,
-    selectedPeer?.publicKey,
-    messagingIdentity?.publicKey,
-  ]);
-
-  // Publish a read receipt only when the selected direct panel is actually open.
-  useEffect(() => {
-    if (
-      !active ||
-      !session ||
-      !selectedPeer ||
-      !messagingIdentity
-    ) {
-      return;
-    }
-
-    const unreadIncoming =
-      entries.filter(
-        (entry) =>
-          entry.scope === "direct" &&
-          Boolean(entry.transactionHash) &&
-          sameStarknetAddress(
-            entry.senderAddress,
-            selectedPeer.address,
-          ) &&
-          sameStarknetAddress(
-            entry.recipientAddress,
-            session.account.address,
-          ) &&
-          !sentReadReceiptsRef.current.has(
-            entry.actionLocator
-              .replace(/^0x/, "")
-              .toLowerCase(),
-          ),
-      );
-
-    if (unreadIncoming.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const publishReceipts =
-      async () => {
-        try {
-          const directKey =
-            await resolveDirectKey();
-
-          if (!directKey || cancelled) {
-            return;
-          }
-
-          for (const entry of unreadIncoming) {
-            const locator =
-              entry.actionLocator
-                .replace(/^0x/, "")
-                .toLowerCase();
-
-            sentReadReceiptsRef.current.add(
-              locator,
-            );
-
-            try {
-              await publishPresence(
-                BACKEND_URL,
-                directKey,
-                {
-                  version: 1,
-                  type: "read",
-                  senderAddress:
-                    session.account.address,
-                  sentAt:
-                    new Date().toISOString(),
-                  messageLocator: locator,
-                },
-                24 * 60 * 60 * 1000,
-              );
-            } catch (err) {
-              sentReadReceiptsRef.current.delete(
-                locator,
-              );
-
-              console.error(
-                "[VINSS DIRECT READ RECEIPT ERROR]",
-                err,
-              );
-            }
-          }
-        } catch (err) {
-          console.error(
-            "[VINSS DIRECT READ KEY ERROR]",
-            err,
-          );
-        }
-      };
-
-    void publishReceipts();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    active,
-    session?.account.address,
-    peerKey,
-    selectedPeer?.publicKey,
-    messagingIdentity?.publicKey,
-    entries,
-  ]);
+  const peerTyping =
+    useDirectPresence({
+      roomId,
+      active,
+      session,
+      messagingIdentity,
+      selectedPeer,
+      peerKey,
+      draft,
+      entries,
+      setEntries,
+    });
 
   useEffect(() => {
     if (!active || entries.length === 0) {
