@@ -298,7 +298,7 @@ jobs:
             echo "$OUTPUT" \
               | grep -i "Class Hash:" \
               | awk '{print $3}' \
-              | tail -1
+              | tail -1 || true
           )"
 
           if [ -z "$CLASS_HASH" ]; then
