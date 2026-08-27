@@ -86,6 +86,10 @@ pub trait IVinssOfferHelper<TContractState> {
         self: @TContractState,
     ) -> ContractAddress;
 
+    fn get_fee_policy(
+        self: @TContractState,
+    ) -> ContractAddress;
+
     /// Return true when this one-time action locator has already been stored.
     ///
     /// The locator identifies exactly one encrypted action. It must not be used

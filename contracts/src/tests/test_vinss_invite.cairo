@@ -16,6 +16,8 @@ use crate::invite::vinss_invite::compute_invite_commitment;
 const PRIVACY_POOL: felt252 = 0x123;
 const OTHER_CALLER: felt252 = 0x456;
 const TEST_SECRET: felt252 = 0xabcdef;
+const ROOM_REVENUE: u128 = 10000000000000000000_u128;
+const TEST_OPEN_NOTE_ID: felt252 = 0x12345;
 
 fn privacy_pool() -> ContractAddress {
     PRIVACY_POOL.try_into().unwrap()
@@ -34,6 +36,14 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
         .deploy(@array![])
         .unwrap();
 
+    let fee_policy_class = declare("MockFeePolicy")
+        .unwrap()
+        .contract_class();
+
+    let (fee_policy_address, _) = fee_policy_class
+        .deploy(@array![ROOM_REVENUE.into(), 250_000_u128.into()])
+        .unwrap();
+
     let contract = declare("VinssInvite")
         .unwrap()
         .contract_class();
@@ -41,6 +51,7 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
     let constructor_calldata = array![
         PRIVACY_POOL,
         token_address.into(),
+        fee_policy_address.into(),
     ];
 
     let (contract_address, _) = contract
@@ -67,6 +78,8 @@ fn create_invite(
         0,
         commitment,
         expires_at.into(),
+        ROOM_REVENUE.into(),
+        TEST_OPEN_NOTE_ID,
     ];
 
     dispatcher.privacy_invoke(calldata.span());
@@ -135,8 +148,8 @@ fn create_invite_stores_commitment() {
 }
 
 #[test]
-fn create_returns_no_open_note_deposit() {
-    let (contract_address, _) = deploy_contract();
+fn create_returns_room_activation_revenue() {
+    let (contract_address, token_address) = deploy_contract();
 
     let dispatcher = IVinssInviteDispatcher {
         contract_address,
@@ -159,12 +172,29 @@ fn create_returns_no_open_note_deposit() {
         0,
         commitment,
         2000,
+        ROOM_REVENUE.into(),
+        TEST_OPEN_NOTE_ID,
     ];
 
     let deposits =
         dispatcher.privacy_invoke(calldata.span());
 
-    assert(deposits.len() == 0, 'unexpected deposit');
+    assert(deposits.len() == 1, 'missing room revenue');
+
+    let deposit = *deposits.at(0);
+
+    assert(
+        deposit.note_id == TEST_OPEN_NOTE_ID,
+        'bad note id',
+    );
+    assert(
+        deposit.token == token_address,
+        'bad revenue token',
+    );
+    assert(
+        deposit.amount == ROOM_REVENUE,
+        'bad room revenue',
+    );
 }
 
 #[test]
@@ -367,6 +397,8 @@ fn non_privacy_pool_caller_is_rejected() {
         0,
         commitment,
         2000,
+        ROOM_REVENUE.into(),
+        TEST_OPEN_NOTE_ID,
     ];
 
     dispatcher.privacy_invoke(calldata.span());

@@ -57,6 +57,11 @@ pub mod VinssEscrowRekber {
     };
 
     use super::IVinssEscrowRekber;
+    use crate::fee_policy::interfaces::{
+        IVinssFeePolicyDispatcher,
+        IVinssFeePolicyDispatcherTrait,
+    };
+    use crate::fee_policy::types::FEE_ACTION_REKBER;
     use crate::escrow_rekber::commitments::{
         compute_fulfillment_chain_step,
         compute_payee_claim_commitment,
@@ -151,6 +156,7 @@ pub mod VinssEscrowRekber {
         // Immutable-after-construction trust/configuration boundary.
         privacy_pool: ContractAddress,
         pragma_oracle: ContractAddress,
+        revenue_fee_policy: ContractAddress,
         dispute_resolver: ContractAddress,
 
         // May be zero if POLICY_EXTERNAL_VERIFY is not used.
@@ -200,6 +206,7 @@ pub mod VinssEscrowRekber {
         ref self: ContractState,
         privacy_pool: ContractAddress,
         pragma_oracle: ContractAddress,
+        revenue_fee_policy: ContractAddress,
         dispute_resolver: ContractAddress,
         external_verifier: ContractAddress,
         strk_token: ContractAddress,
@@ -212,6 +219,7 @@ pub mod VinssEscrowRekber {
     ) {
         assert_non_zero_address(privacy_pool);
         assert_non_zero_address(pragma_oracle);
+        assert_non_zero_address(revenue_fee_policy);
         assert_non_zero_address(dispute_resolver);
         assert_non_zero_address(strk_token);
         assert_non_zero_address(usdc_token);
@@ -225,6 +233,9 @@ pub mod VinssEscrowRekber {
 
         self.privacy_pool.write(privacy_pool);
         self.pragma_oracle.write(pragma_oracle);
+        self.revenue_fee_policy.write(
+            revenue_fee_policy,
+        );
         self.dispute_resolver.write(dispute_resolver);
         self.external_verifier.write(external_verifier);
 
@@ -335,6 +346,12 @@ pub mod VinssEscrowRekber {
             self: @ContractState,
         ) -> ContractAddress {
             self.pragma_oracle.read()
+        }
+
+        fn get_revenue_fee_policy(
+            self: @ContractState,
+        ) -> ContractAddress {
+            self.revenue_fee_policy.read()
         }
 
         fn get_dispute_resolver(
@@ -610,8 +627,34 @@ pub mod VinssEscrowRekber {
             let percentage_fee =
                 principal / FEE_DIVISOR;
 
+            // Rekber service fee is paid once at FUND and is non-refundable.
+            // This dynamic floor reserves enough margin for included terminal
+            // paths such as refund, auto-release, dispute and resolution claims.
+            let fee_policy = IVinssFeePolicyDispatcher {
+                contract_address:
+                    self.revenue_fee_policy.read(),
+            };
+
+            let dynamic_floor_usd_micros =
+                fee_policy.quote_fee_usd_micros(
+                    FEE_ACTION_REKBER,
+                );
+
+            let configured_floor_usd_micros =
+                self.minimum_fee_usd_micros.read();
+
+            let effective_floor_usd_micros =
+                if dynamic_floor_usd_micros >
+                    configured_floor_usd_micros
+                {
+                    dynamic_floor_usd_micros
+                } else {
+                    configured_floor_usd_micros
+                };
+
             let minimum_fee =
                 self.usd_floor_to_token_units(
+                    effective_floor_usd_micros,
                     quote.price,
                     quote.decimals,
                     token_decimals,
@@ -632,13 +675,11 @@ pub mod VinssEscrowRekber {
         // Rounding up prevents systematic undercharging on small transactions.
         fn usd_floor_to_token_units(
             self: @ContractState,
+            usd_micros: u128,
             oracle_price: u128,
             oracle_decimals: u32,
             token_decimals: u32,
         ) -> u128 {
-            let usd_micros =
-                self.minimum_fee_usd_micros.read();
-
             let numerator: u256 =
                 usd_micros.into() *
                 self.pow10(token_decimals) *

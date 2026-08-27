@@ -40,7 +40,16 @@ pub mod VinssInvite {
         StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
+    use openzeppelin_interfaces::erc20::{
+        IERC20Dispatcher,
+        IERC20DispatcherTrait,
+    };
 
+    use crate::fee_policy::interfaces::{
+        IVinssFeePolicyDispatcher,
+        IVinssFeePolicyDispatcherTrait,
+    };
+    use crate::fee_policy::types::FEE_ACTION_ROOM_ACTIVATION;
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 
     use crate::invite::invite_events::{
@@ -62,6 +71,7 @@ pub mod VinssInvite {
     struct Storage {
         privacy_pool: ContractAddress,
         open_note_token: ContractAddress,
+        fee_policy: ContractAddress,
         invites: Map<felt252, InviteEntry>,
     }
 
@@ -77,6 +87,7 @@ pub mod VinssInvite {
         ref self: ContractState,
         privacy_pool: ContractAddress,
         open_note_token: ContractAddress,
+        fee_policy: ContractAddress,
     ) {
         let zero_address: ContractAddress =
             0.try_into().unwrap();
@@ -90,9 +101,14 @@ pub mod VinssInvite {
             open_note_token != zero_address,
             errors::ZERO_ADDRESS,
         );
+        assert(
+            fee_policy != zero_address,
+            errors::ZERO_ADDRESS,
+        );
 
         self.privacy_pool.write(privacy_pool);
         self.open_note_token.write(open_note_token);
+        self.fee_policy.write(fee_policy);
     }
 
     #[abi(embed_v0)]
@@ -122,8 +138,10 @@ pub mod VinssInvite {
                 *calldata.at(0);
 
             if operation == INVITE_OP_CREATE {
+                // CREATE:
+                // [0, commitment, expires_at, quoted_fee, open_note_id]
                 assert(
-                    calldata.len() == 3,
+                    calldata.len() == 5,
                     errors::BAD_CALLDATA,
                 );
 
@@ -134,6 +152,29 @@ pub mod VinssInvite {
                     (*calldata.at(2))
                         .try_into()
                         .expect(errors::BAD_CALLDATA);
+
+                let quoted_fee: u128 =
+                    (*calldata.at(3))
+                        .try_into()
+                        .expect(errors::BAD_CALLDATA);
+
+                let open_note_id =
+                    *calldata.at(4);
+
+                let fee_policy = IVinssFeePolicyDispatcher {
+                    contract_address:
+                        self.fee_policy.read(),
+                };
+
+                let minimum_fee =
+                    fee_policy.quote_fee(
+                        FEE_ACTION_ROOM_ACTIVATION,
+                    );
+
+                assert(
+                    quoted_fee >= minimum_fee,
+                    'FEE_QUOTE_TOO_LOW',
+                );
 
                 assert(
                     commitment != 0,
@@ -175,6 +216,30 @@ pub mod VinssInvite {
                         },
                     ),
                 );
+
+                let revenue_token =
+                    self.open_note_token.read();
+
+                let erc20 = IERC20Dispatcher {
+                    contract_address: revenue_token,
+                };
+
+                assert(
+                    erc20.approve(
+                        spender: expected_privacy_pool,
+                        amount: quoted_fee.into(),
+                    ),
+                    'APPROVE_FAILED',
+                );
+
+                return array![
+                    OpenNoteDeposit {
+                        note_id: open_note_id,
+                        token: revenue_token,
+                        amount: quoted_fee,
+                    },
+                ]
+                    .span();
             } else {
                 assert(
                     operation == INVITE_OP_CONSUME,
@@ -242,6 +307,12 @@ pub mod VinssInvite {
             self: @ContractState,
         ) -> ContractAddress {
             self.privacy_pool.read()
+        }
+
+        fn get_fee_policy(
+            self: @ContractState,
+        ) -> ContractAddress {
+            self.fee_policy.read()
         }
 
         fn get_invite(

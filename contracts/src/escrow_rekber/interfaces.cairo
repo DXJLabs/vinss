@@ -38,7 +38,8 @@ pub trait IVinssEscrowRekber<TState> {
     ) -> felt252;
 
     /// Authoritative fee quote:
-    /// max(2% principal, configured USD minimum converted with Pragma).
+    /// max(2% principal, configured USD minimum, dynamic lifecycle
+    /// sponsor reserve) converted with Pragma.
     fn quote_rekber_fee(
         self: @TState,
         token: ContractAddress,
@@ -47,6 +48,7 @@ pub trait IVinssEscrowRekber<TState> {
 
     fn get_privacy_pool(self: @TState) -> ContractAddress;
     fn get_pragma_oracle(self: @TState) -> ContractAddress;
+    fn get_revenue_fee_policy(self: @TState) -> ContractAddress;
     fn get_dispute_resolver(self: @TState) -> ContractAddress;
     fn get_external_verifier(self: @TState) -> ContractAddress;
 

@@ -72,6 +72,14 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
         .deploy(@array![])
         .unwrap();
 
+    let fee_policy_class = declare("MockFeePolicy")
+        .unwrap()
+        .contract_class();
+
+    let (fee_policy_address, _) = fee_policy_class
+        .deploy(@array![MESSAGE_REVENUE.into(), 150_000_u128.into()])
+        .unwrap();
+
     let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
@@ -79,6 +87,7 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
     let constructor_calldata = array![
         PRIVACY_POOL,
         token_address.into(),
+        fee_policy_address.into(),
     ];
 
     let (contract_address, _) = contract
@@ -182,6 +191,7 @@ fn make_calldata(
         chunks,
     );
 
+    calldata.append(MESSAGE_REVENUE.into());
     calldata.append(TEST_OPEN_NOTE_ID);
     calldata
 }
@@ -233,6 +243,14 @@ fn constructor_rejects_zero_privacy_pool() {
         .deploy(@array![])
         .unwrap();
 
+    let fee_policy_class = declare("MockFeePolicy")
+        .unwrap()
+        .contract_class();
+
+    let (fee_policy_address, _) = fee_policy_class
+        .deploy(@array![MESSAGE_REVENUE.into(), 150_000_u128.into()])
+        .unwrap();
+
     let contract = declare("VinssMessageHelper")
         .unwrap()
         .contract_class();
@@ -240,6 +258,7 @@ fn constructor_rejects_zero_privacy_pool() {
     let constructor_calldata = array![
         0,
         open_note_token.into(),
+        fee_policy_address.into(),
     ];
 
     match contract.deploy(@constructor_calldata) {
@@ -630,6 +649,7 @@ fn privacy_invoke_rejects_truncated_header() {
         VINSS_MESSAGE_ENVELOPE_VERSION.into(),
         6001,
         1,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -658,6 +678,7 @@ fn privacy_invoke_rejects_version_that_does_not_fit_u8() {
         1,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -689,6 +710,7 @@ fn privacy_invoke_rejects_unsupported_version() {
         1,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -737,6 +759,7 @@ fn privacy_invoke_rejects_zero_commitment() {
         0,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -764,6 +787,7 @@ fn privacy_invoke_rejects_empty_ciphertext() {
         TEST_RECIPIENT_TAG,
         1,
         0,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -792,6 +816,7 @@ fn privacy_invoke_rejects_invalid_commitment() {
         1,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -819,6 +844,7 @@ fn privacy_invoke_rejects_chunk_count_above_u64() {
         TEST_RECIPIENT_TAG,
         1,
         0x10000000000000000,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -848,6 +874,7 @@ fn privacy_invoke_rejects_oversized_ciphertext() {
         TEST_RECIPIENT_TAG,
         1,
         oversized_count.into(),
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -876,6 +903,7 @@ fn privacy_invoke_rejects_missing_ciphertext_chunk() {
         1,
         2,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -905,6 +933,7 @@ fn privacy_invoke_rejects_trailing_calldata() {
         1,
         111,
         222,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -931,6 +960,7 @@ fn privacy_invoke_rejects_zero_sender_tag() {
         1,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 
@@ -956,6 +986,7 @@ fn privacy_invoke_rejects_zero_recipient_tag() {
         1,
         1,
         111,
+        MESSAGE_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 

@@ -16,6 +16,12 @@ pub mod offers {
     pub mod vinss_offer;
 }
 
+pub mod fee_policy {
+    pub mod interfaces;
+    pub mod types;
+    pub mod vinss_fee_policy;
+}
+
 pub mod interfaces { pub mod privacy_pool_types; }
 pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time; pub mod validation; }
 
@@ -23,6 +29,7 @@ pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time
 #[cfg(test)]
 pub mod test_mocks {
     pub mod mock_erc20;
+    pub mod mock_fee_policy;
     pub mod mock_pragma;
 }
 

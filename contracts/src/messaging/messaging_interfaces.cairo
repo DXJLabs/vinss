@@ -23,6 +23,10 @@ pub trait IVinssMessageHelper<TContractState> {
         self: @TContractState,
     ) -> ContractAddress;
 
+    fn get_fee_policy(
+        self: @TContractState,
+    ) -> ContractAddress;
+
     /// Return whether a one-time message locator has already been stored.
     fn message_exists(
         self: @TContractState,

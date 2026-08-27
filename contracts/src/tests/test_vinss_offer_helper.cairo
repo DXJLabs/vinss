@@ -52,6 +52,14 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
         .deploy(@array![])
         .unwrap();
 
+    let fee_policy_class = declare("MockFeePolicy")
+        .unwrap()
+        .contract_class();
+
+    let (fee_policy_address, _) = fee_policy_class
+        .deploy(@array![OFFER_REVENUE.into(), 250_000_u128.into()])
+        .unwrap();
+
     let contract = declare("VinssOfferHelper")
         .unwrap()
         .contract_class();
@@ -59,6 +67,7 @@ fn deploy_contract() -> (ContractAddress, ContractAddress) {
     let constructor_calldata = array![
         PRIVACY_POOL,
         token_address.into(),
+        fee_policy_address.into(),
     ];
 
     let (address, _) = contract
@@ -144,6 +153,7 @@ fn make_calldata(
         i += 1;
     };
 
+    calldata.append(OFFER_REVENUE.into());
     calldata.append(TEST_OPEN_NOTE_ID);
 
     calldata
@@ -341,6 +351,7 @@ fn rejects_invalid_commitment() {
         0x999,
         1,
         11,
+        OFFER_REVENUE.into(),
         TEST_OPEN_NOTE_ID,
     ];
 

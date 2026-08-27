@@ -14,6 +14,11 @@ pub mod VinssMessageHelper {
         IERC20DispatcherTrait,
     };
 
+    use crate::fee_policy::interfaces::{
+        IVinssFeePolicyDispatcher,
+        IVinssFeePolicyDispatcherTrait,
+    };
+    use crate::fee_policy::types::FEE_ACTION_MESSAGE;
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
     use crate::messaging::messaging_events::MessageCommitted;
     use crate::messaging::messaging_interfaces::IVinssMessageHelper;
@@ -21,9 +26,6 @@ pub mod VinssMessageHelper {
     use crate::messaging::messaging_validation;
     use crate::utils::constants::MESSAGE_ENVELOPE_HEADER_FELTS;
     use crate::utils::errors;
-
-    const MESSAGE_REVENUE_AMOUNT: u128 =
-        7000000000000000000_u128;
 
     #[storage]
     struct Storage {
@@ -35,6 +37,9 @@ pub mod VinssMessageHelper {
         /// the paired frontend `transfer: "OPEN"` action routes the resulting
         /// private treasury note.
         open_note_token: ContractAddress,
+
+        /// Shared production pricing policy.
+        fee_policy: ContractAddress,
 
         /// Public structural record indexed by a one-time message locator.
         messages: Map<felt252, VinssMessageRecord>,
@@ -63,6 +68,7 @@ pub mod VinssMessageHelper {
         ref self: ContractState,
         privacy_pool: ContractAddress,
         open_note_token: ContractAddress,
+        fee_policy: ContractAddress,
     ) {
         let zero_address: ContractAddress = 0.try_into().unwrap();
 
@@ -74,9 +80,14 @@ pub mod VinssMessageHelper {
             open_note_token != zero_address,
             errors::ZERO_ADDRESS,
         );
+        assert(
+            fee_policy != zero_address,
+            errors::ZERO_ADDRESS,
+        );
 
         self.privacy_pool.write(privacy_pool);
         self.open_note_token.write(open_note_token);
+        self.fee_policy.write(fee_policy);
     }
 
     // -------------------------------------------------------------------------
@@ -125,17 +136,37 @@ pub mod VinssMessageHelper {
             );
 
             assert(
-                calldata.len() >= 1,
+                calldata.len() >= 2,
                 errors::INVALID_MESSAGE_CALLDATA,
             );
 
-            let open_note_id = *calldata.at(calldata.len() - 1);
-            let message_calldata = calldata.slice(0, calldata.len() - 1);
+            // Invoke-helper tail:
+            // [...encrypted envelope, quoted_fee, open_note_id]
+            let quoted_fee: u128 =
+                (*calldata.at(calldata.len() - 2))
+                    .try_into()
+                    .expect('FEE_OVERFLOW');
+            let open_note_id =
+                *calldata.at(calldata.len() - 1);
+            let message_calldata =
+                calldata.slice(0, calldata.len() - 2);
+
+            let fee_policy = IVinssFeePolicyDispatcher {
+                contract_address: self.fee_policy.read(),
+            };
+            let minimum_fee =
+                fee_policy.quote_fee(
+                    FEE_ACTION_MESSAGE,
+                );
+
+            assert(
+                quoted_fee >= minimum_fee,
+                'FEE_QUOTE_TOO_LOW',
+            );
 
             self.store_message(message_calldata);
 
-            // VINSS private messaging revenue: 7 STRK.
-            let revenue_amount = MESSAGE_REVENUE_AMOUNT;
+            let revenue_amount = quoted_fee;
             let revenue_token = self.open_note_token.read();
 
             let erc20 = IERC20Dispatcher {
@@ -164,6 +195,12 @@ pub mod VinssMessageHelper {
             self: @ContractState,
         ) -> ContractAddress {
             self.privacy_pool.read()
+        }
+
+        fn get_fee_policy(
+            self: @ContractState,
+        ) -> ContractAddress {
+            self.fee_policy.read()
         }
 
         fn message_exists(

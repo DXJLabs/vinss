@@ -21,6 +21,10 @@ pub trait IVinssInvite<TContractState> {
         self: @TContractState,
     ) -> ContractAddress;
 
+    fn get_fee_policy(
+        self: @TContractState,
+    ) -> ContractAddress;
+
     fn get_invite(
         self: @TContractState,
         commitment: felt252,

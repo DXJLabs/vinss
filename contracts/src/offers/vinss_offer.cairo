@@ -13,6 +13,11 @@ pub mod VinssOfferHelper {
         IERC20DispatcherTrait,
     };
 
+    use crate::fee_policy::interfaces::{
+        IVinssFeePolicyDispatcher,
+        IVinssFeePolicyDispatcherTrait,
+    };
+    use crate::fee_policy::types::FEE_ACTION_OFFER;
     use crate::interfaces::privacy_pool_types::OpenNoteDeposit;
 
     use crate::offers::offer_commitments::compute_offer_action_commitment;
@@ -23,9 +28,6 @@ pub mod VinssOfferHelper {
 
     use crate::utils::constants::OFFER_ENVELOPE_HEADER_FELTS;
     use crate::utils::errors;
-
-    const OFFER_REVENUE_AMOUNT: u128 =
-        10000000000000000000_u128;
 
     // -------------------------------------------------------------------------
     // Storage
@@ -38,6 +40,9 @@ pub mod VinssOfferHelper {
 
         /// STRK token used for flat VINSS Offer revenue.
         open_note_token: ContractAddress,
+
+        /// Shared production pricing policy.
+        fee_policy: ContractAddress,
 
         /// Public structural records indexed by one-time action locators.
         offer_actions: Map<felt252, EncryptedOfferActionRecord>,
@@ -79,6 +84,7 @@ pub mod VinssOfferHelper {
         ref self: ContractState,
         privacy_pool: ContractAddress,
         open_note_token: ContractAddress,
+        fee_policy: ContractAddress,
     ) {
         let zero_address: ContractAddress = 0.try_into().unwrap();
 
@@ -91,9 +97,14 @@ pub mod VinssOfferHelper {
             open_note_token != zero_address,
             errors::ZERO_ADDRESS,
         );
+        assert(
+            fee_policy != zero_address,
+            errors::ZERO_ADDRESS,
+        );
 
         self.privacy_pool.write(privacy_pool);
         self.open_note_token.write(open_note_token);
+        self.fee_policy.write(fee_policy);
     }
 
     // -------------------------------------------------------------------------
@@ -128,27 +139,43 @@ pub mod VinssOfferHelper {
             );
 
             assert(
-                calldata.len() >= 1,
+                calldata.len() >= 2,
                 errors::INVALID_OFFER_CALLDATA,
             );
 
-            // Wallet invoke-helper convention:
-            // final felt = ${openNoteIds[0]}.
+            // Invoke-helper tail:
+            // [...encrypted envelope, quoted_fee, open_note_id]
+            let quoted_fee: u128 =
+                (*calldata.at(calldata.len() - 2))
+                    .try_into()
+                    .expect('FEE_OVERFLOW');
             let open_note_id =
                 *calldata.at(calldata.len() - 1);
 
             let offer_calldata =
                 calldata.slice(
                     0,
-                    calldata.len() - 1,
+                    calldata.len() - 2,
                 );
+
+            let fee_policy = IVinssFeePolicyDispatcher {
+                contract_address: self.fee_policy.read(),
+            };
+            let minimum_fee =
+                fee_policy.quote_fee(
+                    FEE_ACTION_OFFER,
+                );
+
+            assert(
+                quoted_fee >= minimum_fee,
+                'FEE_QUOTE_TOO_LOW',
+            );
 
             self.store_offer_action(
                 offer_calldata,
             );
 
-            // Flat VINSS Offer revenue = 10 STRK.
-            let revenue_amount = OFFER_REVENUE_AMOUNT;
+            let revenue_amount = quoted_fee;
 
             let revenue_token =
                 self.open_note_token.read();
@@ -179,6 +206,12 @@ pub mod VinssOfferHelper {
             self: @ContractState,
         ) -> ContractAddress {
             self.privacy_pool.read()
+        }
+
+        fn get_fee_policy(
+            self: @ContractState,
+        ) -> ContractAddress {
+            self.fee_policy.read()
         }
 
         fn has_offer_action(
