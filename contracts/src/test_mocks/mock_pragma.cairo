@@ -87,9 +87,7 @@ pub mod MockPragma {
         ) -> PragmaPricesResponse {
             let pair_id =
                 match data_type {
-                    DataType::SpotEntry(
-                        pair_id,
-                    ) => pair_id,
+                    DataType::SpotEntry(pair_id) => pair_id,
                     _ => core::panic_with_felt252(
                         'MOCK_SPOT_ONLY',
                     ),
