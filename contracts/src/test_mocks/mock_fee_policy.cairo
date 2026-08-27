@@ -47,15 +47,17 @@ pub mod MockFeePolicy {
     impl MockFeePolicyImpl of IMockFeePolicy<ContractState> {
         fn quote_fee(
             self: @ContractState,
-            _action: u8,
+            action: u8,
         ) -> u128 {
+            let _ = action;
             self.fee.read()
         }
 
         fn quote_fee_usd_micros(
             self: @ContractState,
-            _action: u8,
+            action: u8,
         ) -> u128 {
+            let _ = action;
             self.fee_usd_micros.read()
         }
     }
