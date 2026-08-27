@@ -158,6 +158,21 @@ fn deploy_contracts() -> (
         0,
     );
 
+    let fee_policy_class =
+        declare("MockFeePolicy")
+            .unwrap()
+            .contract_class();
+
+    let (fee_policy_address, _) =
+        fee_policy_class
+            .deploy(
+                @array![
+                    FEE.into(),
+                    MINIMUM_FEE_USD_MICROS.into(),
+                ],
+            )
+            .unwrap();
+
     let rekber_class =
         declare("VinssEscrowRekber")
             .unwrap()
@@ -166,6 +181,7 @@ fn deploy_contracts() -> (
     let rekber_constructor = array![
         PRIVACY_POOL,
         oracle_address.into(),
+        fee_policy_address.into(),
         RESOLVER,
         EXTERNAL_VERIFIER,
         strk.into(),
