@@ -36,97 +36,11 @@ import {
 } from "@/components/room/conversation/EncryptedAttachmentPreview";
 import { VINSS_FEES } from "@/lib/fees";
 import { useStarkIdentity } from "@/hooks/useStarkIdentity";
-
-interface EvidenceUiCopy {
-  actionLabel: string;
-  submittedLabel: string;
-  composerTitle: string;
-  placeholder: string;
-  submitButton: string;
-  approveButton: string;
-  revisionButton: string;
-  rejectButton: string;
-}
-
-function evidenceUiForDealType(
-  dealType?: DealType,
-): EvidenceUiCopy {
-  switch (dealType) {
-    case "freelance":
-      return {
-        actionLabel: "Submit work",
-        submittedLabel: "Work submitted ✓",
-        composerTitle: "Submit work evidence",
-        placeholder:
-          "Describe what was completed, delivery note, link…",
-        submitButton: "Submit Work →",
-        approveButton: "Approve work",
-        revisionButton: "Request revision",
-        rejectButton: "Reject",
-      };
-
-    case "bounty":
-      return {
-        actionLabel: "Submit result",
-        submittedLabel: "Result submitted ✓",
-        composerTitle: "Submit bounty result",
-        placeholder:
-          "Describe the completed result and supporting evidence…",
-        submitButton: "Submit Result →",
-        approveButton: "Approve result",
-        revisionButton: "Request revision",
-        rejectButton: "Reject",
-      };
-
-    case "digital_goods":
-      return {
-        actionLabel: "Deliver files",
-        submittedLabel: "Delivery submitted ✓",
-        composerTitle: "Deliver digital goods",
-        placeholder:
-          "Describe the delivered files, keys, links, or notes…",
-        submitButton: "Deliver Files →",
-        approveButton: "Accept delivery",
-        revisionButton: "Request changes",
-        rejectButton: "Reject delivery",
-      };
-
-    case "goods":
-      return {
-        actionLabel: "Delivery proof",
-        submittedLabel: "Delivery evidence ✓",
-        composerTitle: "Submit delivery evidence",
-        placeholder:
-          "Add tracking, handover, receipt, or delivery details…",
-        submitButton: "Submit Evidence →",
-        approveButton: "Confirm received",
-        revisionButton: "Report issue",
-        rejectButton: "Reject delivery",
-      };
-
-    default:
-      return {
-        actionLabel: "Submit evidence",
-        submittedLabel: "Evidence submitted ✓",
-        composerTitle: "Submit deal evidence",
-        placeholder:
-          "Describe the delivery or evidence for this deal…",
-        submitButton: "Submit Evidence →",
-        approveButton: "Approve",
-        revisionButton: "Request changes",
-        rejectButton: "Reject",
-      };
-  }
-}
-
-function supportsDealEvidence(
-  dealType?: DealType,
-): boolean {
-  return (
-    dealType !== "otc" &&
-    dealType !== "nft"
-  );
-}
+import {
+  evidenceUiForDealType,
+  supportsDealEvidence,
+} from "@/lib/deal-room/workEvidenceUi";
+import { sha256FileHex } from "@/lib/fileDigest";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -182,29 +96,11 @@ interface DirectConversationPanelProps {
   ) => void | Promise<void>;
 }
 
-async function sha256LocalFile(
-  file: File,
-): Promise<string> {
-  const digest =
-    await crypto.subtle.digest(
-      "SHA-256",
-      await file.arrayBuffer(),
-    );
-
-  return (
-    "0x" +
-    Array.from(
-      new Uint8Array(digest),
-    )
-      .map((value) =>
-        value
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")
-  );
-}
-
+/*
+ * Renders the selected private peer timeline.
+ * Encryption, discovery, persistence, and send lifecycles belong in
+ * useDirectConversation; this component should stay interaction-focused.
+ */
 export function DirectConversationPanel({
   entries,
   offerEntries,
@@ -429,34 +325,31 @@ export function DirectConversationPanel({
           continue;
         }
 
-        const termsEntry =
+        const acceptedEntry =
           pairEntries.find(
             (entry) =>
+              entry.offerAction
+                ?.kind === "accept" &&
               normalizeLocator(
-                entry.actionLocator,
+                entry.offerAction
+                  .parentOfferLocator,
               ) ===
-              normalizeLocator(
-                item.action
-                  .dealOfferLocator,
-              ),
+                normalizeLocator(
+                  item.action
+                    .dealOfferLocator,
+                ),
           );
 
-        if (!termsEntry?.offerAction) {
+        if (!acceptedEntry?.offerAction) {
           continue;
         }
 
         return {
-          ...termsEntry,
+          ...acceptedEntry,
           offerAction: {
-            ...termsEntry.offerAction,
+            ...acceptedEntry.offerAction,
             custodyCommitment:
               custody,
-            senderAddress:
-              item.action
-                .senderAddress,
-            recipientAddress:
-              item.action
-                .recipientAddress,
           },
         };
       }
@@ -477,6 +370,10 @@ export function DirectConversationPanel({
   const currentPayerAddress =
     fundedDealEntry
       ?.offerAction
+      ?.settlementPlan
+      ?.payerAddress ??
+    fundedDealEntry
+      ?.offerAction
       ?.senderAddress;
 
   const currentCustody =
@@ -484,11 +381,119 @@ export function DirectConversationPanel({
       ?.offerAction
       ?.custodyCommitment;
 
+  const [
+    currentRekberState,
+    setCurrentRekberState,
+  ] = useState<
+    Awaited<
+      ReturnType<
+        typeof getRekberCustody
+      >
+    >
+  >(null);
+
+  useEffect(() => {
+    if (!currentCustody) {
+      setCurrentRekberState(null);
+      return;
+    }
+
+    let stopped = false;
+
+    const sync = async () => {
+      try {
+        const state =
+          await getRekberCustody(
+            BigInt(currentCustody),
+          );
+
+        if (!stopped) {
+          setCurrentRekberState(
+            state,
+          );
+        }
+      } catch {
+        // Retry on the next poll.
+      }
+    };
+
+    void sync();
+
+    const timer =
+      window.setInterval(
+        () => void sync(),
+        2000,
+      );
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [currentCustody]);
+
   const isCurrentPayer =
     sameStarknetAddress(
       currentPayerAddress,
       walletAddress,
     );
+
+  const currentReleaseApproved =
+    Boolean(
+      currentCustody &&
+      escrowActions.some(
+        (item) =>
+          item.action.kind ===
+            "resolve" &&
+          Boolean(
+            item.action
+              .releaseAuthorizationSecret,
+          ) &&
+          canonicalCustodyKey(
+            item.action
+              .custodyCommitment,
+          ) ===
+            canonicalCustodyKey(
+              currentCustody,
+            ),
+      ),
+    );
+
+  const currentDealAmount =
+    fundedDealEntry
+      ?.offerAction
+      ?.amount ?? "—";
+
+  const currentDealAsset =
+    fundedDealEntry
+      ?.offerAction
+      ?.asset ?? "";
+
+  /*
+   * Work/review used to be rendered as Message cards.
+   * Rekber is now the workflow source of truth, so hide those
+   * duplicate historical cards for the active custody.
+   */
+  const visiblePairEntries =
+    pairEntries.filter((entry) => {
+      const evidence =
+        entry.workEvidence;
+
+      if (
+        !evidence ||
+        !currentCustody
+      ) {
+        return true;
+      }
+
+      return (
+        canonicalCustodyKey(
+          evidence.custodyCommitment,
+        ) !==
+        canonicalCustodyKey(
+          currentCustody,
+        )
+      );
+    });
 
   const canSubmitWork =
     Boolean(
@@ -805,7 +810,242 @@ export function DirectConversationPanel({
           onScroll={updateScrollIntent}
           className="min-h-[360px] max-h-[58vh] overflow-y-auto overscroll-contain border-x border-wire/60 bg-black/10"
         >
-        {pairEntries.length === 0 ? (
+        {currentRekberState &&
+          fundedDealEntry && (
+            <div className="mx-4 mt-4 overflow-hidden rounded-2xl border border-signal/20 bg-vault/45 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+              <div className="flex items-start justify-between gap-4 border-b border-wire/60 px-4 py-3.5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-[8px] uppercase tracking-[0.17em] text-signal">
+                      Rekber
+                    </span>
+
+                    <span
+                      className={
+                        currentRekberState.consumed
+                          ? "rounded-full bg-signal/10 px-2 py-1 text-[8px] text-signal"
+                          : "rounded-full bg-paper/[0.05] px-2 py-1 text-[8px] text-paper/40"
+                      }
+                    >
+                      {currentRekberState.consumed
+                        ? "SETTLED"
+                        : "ACTIVE"}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="font-display text-2xl text-paper">
+                      {currentDealAmount}
+                    </span>
+                    <span className="text-xs text-paper/35">
+                      {currentDealAsset}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-[8px] uppercase tracking-[0.14em] text-paper/25">
+                    Your role
+                  </p>
+                  <p className="mt-1 text-[10px] text-paper/60">
+                    {isCurrentPayer
+                      ? "Payer"
+                      : "Payee"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-4 py-4">
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div>
+                    <div className="h-1 rounded-full bg-signal" />
+                    <p className="mt-2 text-[8px] text-paper/45">
+                      Payment
+                    </p>
+                    <p className="mt-0.5 text-[8px] text-signal">
+                      Secured ✓
+                    </p>
+                  </div>
+
+                  <div>
+                    <div
+                      className={
+                        currentRekberState.fulfillmentSubmitted
+                          ? "h-1 rounded-full bg-signal"
+                          : "h-1 rounded-full bg-paper/10"
+                      }
+                    />
+                    <p className="mt-2 text-[8px] text-paper/45">
+                      Work
+                    </p>
+                    <p className="mt-0.5 text-[8px] text-paper/30">
+                      {currentRekberState.revisionPending
+                        ? "Revision"
+                        : currentRekberState.fulfillmentSubmitted
+                          ? "Submitted ✓"
+                          : "Waiting"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div
+                      className={
+                        currentRekberState.fulfillmentConfirmed &&
+                        !currentRekberState.revisionPending
+                          ? "h-1 rounded-full bg-signal"
+                          : currentRekberState.revisionPending
+                            ? "h-1 rounded-full bg-amber-300/70"
+                            : "h-1 rounded-full bg-paper/10"
+                      }
+                    />
+                    <p className="mt-2 text-[8px] text-paper/45">
+                      Review
+                    </p>
+                    <p
+                      className={
+                        currentRekberState.revisionPending
+                          ? "mt-0.5 text-[8px] text-amber-300"
+                          : "mt-0.5 text-[8px] text-paper/30"
+                      }
+                    >
+                      {currentRekberState.revisionPending
+                        ? "Changes"
+                        : currentRekberState.fulfillmentConfirmed
+                          ? "Approved ✓"
+                          : "Waiting"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div
+                      className={
+                        currentRekberState.consumed
+                          ? "h-1 rounded-full bg-signal"
+                          : currentReleaseApproved
+                            ? "h-1 rounded-full bg-signal/60"
+                            : "h-1 rounded-full bg-paper/10"
+                      }
+                    />
+                    <p className="mt-2 text-[8px] text-paper/45">
+                      Payout
+                    </p>
+                    <p className="mt-0.5 text-[8px] text-paper/30">
+                      {currentRekberState.consumed
+                        ? "Paid ✓"
+                        : currentReleaseApproved
+                          ? "Ready"
+                          : "Waiting"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-wire/60 bg-black/10 px-3.5 py-3">
+                  <p className="text-[11px] leading-relaxed text-paper/55">
+                    {currentRekberState.consumed
+                      ? `${currentDealAmount} ${currentDealAsset} settlement completed.`
+                      : currentRekberState.revisionPending
+                        ? isCurrentPayer
+                          ? "Revision requested. Waiting for the Payee to resubmit."
+                          : "The Payer requested changes. Submit the revised work when ready."
+                        : currentReleaseApproved
+                          ? isCurrentPayer
+                            ? "Release approved. Waiting for the Payee to claim payment."
+                            : `${currentDealAmount} ${currentDealAsset} is ready to claim.`
+                          : currentRekberState.fulfillmentConfirmed
+                            ? isCurrentPayer
+                              ? "Work is approved. Continue to authorize payment."
+                              : "Work approved. Waiting for the Payer to authorize payment."
+                            : isCurrentPayer
+                              ? "Payment is secured. Waiting for the Payee to submit work."
+                              : "Payment is secured. Submit work when delivery is ready."}
+                  </p>
+                </div>
+
+                {!currentRekberState.consumed &&
+                  !isCurrentPayer &&
+                  currentRekberState.revisionPending && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        setShowWorkComposer(true)
+                      }
+                      className="mt-3 w-full rounded-xl bg-amber-300/10 px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-amber-300 ring-1 ring-amber-300/25 disabled:opacity-30"
+                    >
+                      Submit revision →
+                    </button>
+                  )}
+
+                {!currentRekberState.consumed &&
+                  !isCurrentPayer &&
+                  !currentRekberState.fulfillmentSubmitted &&
+                  !currentRekberState.revisionPending && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        setShowWorkComposer(true)
+                      }
+                      className="mt-3 w-full rounded-xl bg-signal px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-ink disabled:opacity-30"
+                    >
+                      Submit work →
+                    </button>
+                  )}
+
+                {!currentRekberState.consumed &&
+                  isCurrentPayer &&
+                  currentRekberState.fulfillmentConfirmed &&
+                  !currentRekberState.revisionPending &&
+                  !currentReleaseApproved && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        onOpenEscrow(
+                          fundedDealEntry,
+                        )
+                      }
+                      className="mt-3 w-full rounded-xl bg-signal px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-ink disabled:opacity-30"
+                    >
+                      Continue settlement →
+                    </button>
+                  )}
+
+                {!currentRekberState.consumed &&
+                  !isCurrentPayer &&
+                  currentReleaseApproved && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        onOpenEscrow(
+                          fundedDealEntry,
+                        )
+                      }
+                      className="mt-3 w-full rounded-xl bg-signal px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-ink disabled:opacity-30"
+                    >
+                      Claim {currentDealAmount} {currentDealAsset} →
+                    </button>
+                  )}
+
+                {currentRekberState.consumed && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenEscrow(
+                        fundedDealEntry,
+                      )
+                    }
+                    className="mt-3 w-full rounded-xl border border-signal/25 px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-signal"
+                  >
+                    View settlement proof →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+        {visiblePairEntries.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
               <span className="text-base text-signal">
@@ -823,7 +1063,7 @@ export function DirectConversationPanel({
           </div>
         ) : (
           <ul className="space-y-4 p-4 sm:p-5">
-            {pairEntries.map((entry) => {
+            {visiblePairEntries.map((entry) => {
               if (
                 entry.kind ===
                   "message" &&
@@ -1104,7 +1344,7 @@ export function DirectConversationPanel({
                                     }
 
                                     const hash =
-                                      await sha256LocalFile(
+                                      await sha256FileHex(
                                         file,
                                       );
 

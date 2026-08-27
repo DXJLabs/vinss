@@ -82,6 +82,13 @@ import {
   explorerUrl,
   shortAddress,
 } from "@/components/room/conversation/chatFormat";
+import {
+  canonicalLocator,
+  formatDeadline,
+  formatRefundDuration,
+  hasCustody,
+  toBigInt,
+} from "@/lib/deal-room/rekberView";
 
 interface LocalCoordination {
   actionLocator: string;
@@ -133,92 +140,12 @@ interface EscrowPanelProps {
   ) => Promise<SendActionResult>;
 }
 
-function canonicalLocator(
-  value: string | undefined,
-): string {
-  if (!value) return "";
-  return value
-    .replace(/^0x/, "")
-    .toLowerCase();
-}
-
-function toBigInt(
-  value: string | undefined,
-): bigint | null {
-  if (!value) return null;
-
-  try {
-    return BigInt(value);
-  } catch {
-    return null;
-  }
-}
-
-function formatDeadline(
-  unixSeconds: number,
-): string {
-  if (!unixSeconds) return "—";
-
-  return new Intl.DateTimeFormat(
-    undefined,
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    },
-  ).format(
-    new Date(unixSeconds * 1000),
-  );
-}
-
-function formatRefundDuration(
-  totalSeconds: number,
-): string {
-  if (totalSeconds <= 0) {
-    return "Available now";
-  }
-
-  const days =
-    Math.floor(
-      totalSeconds / 86_400,
-    );
-
-  const hours =
-    Math.floor(
-      (totalSeconds % 86_400) /
-        3_600,
-    );
-
-  const minutes =
-    Math.floor(
-      (totalSeconds % 3_600) /
-        60,
-    );
-
-  const seconds =
-    totalSeconds % 60;
-
-  if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`;
-  }
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  }
-
-  return `${minutes}m ${seconds}s`;
-}
-
-function hasCustody(
-  action: EscrowActionPayload,
-  custody: bigint | null,
-): boolean {
-  if (!custody) return false;
-  const parsed = toBigInt(
-    action.custodyCommitment,
-  );
-  return parsed === custody;
-}
-
+/*
+ * EscrowPanel still orchestrates the production Rekber lifecycle.
+ * Phase 1 deliberately keeps signing, coordination, funding, release,
+ * refund, and certificate handlers here so this refactor cannot change
+ * transaction sequencing. Move them only after behavior tests stay green.
+ */
 export function EscrowPanel({
   roomId,
   session,
@@ -776,16 +703,30 @@ export function EscrowPanel({
         expected.payeeDisputeCommitment &&
       custodyState.payeeRefundConsentCommitment ===
         expected.payeeRefundConsentCommitment &&
-      custodyState.fulfillmentChainHead ===
-        expected.fulfillmentChainHead &&
+      (
+        custodyState
+          .fulfillmentRoundsRemaining <
+          settlementPlan
+            .maxFulfillmentRounds ||
+        custodyState
+          .fulfillmentChainHead ===
+          expected.fulfillmentChainHead
+      ) &&
       custodyState.refundCommitment ===
         expected.refundCommitment &&
       custodyState.payerConfirmationCommitment ===
         expected.payerConfirmationCommitment &&
       custodyState.payerDisputeCommitment ===
         expected.payerDisputeCommitment &&
-      custodyState.revisionChainHead ===
-        expected.revisionChainHead &&
+      (
+        custodyState
+          .revisionRoundsRemaining <
+          settlementPlan
+            .maxRevisionRounds ||
+        custodyState
+          .revisionChainHead ===
+          expected.revisionChainHead
+      ) &&
       custodyState.payerCertificateCommitment ===
         expected.payerCertificateCommitment &&
       custodyState.payeeCertificateCommitment ===
@@ -800,9 +741,9 @@ export function EscrowPanel({
         verificationPolicyCode(
           settlementPlan.verificationPolicy,
         ) &&
-      custodyState.fulfillmentRoundsRemaining ===
+      custodyState.fulfillmentRoundsRemaining <=
         settlementPlan.maxFulfillmentRounds &&
-      custodyState.revisionRoundsRemaining ===
+      custodyState.revisionRoundsRemaining <=
         settlementPlan.maxRevisionRounds &&
       sameStarknetAddress(
         custodyState.token,
@@ -1148,6 +1089,19 @@ export function EscrowPanel({
   }
 
   async function handleStartRekber() {
+    // Recover a stale coordination lock. The lock is only legitimate while
+    // Ready X coordination is actively running. Without this recovery the
+    // button can look enabled while taps silently return.
+    if (
+      coordinationLockRef.current &&
+      !busy
+    ) {
+      coordinationLockRef.current = false;
+      pendingRekberActionRef.current = null;
+      setPendingRekberAction(null);
+      setCoordinationPhase("idle");
+    }
+
     if (
       coordinationLockRef.current ||
       !session ||
@@ -1293,6 +1247,17 @@ export function EscrowPanel({
           payload,
         };
         setPendingPayerSetup(pending);
+
+        // Do not immediately open a second Ready X request after signing.
+        // Persist the exact signed setup and return control to the user.
+        await persistSecrets(
+          pending.custodyCommitment,
+          pending.secrets,
+        );
+        setCustodyCommitment(
+          pending.custodyCommitment,
+        );
+        return;
       }
 
       await persistSecrets(
@@ -1368,6 +1333,17 @@ export function EscrowPanel({
   }
 
   async function handleAcceptRekber() {
+    // Same stale-lock recovery for the Payee approval side.
+    if (
+      coordinationLockRef.current &&
+      !busy
+    ) {
+      coordinationLockRef.current = false;
+      pendingRekberActionRef.current = null;
+      setPendingRekberAction(null);
+      setCoordinationPhase("idle");
+    }
+
     if (
       coordinationLockRef.current ||
       !session ||
@@ -1508,6 +1484,13 @@ export function EscrowPanel({
         setPendingPayeeAcceptance(
           pending,
         );
+
+        // Separate the wallet signature from the STRK20 send.
+        await persistSecrets(
+          custodyCommitment,
+          pending.secrets,
+        );
+        return;
       }
 
       await persistSecrets(

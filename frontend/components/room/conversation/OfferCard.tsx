@@ -708,6 +708,14 @@ export function OfferCard({
   const rejected =
     action.kind === "reject";
 
+  // Prepared actions exist before Ready X has returned a confirmed tx.
+  // Never present an optimistic Accept as a finished Agreement.
+  const confirmed =
+    Boolean(entry.transactionHash);
+
+  const agreementPending =
+    accepted && !confirmed;
+
   const detailRows =
     offerDetailRows(action);
 
@@ -769,11 +777,13 @@ export function OfferCard({
                     : "text-[9px] text-paper/30"
               }
             >
-              {stateLabel(
-                action.kind,
-                ownAction,
-                actionable,
-              )}
+              {agreementPending
+                ? "Confirming…"
+                : stateLabel(
+                    action.kind,
+                    ownAction,
+                    actionable,
+                  )}
             </span>
 
             {ownAction &&
@@ -939,26 +949,35 @@ export function OfferCard({
 
         {accepted && (
           <div className="mt-3 border-t border-signal/15 pt-2.5">
-            <p className="text-[10px] text-signal/65">
-              {rekberStarted
-                ? "✓ Escrow is active for this agreement"
-                : "Agreement ready · continue to Escrow"}
+            <p
+              className={
+                agreementPending
+                  ? "text-[10px] text-paper/40"
+                  : "text-[10px] text-signal/65"
+              }
+            >
+              {agreementPending
+                ? "Agreement confirming on Starknet…"
+                : rekberStarted
+                  ? "✓ Rekber is active for this agreement"
+                  : "Agreement confirmed · ready for Rekber"}
             </p>
 
-            {onOpenEscrow && (
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenEscrow(entry)
-                }
-                disabled={busy}
-                className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
-              >
-                {rekberStarted
-                  ? "Open Escrow →"
-                  : "Prepare Escrow →"}
-              </button>
-            )}
+            {onOpenEscrow &&
+              confirmed && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenEscrow(entry)
+                  }
+                  disabled={busy}
+                  className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+                >
+                  {rekberStarted
+                    ? "Open Rekber →"
+                    : "Prepare Rekber →"}
+                </button>
+              )}
           </div>
         )}
       </div>

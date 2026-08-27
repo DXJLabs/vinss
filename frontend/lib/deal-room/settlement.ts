@@ -79,6 +79,7 @@ export interface RekberCustodyState {
   verificationPolicy: number;
   fulfillmentRoundsRemaining: number;
   revisionRoundsRemaining: number;
+  fulfillmentEvidenceCommitment: bigint;
   fulfillmentSubmitted: boolean;
   fulfillmentConfirmed: boolean;
   revisionPending: boolean;
@@ -576,6 +577,193 @@ export async function refundEscrow(
   ]);
 }
 
+export interface RekberStateInvoke {
+  contract: string;
+  calldata: string[];
+}
+
+function buildRekberStateInvoke(
+  action: number,
+  custodyCommitment: bigint,
+  secret: bigint,
+  evidenceCommitment: bigint,
+): RekberStateInvoke {
+  if (
+    custodyCommitment === 0n ||
+    secret === 0n ||
+    evidenceCommitment === 0n
+  ) {
+    throw new Error(
+      "Rekber lifecycle commitment is incomplete.",
+    );
+  }
+
+  return {
+    contract: requireRekberAddress(),
+    calldata: [
+      toFelt(action),
+      toFelt(custodyCommitment),
+      toFelt(secret),
+      toFelt(evidenceCommitment),
+    ],
+  };
+}
+
+export function buildSubmitFulfillmentInvoke(
+  params: {
+    custodyCommitment: bigint;
+    chainSecret: bigint;
+    evidenceCommitment: bigint;
+  },
+): RekberStateInvoke {
+  return buildRekberStateInvoke(
+    4,
+    params.custodyCommitment,
+    params.chainSecret,
+    params.evidenceCommitment,
+  );
+}
+
+export function buildConfirmFulfillmentInvoke(
+  params: {
+    custodyCommitment: bigint;
+    confirmationSecret: bigint;
+    evidenceCommitment: bigint;
+  },
+): RekberStateInvoke {
+  return buildRekberStateInvoke(
+    5,
+    params.custodyCommitment,
+    params.confirmationSecret,
+    params.evidenceCommitment,
+  );
+}
+
+export function buildRequestRevisionInvoke(
+  params: {
+    custodyCommitment: bigint;
+    chainSecret: bigint;
+    reasonCommitment: bigint;
+  },
+): RekberStateInvoke {
+  return buildRekberStateInvoke(
+    7,
+    params.custodyCommitment,
+    params.chainSecret,
+    params.reasonCommitment,
+  );
+}
+
+async function invokeRekberWorkflowAction(
+  account: WalletAccountV6,
+  payload: Array<bigint | number | string>,
+): Promise<{ transactionHash: string }> {
+  const token =
+    CONTRACTS.messageHelperOpenNoteToken;
+  const rawTreasury =
+    process.env
+      .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!token || !rawTreasury) {
+    throw new Error(
+      "Rekber replay protection is not configured.",
+    );
+  }
+
+  /*
+   * STRK20 currently permits only one external invoke per
+   * private transaction.
+   *
+   * Workflow actions therefore invoke Rekber directly and
+   * consume a negligible 10 wei STRK note for replay
+   * protection. They never bundle MessageHelper + Rekber.
+   */
+  const calldata =
+    payload.map((value) => toFelt(value));
+
+  const response =
+    await account.strk20InvokeTransaction([
+      {
+        type: "withdraw",
+        token,
+        amount: "0xa",
+        recipient:
+          num.toHex(rawTreasury),
+      },
+      {
+        type: "invoke",
+        contract:
+          requireRekberAddress(),
+        calldata: [
+          toFelt(calldata.length),
+          ...calldata,
+        ],
+      },
+    ]);
+
+  return {
+    transactionHash:
+      response.transaction_hash,
+  };
+}
+
+export async function submitRekberFulfillment(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    chainSecret: bigint;
+    evidenceCommitment: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeRekberWorkflowAction(
+    account,
+    [
+      4,
+      params.custodyCommitment,
+      params.chainSecret,
+      params.evidenceCommitment,
+    ],
+  );
+}
+
+export async function confirmRekberFulfillment(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    confirmationSecret: bigint;
+    evidenceCommitment: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeRekberWorkflowAction(
+    account,
+    [
+      5,
+      params.custodyCommitment,
+      params.confirmationSecret,
+      params.evidenceCommitment,
+    ],
+  );
+}
+
+export async function requestRekberRevision(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    chainSecret: bigint;
+    reasonCommitment: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeRekberWorkflowAction(
+    account,
+    [
+      7,
+      params.custodyCommitment,
+      params.chainSecret,
+      params.reasonCommitment,
+    ],
+  );
+}
+
 export async function getRekberCustody(
   custodyCommitment: bigint,
 ): Promise<RekberCustodyState | null> {
@@ -639,6 +827,8 @@ export async function getRekberCustody(
         Number(BigInt(result[20] ?? "0")),
       revisionRoundsRemaining:
         Number(BigInt(result[21] ?? "0")),
+      fulfillmentEvidenceCommitment:
+        BigInt(result[22] ?? "0"),
       fulfillmentSubmitted:
         BigInt(result[27] ?? "0") !== 0n,
       fulfillmentConfirmed:

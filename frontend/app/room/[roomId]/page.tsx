@@ -1,6 +1,10 @@
 "use client";
 
-import { useParams, useSearchParams } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   useEffect,
   useRef,
@@ -47,6 +51,7 @@ type TimelineEntry = ConversationEntry;
 
 export default function DealRoomPage() {
   const params = useParams<{ roomId: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const invitedChatTarget = searchParams.get("chat");
   const invitedMessageMode = searchParams.get("message");
@@ -201,6 +206,35 @@ export default function DealRoomPage() {
     session,
     setError,
   });
+
+  // Once an invite is consumed there is no reason to keep the
+  // inviter inside the access screen. Return directly to Messages.
+  useEffect(() => {
+    if (!joinedNoticeScope) {
+      return;
+    }
+
+    setCounterSource(null);
+    setEscrowOfferSource(null);
+    setTab("timeline");
+
+    if (joinedNoticeScope === "direct") {
+      setMessageTarget("chat");
+    } else {
+      setMessageTarget("groups");
+    }
+
+    // Remove ?access=chat/group so InvitationPanel unmounts.
+    router.replace(
+      `/room/${params.roomId}`,
+      { scroll: false },
+    );
+  }, [
+    joinedNoticeScope,
+    params.roomId,
+    router,
+    setMessageTarget,
+  ]);
 
   useEffect(() => {
     if (!room) return;

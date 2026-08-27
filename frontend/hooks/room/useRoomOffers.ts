@@ -27,6 +27,9 @@ import type {
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import { humanizeError } from "@/lib/errors/uiError";
 import {
+  buildOfferSettlementPlan,
+} from "@/lib/deal-room/settlementPlan";
+import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
@@ -821,8 +824,8 @@ export function useRoomOffers({
       // background/remount. A timeout is therefore a pending result until
       // encrypted discovery reconciles the exact prepared Offer locator.
       const callbackDelayed =
-        /(?:timeout|timed out)/i.test(
-          raw,
+        raw.includes(
+          `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
         );
 
       if (callbackDelayed) {
@@ -890,9 +893,22 @@ export function useRoomOffers({
             peerAddress,
           );
 
-        // Participant identity and ordering metadata remain encrypted.
+        // The original Offer explicitly fixes Rekber roles.
+        // These roles stay encrypted with the private Offer terms.
+        const settlementPlan =
+          buildOfferSettlementPlan({
+            dealType: terms.dealType,
+            payerAddress:
+              session.account.address,
+            payeeAddress:
+              peer.address,
+          });
+
+        // Participant identity, settlement policy and ordering metadata
+        // remain encrypted.
         const action: Omit<OfferActionPayload, "kind"> = {
           ...terms,
+          settlementPlan,
           senderAddress: session.account.address,
           recipientAddress: peer.address,
           sentAt: new Date().toISOString(),
@@ -972,8 +988,16 @@ export function useRoomOffers({
           sourceAction.rootOfferLocator ??
           canonicalLocator(source.actionLocator);
 
+        if (!sourceAction.settlementPlan) {
+          throw new Error(
+            "This Offer predates production Rekber settlement terms. Create a new Offer.",
+          );
+        }
+
         const action: Omit<OfferActionPayload, "kind"> = {
           ...terms,
+          settlementPlan:
+            sourceAction.settlementPlan,
           rootOfferLocator,
           parentOfferLocator:
             canonicalLocator(source.actionLocator),
@@ -1048,8 +1072,14 @@ export function useRoomOffers({
             peerAddress,
           );
 
-        // Copy the accepted terms into the encrypted acceptance action so
-        // the final agreement remains self-contained for both clients.
+        if (!sourceAction.settlementPlan) {
+          throw new Error(
+            "This Offer predates production Rekber settlement terms. Create a new Offer.",
+          );
+        }
+
+        // Copy the complete accepted terms, including the immutable Rekber
+        // roles/policy, into the encrypted acceptance action.
         const action: Omit<OfferActionPayload, "kind"> = {
           dealType: sourceAction.dealType,
           rootOfferLocator:
@@ -1062,6 +1092,8 @@ export function useRoomOffers({
           paymentTerms: sourceAction.paymentTerms,
           conditions: sourceAction.conditions,
           expiresAt: sourceAction.expiresAt,
+          settlementPlan:
+            sourceAction.settlementPlan,
           senderAddress: session.account.address,
           recipientAddress: peer.address,
           sentAt: new Date().toISOString(),

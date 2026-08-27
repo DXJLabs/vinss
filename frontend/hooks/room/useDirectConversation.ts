@@ -44,6 +44,21 @@ import {
   downloadDirectAttachment,
   uploadDirectAttachment,
 } from "@/lib/privacy/directAttachments";
+import {
+  locatorHex,
+  uniqueIdentities,
+} from "@/lib/deal-room/directMessageRouting";
+import { sha256FileHex } from "@/lib/fileDigest";
+
+import {
+  confirmRekberFulfillment as confirmWorkOnRekber,
+  getRekberCustody as getWorkRekberState,
+  requestRekberRevision as requestWorkRevisionOnRekber,
+  submitRekberFulfillment as submitWorkOnRekber,
+} from "@/lib/deal-room/settlement";
+import {
+  loadRekberSecrets as loadWorkRekberSecrets,
+} from "@/lib/deal-room/rekberSecrets";
 
 interface UseDirectConversationOptions {
   roomId: string | null;
@@ -87,53 +102,11 @@ interface UseDirectConversationResult {
   refreshDirect: (silent?: boolean) => Promise<void>;
 }
 
-function locatorHex(value: string): string {
-  return BigInt(value).toString(16);
-}
-
-function uniqueIdentities(
-  identities: Array<string | null | undefined>,
-): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const identity of identities) {
-    if (!identity?.trim()) continue;
-
-    const exact = identity.trim().toLowerCase();
-
-    if (!seen.has(exact)) {
-      seen.add(exact);
-      result.push(identity.trim());
-    }
-  }
-
-  return result;
-}
-
-async function sha256FileHex(
-  file: File,
-): Promise<string> {
-  const digest =
-    await crypto.subtle.digest(
-      "SHA-256",
-      await file.arrayBuffer(),
-    );
-
-  return (
-    "0x" +
-    Array.from(
-      new Uint8Array(digest),
-    )
-      .map((value) =>
-        value
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")
-  );
-}
-
+/*
+ * Owns the React lifecycle for one direct peer: discovery, encrypted
+ * local history, presence, receipts, attachments, and sends. Pure routing
+ * and hashing helpers live in lib/ to avoid duplicated behavior.
+ */
 export function useDirectConversation({
   roomId,
   session,
@@ -1210,6 +1183,63 @@ export function useDirectConversation({
     }
   }
 
+
+async function computeRekberEvidenceCommitment(
+  parts: string[],
+): Promise<bigint> {
+  const bytes =
+    new TextEncoder().encode(
+      parts.join("\u001f"),
+    );
+
+  const digest =
+    new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-256",
+        bytes,
+      ),
+    );
+
+  const hex =
+    Array.from(digest)
+      .map((byte) =>
+        byte
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("");
+
+  // Stay comfortably inside Starknet felt range.
+  const value =
+    BigInt(`0x${hex}`) &
+    ((1n << 250n) - 1n);
+
+  return value || 1n;
+}
+
+async function sha256WorkFile(
+  file: File,
+): Promise<string> {
+  const digest =
+    new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-256",
+        await file.arrayBuffer(),
+      ),
+    );
+
+  return (
+    "0x" +
+    Array.from(digest)
+      .map((byte) =>
+        byte
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
+}
+
   async function sendDirectWorkSubmission(
     input: {
       custodyCommitment: string;
@@ -1222,7 +1252,6 @@ export function useDirectConversation({
       !roomId ||
       !session ||
       !channelKey ||
-      !messagingIdentity ||
       !selectedPeer
     ) {
       return false;
@@ -1238,23 +1267,11 @@ export function useDirectConversation({
       return false;
     }
 
-    const directKey =
-      await resolveDirectKey();
-
-    if (!directKey) {
-      setError(
-        "This private chat is not ready yet.",
-      );
-      return false;
-    }
-
-    let custodyCommitment: string;
+    let custodyCommitment: bigint;
 
     try {
       custodyCommitment =
-        `0x${BigInt(
-          input.custodyCommitment,
-        ).toString(16)}`;
+        BigInt(input.custodyCommitment);
     } catch {
       setError(
         "The Rekber custody reference is invalid.",
@@ -1262,241 +1279,114 @@ export function useDirectConversation({
       return false;
     }
 
-    let attachment:
-      AttachmentRef | undefined;
-
     setBusy(true);
     setError(null);
 
     try {
-      if (file) {
-        attachment =
-          await uploadDirectAttachment(
-            BACKEND_URL,
-            directKey,
-            file,
-          );
-      }
-
-      const evidence:
-        WorkEvidence = {
-          type: "work_submission",
+      const [
+        custody,
+        secrets,
+      ] = await Promise.all([
+        getWorkRekberState(
           custodyCommitment,
-          dealType: input.dealType,
-          note,
-          ...(attachment
-            ? {
-                fileName:
-                  attachment.fileName,
-                fileType:
-                  attachment.mimeType,
-                fileSize:
-                  attachment.size,
-                fileSha256:
-                  attachment.sha256,
-              }
-            : {}),
-        };
+        ),
+        loadWorkRekberSecrets(
+          roomId,
+          session.account.address,
+          custodyCommitment,
+          channelKey,
+        ),
+      ]);
 
-      const sentAt =
-        new Date().toISOString();
-
-      const route:
-        MessageRoute = {
-          recipientIdentity:
-            selectedPeer.address,
-          encryptionKey:
-            directKey,
-          routingKey:
-            directKey,
-        };
-
-      const body =
-        note ||
-        attachment?.fileName ||
-        "Evidence submitted";
-
-      const payload:
-        MessagePayload = {
-          kind: attachment
-            ? "attachment_ref"
-            : "system_note",
-          scope: "direct",
-          body,
-          senderIdentity: {
-            address:
-              session.account.address,
-            messagingPublicKey:
-              messagingIdentity.publicKey,
-          },
-          recipientAddress:
-            selectedPeer.address,
-          attachment,
-          workEvidence:
-            evidence,
-          sentAt,
-        };
-
-      let preparedLocator:
-        string | null = null;
-
-      try {
-        const sendPromise =
-          sendMessage(
-            session.account,
-            channelKey,
-            payload,
-            route,
-            (prepared) => {
-              preparedLocator =
-                prepared.actionLocator
-                  .toString(16);
-
-              setEntries(
-                (previous) => {
-                  const next:
-                    ConversationEntry[] = [
-                      ...previous.filter(
-                        (entry) =>
-                          entry.actionLocator !==
-                          preparedLocator,
-                      ),
-                      {
-                        id:
-                          `direct:${preparedLocator}`,
-                        kind:
-                          "message",
-                        summary:
-                          body,
-                        transactionHash:
-                          "",
-                        actionLocator:
-                          preparedLocator!,
-                        sentAt,
-                        scope:
-                          "direct",
-                        senderAddress:
-                          session.account.address,
-                        recipientAddress:
-                          selectedPeer.address,
-                        workEvidence:
-                          evidence,
-                        attachment,
-                      },
-                    ];
-
-                  void persistHistory(
-                    next,
-                  );
-
-                  return next;
-                },
-              );
-            },
-          );
-
-        const result =
-          await Promise.race([
-            sendPromise,
-            new Promise<never>(
-              (_, reject) => {
-                window.setTimeout(
-                  () =>
-                    reject(
-                      new Error(
-                        "VINSS_WORK_CALLBACK_TIMEOUT",
-                      ),
-                    ),
-                  25_000,
-                );
-              },
-            ),
-          ]);
-
-        const confirmedLocator =
-          result.actionLocator
-            .toString(16);
-
-        setEntries(
-          (previous) => {
-            const next =
-              previous.map(
-                (entry) =>
-                  entry.actionLocator ===
-                  confirmedLocator
-                    ? {
-                        ...entry,
-                        transactionHash:
-                          result.transactionHash,
-                      }
-                    : entry,
-              );
-
-            void persistHistory(next);
-            return next;
-          },
+      if (
+        !custody ||
+        !secrets ||
+        secrets.role !== "payee"
+      ) {
+        throw new Error(
+          "PAYEE_SECRET_MISSING",
         );
-
-        void refreshDirect(true);
-
-        return true;
-      } catch (err) {
-        const raw =
-          err instanceof Error
-            ? err.message
-            : String(err);
-
-        const definitelyFailed =
-          /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
-            raw,
-          );
-
-        if (definitelyFailed) {
-          if (preparedLocator) {
-            setEntries(
-              (previous) =>
-                previous.filter(
-                  (entry) =>
-                    entry.actionLocator !==
-                    preparedLocator,
-                ),
-            );
-          }
-
-          setError(
-            humanizeError(
-              err,
-              "Evidence submission could not be sent.",
-            ),
-          );
-
-          return false;
-        }
-
-        if (preparedLocator) {
-          console.warn(
-            "[VINSS EVIDENCE CALLBACK DELAYED]",
-            {
-              actionLocator:
-                preparedLocator,
-            },
-          );
-
-          setError(null);
-          void refreshDirect(true);
-
-          return true;
-        }
-
-        setError(
-          humanizeError(
-            err,
-            "Evidence submission could not be sent.",
-          ),
-        );
-
-        return false;
       }
+
+      const fulfillmentSecrets =
+        secrets.fulfillmentChainSecrets ?? [];
+
+      const secretIndex =
+        fulfillmentSecrets.length -
+        custody
+          .fulfillmentRoundsRemaining;
+
+      const chainSecretRaw =
+        fulfillmentSecrets[
+          secretIndex
+        ];
+
+      if (!chainSecretRaw) {
+        throw new Error(
+          "FULFILLMENT_SECRET_MISSING",
+        );
+      }
+
+      const fileSha256 =
+        file
+          ? await sha256WorkFile(file)
+          : "";
+
+      /*
+       * Evidence plaintext does NOT go on-chain.
+       * Rekber receives only this opaque commitment.
+       */
+      const evidenceCommitment =
+        await computeRekberEvidenceCommitment([
+          "VINSS_REKBER_WORK_V1",
+          custodyCommitment.toString(),
+          input.dealType ?? "",
+          note,
+          file?.name ?? "",
+          file?.type ?? "",
+          String(file?.size ?? 0),
+          fileSha256,
+        ]);
+
+      await submitWorkOnRekber(
+        session.account,
+        {
+          custodyCommitment,
+          chainSecret:
+            BigInt(chainSecretRaw),
+          evidenceCommitment,
+        },
+      );
+
+      /*
+       * Do not create a MessageHelper record here.
+       * Both wallets derive workflow status from Rekber custody.
+       */
+      setError(null);
+      void refreshDirect(true);
+
+      return true;
+    } catch (err) {
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err);
+
+      const code =
+        raw.match(
+          /\b(BAD_CHAIN_SECRET|FULFILLMENT_EXISTS|FULFILLMENT_REQUIRED|FULFILLMENT_TOO_LATE|REVISION_TOO_LATE|INVALID_ROUNDS|CUSTODY_NOT_FOUND|CUSTODY_CONSUMED|ZERO_SECRET|ZERO_COMMITMENT|INVALID_CALLDATA|UNKNOWN_ERROR|PAYEE_SECRET_MISSING|FULFILLMENT_SECRET_MISSING)\b/i,
+        )?.[1];
+
+      setError(
+        code
+          ? `Rekber rejected work: ${code.toUpperCase()}`
+          : humanizeError(
+              err,
+              "Work could not be committed to Rekber.",
+            ),
+      );
+
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1514,29 +1404,16 @@ export function useDirectConversation({
       !roomId ||
       !session ||
       !channelKey ||
-      !messagingIdentity ||
       !selectedPeer
     ) {
       return false;
     }
 
-    const directKey =
-      await resolveDirectKey();
-
-    if (!directKey) {
-      setError(
-        "This private chat is not ready yet.",
-      );
-      return false;
-    }
-
-    let custodyCommitment: string;
+    let custodyCommitment: bigint;
 
     try {
       custodyCommitment =
-        `0x${BigInt(
-          input.custodyCommitment,
-        ).toString(16)}`;
+        BigInt(input.custodyCommitment);
     } catch {
       setError(
         "The Rekber custody reference is invalid.",
@@ -1544,221 +1421,166 @@ export function useDirectConversation({
       return false;
     }
 
-    const submissionLocator =
-      input.submissionLocator
-        .replace(/^0x/, "")
-        .toLowerCase();
-
-    if (!submissionLocator) {
-      setError(
-        "The evidence reference is missing.",
-      );
-      return false;
-    }
-
-    const label =
-      input.decision === "approved"
-        ? "Evidence approved"
-        : input.decision ===
-            "revision_requested"
-          ? "Revision requested"
-          : "Evidence rejected";
-
-    const evidence:
-      WorkEvidence = {
-        type: "work_review",
-        custodyCommitment,
-        submissionLocator,
-        decision:
-          input.decision,
-        note:
-          input.note?.trim() ||
-          undefined,
-      };
-
-    const sentAt =
-      new Date().toISOString();
-
-    const route:
-      MessageRoute = {
-        recipientIdentity:
-          selectedPeer.address,
-        encryptionKey:
-          directKey,
-        routingKey:
-          directKey,
-      };
-
-    const payload:
-      MessagePayload = {
-        kind: "system_note",
-        scope: "direct",
-        body:
-          input.note?.trim()
-            ? `${label}: ${input.note.trim()}`
-            : label,
-        senderIdentity: {
-          address:
-            session.account.address,
-          messagingPublicKey:
-            messagingIdentity.publicKey,
-        },
-        recipientAddress:
-          selectedPeer.address,
-        workEvidence:
-          evidence,
-        sentAt,
-      };
-
-    let preparedLocator:
-      string | null = null;
-
     setBusy(true);
     setError(null);
 
     try {
-      const sendPromise =
-        sendMessage(
-          session.account,
+      const [
+        custody,
+        secrets,
+      ] = await Promise.all([
+        getWorkRekberState(
+          custodyCommitment,
+        ),
+        loadWorkRekberSecrets(
+          roomId,
+          session.account.address,
+          custodyCommitment,
           channelKey,
-          payload,
-          route,
-          (prepared) => {
-            preparedLocator =
-              prepared.actionLocator
-                .toString(16);
+        ),
+      ]);
 
-            setEntries(
-              (previous) => {
-                const next:
-                  ConversationEntry[] = [
-                    ...previous.filter(
-                      (entry) =>
-                        entry.actionLocator !==
-                        preparedLocator,
-                    ),
-                    {
-                      id:
-                        `direct:${preparedLocator}`,
-                      kind:
-                        "message",
-                      summary:
-                        payload.body,
-                      transactionHash:
-                        "",
-                      actionLocator:
-                        preparedLocator!,
-                      sentAt,
-                      scope:
-                        "direct",
-                      senderAddress:
-                        session.account.address,
-                      recipientAddress:
-                        selectedPeer.address,
-                      workEvidence:
-                        evidence,
-                    },
-                  ];
+      if (
+        !custody ||
+        !secrets ||
+        secrets.role !== "payer"
+      ) {
+        throw new Error(
+          "PAYER_SECRET_MISSING",
+        );
+      }
 
-                void persistHistory(
-                  next,
-                );
+      if (
+        input.decision ===
+        "revision_requested"
+      ) {
+        const revisionSecrets =
+          secrets.revisionChainSecrets ?? [];
 
-                return next;
-              },
-            );
+        const secretIndex =
+          revisionSecrets.length -
+          custody
+            .revisionRoundsRemaining;
+
+        const chainSecretRaw =
+          revisionSecrets[
+            secretIndex
+          ];
+
+        if (!chainSecretRaw) {
+          throw new Error(
+            "REVISION_SECRET_MISSING",
+          );
+        }
+
+        const reasonCommitment =
+          await computeRekberEvidenceCommitment([
+            "VINSS_REKBER_REVISION_V1",
+            custodyCommitment.toString(),
+            input.submissionLocator,
+            input.note?.trim() ?? "",
+          ]);
+
+        await requestWorkRevisionOnRekber(
+          session.account,
+          {
+            custodyCommitment,
+            chainSecret:
+              BigInt(chainSecretRaw),
+            reasonCommitment,
           },
         );
 
-      const result =
-        await Promise.race([
-          sendPromise,
-          new Promise<never>(
-            (_, reject) => {
-              window.setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      "VINSS_WORK_REVIEW_CALLBACK_TIMEOUT",
-                    ),
-                  ),
-                25_000,
-              );
-            },
-          ),
-        ]);
+        return true;
+      }
 
-      const confirmedLocator =
-        result.actionLocator
-          .toString(16);
-
-      setEntries(
-        (previous) => {
-          const next =
-            previous.map(
-              (entry) =>
-                entry.actionLocator ===
-                confirmedLocator
-                  ? {
-                      ...entry,
-                      transactionHash:
-                        result.transactionHash,
-                    }
-                  : entry,
+      if (
+        input.decision === "approved"
+      ) {
+        /*
+         * submission_review (policy 1) is confirmed by
+         * submit_fulfillment itself. Payer approval is the
+         * later release authorization in Escrow.
+         */
+        if (
+          custody.verificationPolicy === 1
+        ) {
+          if (
+            !custody
+              .fulfillmentConfirmed ||
+            custody.revisionPending
+          ) {
+            throw new Error(
+              "FULFILLMENT_REQUIRED",
             );
+          }
 
-          void persistHistory(next);
-          return next;
-        },
+          return true;
+        }
+
+        /*
+         * counterparty_confirm (policy 2) requires
+         * explicit payer confirmation.
+         */
+        if (
+          custody.verificationPolicy === 2
+        ) {
+          if (
+            !secrets
+              .payerConfirmationSecret ||
+            !custody
+              .fulfillmentEvidenceCommitment
+          ) {
+            throw new Error(
+              "PAYER_CONFIRM_MISSING",
+            );
+          }
+
+          await confirmWorkOnRekber(
+            session.account,
+            {
+              custodyCommitment,
+              confirmationSecret:
+                BigInt(
+                  secrets
+                    .payerConfirmationSecret,
+                ),
+              evidenceCommitment:
+                custody
+                  .fulfillmentEvidenceCommitment,
+            },
+          );
+
+          return true;
+        }
+
+        throw new Error(
+          "INVALID_POLICY",
+        );
+      }
+
+      setError(
+        "Reject is handled through the Rekber dispute flow, not a work message.",
       );
-
-      void refreshDirect(true);
-
-      return true;
+      return false;
     } catch (err) {
       const raw =
         err instanceof Error
           ? err.message
           : String(err);
 
-      const definitelyFailed =
-        /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
-          raw,
-        );
-
-      if (definitelyFailed) {
-        if (preparedLocator) {
-          setEntries(
-            (previous) =>
-              previous.filter(
-                (entry) =>
-                  entry.actionLocator !==
-                  preparedLocator,
-              ),
-          );
-        }
-
-        setError(
-          humanizeError(
-            err,
-            "Evidence review could not be sent.",
-          ),
-        );
-
-        return false;
-      }
-
-      if (preparedLocator) {
-        setError(null);
-        void refreshDirect(true);
-        return true;
-      }
+      const code =
+        raw.match(
+          /\b(BAD_CHAIN_SECRET|REVISION_NOT_ALLOWED|REVISION_REQUIRED|REVISION_TOO_LATE|REVIEW_WINDOW_CLOSED|FULFILLMENT_REQUIRED|FULFILLMENT_ALREADY_CONFIRMED|INVALID_POLICY|PAYER_SECRET_MISSING|REVISION_SECRET_MISSING|PAYER_CONFIRM_MISSING|UNKNOWN_ERROR)\b/i,
+        )?.[1];
 
       setError(
-        humanizeError(
-          err,
-          "Evidence review could not be sent.",
-        ),
+        code
+          ? `Rekber review rejected: ${code.toUpperCase()}`
+          : humanizeError(
+              err,
+              "Rekber review could not be completed.",
+            ),
       );
 
       return false;

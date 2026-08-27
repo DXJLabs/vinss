@@ -37,6 +37,17 @@ export interface PreparedMessageSend {
   payloadCommitment: bigint;
 }
 
+export interface AdditionalPrivacyInvoke {
+  contract: string;
+  calldata: string[];
+}
+
+export type AdditionalPrivacyInvokeBuilder = (
+  prepared: PreparedMessageSend,
+) =>
+  | AdditionalPrivacyInvoke[]
+  | Promise<AdditionalPrivacyInvoke[]>;
+
 export async function sendMessage(
   account: WalletAccountV6,
   channelKey: ChannelKey,
@@ -45,6 +56,8 @@ export async function sendMessage(
   onPrepared?: (
     prepared: PreparedMessageSend,
   ) => void | Promise<void>,
+  buildAdditionalInvokes?:
+    AdditionalPrivacyInvokeBuilder,
 ): Promise<SendActionResult> {
   if (!CONTRACTS.messageHelper) {
     throw new Error(
@@ -98,6 +111,14 @@ export async function sendMessage(
       payloadCommitment,
     });
   }
+
+  const additionalInvokes =
+    buildAdditionalInvokes
+      ? await buildAdditionalInvokes({
+          actionLocator,
+          payloadCommitment,
+        })
+      : [];
 
   // No selector prepended — the STRK20 Wallet API calls the helper's
   // `privacy_invoke` itself; `calldata` is deserialized directly into that
@@ -158,23 +179,53 @@ export async function sendMessage(
         "${openNoteIds[0]}",
       ],
     },
+    ...additionalInvokes.map(
+      (invoke) => ({
+        type: "invoke" as const,
+        contract: invoke.contract,
+        calldata: [
+          toFelt(invoke.calldata.length),
+          ...invoke.calldata,
+        ],
+      }),
+    ),
   ];
 
   let response;
   try {
     response = await account.strk20InvokeTransaction(debugActions);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg =
+      err instanceof Error
+        ? err.message
+        : String(err);
+
+    const sensitiveLifecycle =
+      additionalInvokes.some(
+        (invoke) =>
+          invoke.contract ===
+          CONTRACTS.escrowRekber,
+      );
 
     const extra: Record<string, unknown> = {};
-    if (err && typeof err === "object") {
+    if (
+      !sensitiveLifecycle &&
+      err &&
+      typeof err === "object"
+    ) {
       for (const key of Object.getOwnPropertyNames(err)) {
         if (key === "message" || key === "stack") continue;
         extra[key] = (err as Record<string, unknown>)[key];
       }
     }
 
-    const rawError = JSON.stringify(
+    const rawError =
+      sensitiveLifecycle
+        ? JSON.stringify({
+            redacted:
+              "VINSS_REKBER_LIFECYCLE",
+          })
+        : JSON.stringify(
       err,
       (_key, value) => {
         if (typeof value === "bigint") return value.toString();
@@ -193,11 +244,26 @@ export async function sendMessage(
       2,
     );
 
+    const safeDebugActions =
+      debugActions.map((action) =>
+        action.type === "invoke" &&
+        action.contract ===
+          CONTRACTS.escrowRekber
+          ? {
+              ...action,
+              calldata: [
+                "[REDACTED_REKBER_CALLDATA]",
+              ],
+            }
+          : action,
+      );
+
     console.error("[VINSS MESSAGING] strk20InvokeTransaction failed", {
       message: msg,
       ...extra,
       rawError,
-      debugActions,
+      debugActions:
+        safeDebugActions,
     });
 
     throw new Error(
@@ -205,7 +271,7 @@ export async function sendMessage(
         (Object.keys(extra).length
           ? ` | WALLET_ERROR_DETAIL=${JSON.stringify(extra)}`
           : "") +
-        ` | DEBUG_PAYLOAD=${JSON.stringify(debugActions)}` +
+        ` | DEBUG_PAYLOAD=${JSON.stringify(safeDebugActions)}` +
         ` | RAW_ERROR=${rawError}`,
     );
   }
