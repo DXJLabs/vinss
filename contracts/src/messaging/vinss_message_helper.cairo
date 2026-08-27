@@ -9,7 +9,7 @@ pub mod VinssMessageHelper {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use openzeppelin_token::erc20::interface::{
+    use openzeppelin_interfaces::erc20::{
         IERC20Dispatcher,
         IERC20DispatcherTrait,
     };

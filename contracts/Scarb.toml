@@ -3,13 +3,24 @@ name = "vinss"
 version = "0.1.0"
 edition = "2024_07"
 
-
 [dependencies]
 starknet = "2.17.0"
-openzeppelin = "0.20.0"
-openzeppelin_introspection = "0.20.0"
-openzeppelin_security = "0.20.0"
-openzeppelin_token = "0.20.0"
+
+# Funds-holding contracts use the latest STABLE OpenZeppelin Cairo release.
+# Keep this pinned. Do not float Rekber onto an RC/prerelease.
+openzeppelin = "3.0.0"
+
+# Direct OZ packages imported by VINSS Cairo source.
+# `openzeppelin_interfaces` intentionally follows the version resolved by
+# OpenZeppelin 3.0.0; it has its own package version line.
+openzeppelin_interfaces = "2.2.0"
+openzeppelin_security = "3.0.0"
+
+
+# Pragma Cairo SDK / ABI types.
+# Pin the exact revision used during the audit/test cycle so an upstream
+# branch update cannot silently change custody fee behavior.
+pragma_lib = { git = "https://github.com/astraly-labs/pragma-lib", rev = "ff4c51a2da21591722a7e023971af1bdbf386ae4" }
 
 [dev-dependencies]
 snforge_std = "0.56.0"

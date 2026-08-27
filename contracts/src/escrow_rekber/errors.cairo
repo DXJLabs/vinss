@@ -1,32 +1,77 @@
 // Rekber contract error constants.
 //
-// Short felt252 values are used so failures remain compatible with
-// Starknet contract assertions while still identifying the violated
-// custody or accounting invariant.
+// Keep short felt252 values: these errors cross wallet/RPC boundaries and must
+// stay compatible with Starknet contract assertions.
 
-// Action and calldata validation.
+// Action / calldata.
 pub const INVALID_ACTION: felt252 = 'BAD_REKBER_ACTION';
 pub const INVALID_CALLDATA: felt252 = 'BAD_REKBER_DATA';
-// Custody lifecycle validation.
+
+// Custody lifecycle.
 pub const ZERO_CUSTODY: felt252 = 'ZERO_CUSTODY_COMMIT';
 pub const ZERO_COMMITMENT: felt252 = 'ZERO_REKBER_COMMIT';
 pub const DUPLICATE_COMMITMENT: felt252 = 'DUP_REKBER_COMMIT';
 pub const DUPLICATE_CUSTODY: felt252 = 'CUSTODY_ALREADY_EXISTS';
 pub const CUSTODY_NOT_FOUND: felt252 = 'CUSTODY_NOT_FOUND';
 pub const CUSTODY_CONSUMED: felt252 = 'CUSTODY_ALREADY_CONSUMED';
-// Settlement secret validation.
+
+// Secrets / commitments.
 pub const ZERO_SECRET: felt252 = 'ZERO_ESCROW_SECRET';
 pub const BAD_RELEASE_AUTH: felt252 = 'BAD_RELEASE_AUTH';
 pub const BAD_PAYEE_CLAIM: felt252 = 'BAD_PAYEE_CLAIM';
 pub const BAD_REFUND_SECRET: felt252 = 'BAD_REFUND_SECRET';
-// Settlement timing validation.
-pub const INVALID_REFUND_AFTER: felt252 = 'BAD_REFUND_AFTER';
-pub const RELEASE_WINDOW_CLOSED: felt252 = 'RELEASE_WINDOW_CLOSED';
+pub const BAD_PAYER_CONFIRM: felt252 = 'BAD_PAYER_CONFIRM';
+pub const BAD_DISPUTE_SECRET: felt252 = 'BAD_DISPUTE_SECRET';
+pub const BAD_REFUND_CONSENT: felt252 = 'BAD_REFUND_CONSENT';
+pub const BAD_CHAIN_SECRET: felt252 = 'BAD_CHAIN_SECRET';
+pub const BAD_RESOLUTION_SECRET: felt252 = 'BAD_RESOLUTION_SECRET';
+
+// Timing / policy.
+pub const INVALID_FULFILLMENT_DEADLINE: felt252 = 'BAD_FULFILL_DEADLINE';
+pub const INVALID_REVIEW_WINDOW: felt252 = 'BAD_REVIEW_WINDOW';
+pub const INVALID_POLICY: felt252 = 'BAD_VERIFY_POLICY';
+pub const INVALID_ROUNDS: felt252 = 'BAD_REKBER_ROUNDS';
+pub const FULFILLMENT_TOO_LATE: felt252 = 'FULFILLMENT_TOO_LATE';
+pub const FULFILLMENT_REQUIRED: felt252 = 'FULFILLMENT_REQUIRED';
+pub const FULFILLMENT_EXISTS: felt252 = 'FULFILLMENT_EXISTS';
+pub const FULFILLMENT_NOT_CONFIRMED: felt252 = 'FULFILL_NOT_CONFIRMED';
+pub const FULFILLMENT_ALREADY_CONFIRMED: felt252 = 'FULFILL_ALREADY_CONFIRMED';
+pub const REVIEW_NOT_STARTED: felt252 = 'REVIEW_NOT_STARTED';
+pub const REVIEW_NOT_FINISHED: felt252 = 'REVIEW_NOT_FINISHED';
+pub const REVIEW_WINDOW_CLOSED: felt252 = 'REVIEW_WINDOW_CLOSED';
+pub const REVISION_NOT_ALLOWED: felt252 = 'REVISION_NOT_ALLOWED';
+pub const REVISION_REQUIRED: felt252 = 'REVISION_REQUIRED';
+pub const REVISION_TOO_LATE: felt252 = 'REVISION_TOO_LATE';
 pub const REFUND_TOO_EARLY: felt252 = 'REFUND_TOO_EARLY';
-// Token custody and reserve accounting.
+pub const REFUND_BLOCKED_BY_FULFILLMENT: felt252 = 'REFUND_BLOCKED_FULFILL';
+pub const REFUND_BLOCKED_BY_DISPUTE: felt252 = 'REFUND_BLOCKED_DISPUTE';
+
+// Dispute.
+pub const DISPUTE_NOT_ALLOWED: felt252 = 'DISPUTE_NOT_ALLOWED';
+pub const DISPUTE_ALREADY_OPEN: felt252 = 'DISPUTE_ALREADY_OPEN';
+pub const DISPUTE_REQUIRED: felt252 = 'DISPUTE_REQUIRED';
+pub const RESOLUTION_ALREADY_SET: felt252 = 'RESOLUTION_ALREADY_SET';
+pub const RESOLUTION_NOT_SET: felt252 = 'RESOLUTION_NOT_SET';
+pub const BAD_RESOLUTION_SPLIT: felt252 = 'BAD_RESOLUTION_SPLIT';
+pub const NOT_DISPUTE_RESOLVER: felt252 = 'NOT_DISPUTE_RESOLVER';
+pub const NOT_EXTERNAL_VERIFIER: felt252 = 'NOT_EXTERNAL_VERIFIER';
+
+// Token custody / reserve.
 pub const FUNDS_NOT_RECEIVED: felt252 = 'FUNDS_NOT_RECEIVED';
 pub const APPROVAL_FAILED: felt252 = 'APPROVAL_FAILED';
 pub const APPROVAL_NOT_EXACT: felt252 = 'APPROVAL_NOT_EXACT';
 pub const STALE_ALLOWANCE: felt252 = 'STALE_ALLOWANCE';
 pub const RESERVE_INVARIANT: felt252 = 'RESERVE_INVARIANT';
 pub const FEE_TOO_SMALL: felt252 = 'ESCROW_FEE_TOO_SMALL';
+pub const FEE_QUOTE_MISMATCH: felt252 = 'REKBER_FEE_CHANGED';
+pub const FEE_OVERFLOW: felt252 = 'REKBER_FEE_OVERFLOW';
+
+// Oracle-backed USD minimum.
+pub const BAD_ORACLE_CONFIG: felt252 = 'BAD_ORACLE_CONFIG';
+pub const UNSUPPORTED_TOKEN: felt252 = 'REKBER_TOKEN_UNSUPPORTED';
+pub const ORACLE_ZERO_PRICE: felt252 = 'ORACLE_ZERO_PRICE';
+pub const ORACLE_BAD_DECIMALS: felt252 = 'ORACLE_BAD_DECIMALS';
+pub const ORACLE_BAD_TIMESTAMP: felt252 = 'ORACLE_BAD_TIME';
+pub const ORACLE_PRICE_STALE: felt252 = 'ORACLE_PRICE_STALE';
+pub const ORACLE_SOURCES_LOW: felt252 = 'ORACLE_SOURCES_LOW';
+pub const ORACLE_PRICE_EXPIRED: felt252 = 'ORACLE_PRICE_EXPIRED';

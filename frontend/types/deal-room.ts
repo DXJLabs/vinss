@@ -42,6 +42,32 @@ export type DealType =
   | "nft"
   | "other";
 
+/**
+ * Public Rekber verification class chosen by the encrypted Accepted Offer.
+ */
+export type RekberVerificationPolicy =
+  | "submission_review"
+  | "counterparty_confirm"
+  | "external_verify";
+
+/**
+ * Explicit settlement roles for one Accepted Offer.
+ *
+ * VINSS no longer infers the funder from whoever created the original Offer.
+ */
+export interface OfferSettlementPlan {
+  version: 1;
+  payerAddress: string;
+  payeeAddress: string;
+  fulfillerAddress: string;
+  beneficiaryAddress: string;
+  fulfillmentType: DealType;
+  verificationPolicy: RekberVerificationPolicy;
+  reviewWindowSeconds: number;
+  maxFulfillmentRounds: number;
+  maxRevisionRounds: number;
+}
+
 export type WorkReviewDecision =
   | "approved"
   | "revision_requested"
@@ -133,6 +159,10 @@ export interface OfferActionPayload {
   expiresAt?: string;
   reason?: string;
 
+  // Explicit encrypted Rekber roles/policy. Offer creation direction must
+  // never be used to infer the funder.
+  settlementPlan?: OfferSettlementPlan;
+
   // Used locally when an accepted Offer is associated with Rekber custody.
   custodyCommitment?: string;
 }
@@ -164,6 +194,9 @@ export interface EscrowOfferSnapshot {
   paymentTerms: string;
   conditions?: string;
   expiresAt?: string;
+
+  // Immutable copy of the Accepted Offer settlement roles/policy.
+  settlementPlan?: OfferSettlementPlan;
 }
 
 export interface EscrowActionPayload {

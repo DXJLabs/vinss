@@ -23,6 +23,7 @@ pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time
 #[cfg(test)]
 pub mod test_mocks {
     pub mod mock_erc20;
+    pub mod mock_pragma;
 }
 
 pub mod private_escrow {
