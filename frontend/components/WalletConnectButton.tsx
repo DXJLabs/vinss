@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import {
   useEffect,
   useRef,
-  useState,
 } from "react";
 
 const WalletConnectModal = dynamic(
@@ -40,9 +39,6 @@ export function WalletConnectButton({
   const connectAttemptedRef =
     useRef(false);
 
-  const [walletUiNonce, setWalletUiNonce] =
-    useState(0);
-
   useEffect(() => {
     connectedRef.current = connected;
 
@@ -52,8 +48,6 @@ export function WalletConnectButton({
   }, [connected]);
 
   useEffect(() => {
-    let recoveryTimer: number | null = null;
-
     const recoverAfterWalletUnlock = () => {
       if (
         !connectAttemptedRef.current ||
@@ -62,27 +56,13 @@ export function WalletConnectButton({
         return;
       }
 
-      refreshInjectedWallets();
-
-      if (recoveryTimer !== null) {
-        window.clearTimeout(recoveryTimer);
-      }
-
       /*
-       * WalletProvider gets the first chance to silently recover.
-       * If it cannot, reset only the wallet modal so a second connect
-       * uses the freshly injected Ready X provider. No page reload.
+       * Ready X may refresh its injected wallet object while the browser
+       * is backgrounded. Rediscover it when VINSS becomes active again,
+       * but never remount the wallet modal here: doing so can abort an
+       * in-flight connect request before Ready X has finished.
        */
-      recoveryTimer = window.setTimeout(() => {
-        refreshInjectedWallets();
-
-        if (!connectedRef.current) {
-          setWalletUiNonce(
-            (value) => value + 1,
-          );
-          connectAttemptedRef.current = false;
-        }
-      }, 900);
+      refreshInjectedWallets();
     };
 
     const visibility = () => {
@@ -120,9 +100,6 @@ export function WalletConnectButton({
         visibility,
       );
 
-      if (recoveryTimer !== null) {
-        window.clearTimeout(recoveryTimer);
-      }
     };
   }, []);
 
@@ -144,7 +121,6 @@ export function WalletConnectButton({
       }}
     >
       <WalletConnectModal
-        key={walletUiNonce}
         buttonClassName="
           border border-signal/60
           bg-signal/5

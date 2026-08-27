@@ -315,10 +315,14 @@ pub mod VinssFeePolicy {
 
             match response.expiration_timestamp {
                 Option::Some(expiration) => {
-                    assert(
-                        expiration >= now,
-                        'EXPIRED_ORACLE_PRICE',
-                    );
+                    // Pragma SpotEntry currently uses Some(0) as the
+                    // sentinel for "no expiration".
+                    if expiration != 0 {
+                        assert(
+                            expiration >= now,
+                            'EXPIRED_ORACLE_PRICE',
+                        );
+                    }
                 },
                 Option::None => {},
             };
@@ -392,10 +396,14 @@ pub mod VinssFeePolicy {
 
             match response.expiration_timestamp {
                 Option::Some(expiration) => {
-                    assert(
-                        expiration >= now,
-                        'EXPIRED_ORACLE_PRICE',
-                    );
+                    // Pragma SpotEntry currently uses Some(0) as the
+                    // sentinel for "no expiration".
+                    if expiration != 0 {
+                        assert(
+                            expiration >= now,
+                            'EXPIRED_ORACLE_PRICE',
+                        );
+                    }
                 },
                 Option::None => {},
             };

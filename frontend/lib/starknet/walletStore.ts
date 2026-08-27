@@ -1,6 +1,6 @@
 import { createStore } from "@starknet-io/get-starknet-discovery";
 
-export const walletStore = createStore();
+export const walletStore = createStore({ eip1193Adapters: [] });
 
 export function refreshInjectedWallets(): void {
   if (typeof window === "undefined") return;

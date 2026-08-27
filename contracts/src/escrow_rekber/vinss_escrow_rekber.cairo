@@ -616,10 +616,14 @@ pub mod VinssEscrowRekber {
 
             match quote.expiration_timestamp {
                 Option::Some(expiration) => {
-                    assert(
-                        now <= expiration,
-                        errors::ORACLE_PRICE_EXPIRED,
-                    );
+                    // Pragma SpotEntry currently uses Some(0) as the
+                    // sentinel for "no expiration".
+                    if expiration != 0 {
+                        assert(
+                            now <= expiration,
+                            errors::ORACLE_PRICE_EXPIRED,
+                        );
+                    }
                 },
                 Option::None => {},
             };
