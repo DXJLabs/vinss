@@ -778,7 +778,7 @@ export function DirectConversationPanel({
                       }
                     />
                     <p className="mt-2 text-[8px] text-paper/45">
-                      Work
+                      Fulfillment
                     </p>
                     <p className="mt-0.5 text-[8px] text-paper/30">
                       {currentRekberState.revisionPending
@@ -855,11 +855,19 @@ export function DirectConversationPanel({
                             : `${currentDealAmount} ${currentDealAsset} is ready to claim.`
                           : currentRekberState.fulfillmentConfirmed
                             ? isCurrentPayer
-                              ? "Work is approved. Continue to authorize payment."
-                              : "Work approved. Waiting for the Payer to authorize payment."
-                            : isCurrentPayer
-                              ? "Payment is secured. Waiting for the Payee to submit work."
-                              : "Payment is secured. Submit work when delivery is ready."}
+                              ? "Fulfillment is confirmed. Continue to settlement."
+                              : "Fulfillment confirmed. Waiting for the Payer to authorize payment."
+                            : currentRekberState.fulfillmentSubmitted
+                              ? isCurrentPayer
+                                ? currentRekberState.verificationPolicy === 2
+                                  ? "Fulfillment was submitted. Confirm receipt or open a dispute."
+                                  : "Fulfillment is under review."
+                                : currentRekberState.verificationPolicy === 2
+                                  ? "Fulfillment submitted. Waiting for counterparty confirmation."
+                                  : "Fulfillment submitted. Review window is active."
+                              : isCurrentPayer
+                                ? `Payment is secured. Waiting for the Payee to ${evidenceUi.actionLabel.toLowerCase()}.`
+                                : `Payment is secured. ${evidenceUi.actionLabel} only when the agreed obligation is complete.`}
                   </p>
                 </div>
 
@@ -890,7 +898,27 @@ export function DirectConversationPanel({
                       }
                       className="mt-3 w-full rounded-xl bg-signal px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-ink disabled:opacity-30"
                     >
-                      Submit work →
+                      {evidenceUi.actionLabel} →
+                    </button>
+                  )}
+
+                {!currentRekberState.consumed &&
+                  isCurrentPayer &&
+                  currentRekberState.verificationPolicy === 2 &&
+                  currentRekberState.fulfillmentSubmitted &&
+                  !currentRekberState.fulfillmentConfirmed &&
+                  !currentRekberState.disputed && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        onOpenEscrow(
+                          fundedDealEntry,
+                        )
+                      }
+                      className="mt-3 w-full rounded-xl border border-signal/30 px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-signal disabled:opacity-30"
+                    >
+                      Review fulfillment →
                     </button>
                   )}
 

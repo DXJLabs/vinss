@@ -36,3 +36,25 @@ export async function computeRekberEvidenceCommitment(
 
   return value || 1n;
 }
+
+
+/*
+ * Both wallets can recompute this from the encrypted dispute payload.
+ * The public contract stores only the resulting felt, never the reason.
+ */
+export async function computeRekberDisputeEvidenceCommitment(
+  input: {
+    custodyCommitment: bigint;
+    role: "payer" | "payee";
+    fulfillmentEvidenceCommitment: bigint;
+    reason: string;
+  },
+): Promise<bigint> {
+  return computeRekberEvidenceCommitment([
+    "VINSS_REKBER_DISPUTE_V1",
+    input.custodyCommitment.toString(),
+    input.role,
+    input.fulfillmentEvidenceCommitment.toString(),
+    input.reason.trim(),
+  ]);
+}

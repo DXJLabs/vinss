@@ -1,9 +1,16 @@
 import type { DealType } from "@/types/deal-room";
 
 /*
- * Deal-specific work-evidence wording is domain presentation policy.
- * Keeping it outside the chat component prevents new deal types from
- * growing DirectConversationPanel with another large switch statement.
+ * Rekber fulfillment copy is security-sensitive product policy.
+ *
+ * Calling submit_fulfillment changes user rights: once submitted, the payer
+ * can no longer use the unilateral "no fulfillment" timeout refund. Labels
+ * therefore describe the point where the fulfiller is claiming the actual
+ * obligation has been completed.
+ *
+ * Physical Goods invariant:
+ * "shipped" is only progress. VINSS must submit fulfillment only when the
+ * seller claims delivery/hand-over occurred.
  */
 interface EvidenceUiCopy {
   actionLabel: string;
@@ -30,7 +37,7 @@ export function evidenceUiForDealType(
         submitButton: "Submit Work →",
         approveButton: "Approve work",
         revisionButton: "Request revision",
-        rejectButton: "Reject",
+        rejectButton: "Open dispute",
       };
 
     case "bounty":
@@ -43,55 +50,86 @@ export function evidenceUiForDealType(
         submitButton: "Submit Result →",
         approveButton: "Approve result",
         revisionButton: "Request revision",
-        rejectButton: "Reject",
+        rejectButton: "Open dispute",
       };
 
     case "digital_goods":
       return {
         actionLabel: "Deliver files",
-        submittedLabel: "Delivery submitted ✓",
+        submittedLabel: "Digital delivery submitted ✓",
         composerTitle: "Deliver digital goods",
         placeholder:
-          "Describe the delivered files, keys, links, or notes…",
+          "Describe the delivered files, keys, links, or license details…",
         submitButton: "Deliver Files →",
         approveButton: "Accept delivery",
         revisionButton: "Request changes",
-        rejectButton: "Reject delivery",
+        rejectButton: "Open dispute",
       };
 
     case "goods":
       return {
-        actionLabel: "Delivery proof",
-        submittedLabel: "Delivery evidence ✓",
-        composerTitle: "Submit delivery evidence",
+        actionLabel: "Confirm delivered",
+        submittedLabel: "Delivery claimed ✓",
+        composerTitle: "Confirm physical delivery",
         placeholder:
-          "Add tracking, handover, receipt, or delivery details…",
-        submitButton: "Submit Evidence →",
+          "Add delivery confirmation, tracking, hand-over, or receipt details. Do not mark delivered while the item is only shipped.",
+        submitButton: "Mark Delivered →",
         approveButton: "Confirm received",
-        revisionButton: "Report issue",
-        rejectButton: "Reject delivery",
+        revisionButton: "Open dispute",
+        rejectButton: "Open dispute",
       };
 
+    case "otc":
+      return {
+        actionLabel: "Submit settlement proof",
+        submittedLabel: "Settlement proof submitted ✓",
+        composerTitle: "Submit settlement evidence",
+        placeholder:
+          "Add the off-chain payment or settlement evidence agreed in the Offer…",
+        submitButton: "Submit Proof →",
+        approveButton: "Confirm received",
+        revisionButton: "Open dispute",
+        rejectButton: "Open dispute",
+      };
+
+    case "nft":
+      return {
+        actionLabel: "Submit NFT transfer proof",
+        submittedLabel: "NFT transfer submitted ✓",
+        composerTitle: "Submit NFT transfer evidence",
+        placeholder:
+          "Add the expected collection, token ID, transfer transaction, or supporting note…",
+        submitButton: "Submit Transfer Proof →",
+        approveButton: "Confirm NFT",
+        revisionButton: "Request correction",
+        rejectButton: "Open dispute",
+      };
+
+    case "other":
     default:
       return {
-        actionLabel: "Submit evidence",
-        submittedLabel: "Evidence submitted ✓",
+        actionLabel: "Submit fulfillment",
+        submittedLabel: "Fulfillment submitted ✓",
         composerTitle: "Submit deal evidence",
         placeholder:
-          "Describe the delivery or evidence for this deal…",
-        submitButton: "Submit Evidence →",
+          "Describe how the agreed completion condition was fulfilled…",
+        submitButton: "Submit Fulfillment →",
         approveButton: "Approve",
         revisionButton: "Request changes",
-        rejectButton: "Reject",
+        rejectButton: "Open dispute",
       };
   }
 }
 
+/*
+ * Every current Rekber template needs a fulfillment path before principal can
+ * be released. OTC and NFT used to be disabled here, which could leave funded
+ * deals unable to progress through the current contract.
+ *
+ * `undefined` stays enabled for encrypted legacy Offers and uses generic copy.
+ */
 export function supportsDealEvidence(
-  dealType?: DealType,
+  _dealType?: DealType,
 ): boolean {
-  return (
-    dealType !== "otc" &&
-    dealType !== "nft"
-  );
+  return true;
 }

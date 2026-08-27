@@ -80,11 +80,22 @@ export interface RekberCustodyState {
   fulfillmentRoundsRemaining: number;
   revisionRoundsRemaining: number;
   fulfillmentEvidenceCommitment: bigint;
+
+  // Only opaque commitments/amounts are public. Dispute plaintext remains
+  // encrypted/off-chain; these fields let the UI render contract state
+  // without guessing from local messages.
+  disputeEvidenceCommitment: bigint;
+  resolutionCommitment: bigint;
+  resolutionPayerAmount: bigint;
+  resolutionPayeeAmount: bigint;
+
   fulfillmentSubmitted: boolean;
   fulfillmentConfirmed: boolean;
   revisionPending: boolean;
   disputed: boolean;
   resolutionAuthorized: boolean;
+  resolutionPayerClaimed: boolean;
+  resolutionPayeeClaimed: boolean;
   consumed: boolean;
   refunded: boolean;
   createdAt: number;
@@ -93,7 +104,11 @@ export interface RekberCustodyState {
 }
 
 export interface RekberProof {
-  kind: "funded" | "released" | "refunded";
+  kind:
+    | "funded"
+    | "released"
+    | "refunded"
+    | "resolved";
   transactionHash: string;
   blockNumber: number;
   timestamp: number;
@@ -764,6 +779,91 @@ export async function requestRekberRevision(
   );
 }
 
+/**
+ * Lock an active custody into dispute.
+ *
+ * Only `evidenceCommitment` reaches public state. The reason, files, tracking,
+ * screenshots, or other business evidence stay encrypted/off-chain.
+ */
+export async function openRekberDispute(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    role: SettlementRole;
+    disputeSecret: bigint;
+    evidenceCommitment: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeRekberWorkflowAction(
+    account,
+    [
+      6,
+      params.custodyCommitment,
+      params.role === "payer" ? 1 : 2,
+      params.disputeSecret,
+      params.evidenceCommitment,
+    ],
+  );
+}
+
+/**
+ * Payee protection against payer silence.
+ * The contract enforces confirmed fulfillment + review deadline.
+ */
+export async function autoReleaseEscrow(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    payeeClaimSecret: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeSettlement(account, [
+    toFelt(8),
+    toFelt(params.custodyCommitment),
+    toFelt(params.payeeClaimSecret),
+  ]);
+}
+
+/**
+ * Full refund after fulfillment is bilateral by design.
+ * UI must call this from the payer after receiving payee consent.
+ */
+export async function mutualRefundEscrow(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    refundSecret: bigint;
+    payeeRefundConsentSecret: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeSettlement(account, [
+    toFelt(9),
+    toFelt(params.custodyCommitment),
+    toFelt(params.refundSecret),
+    toFelt(params.payeeRefundConsentSecret),
+  ]);
+}
+
+/**
+ * After resolver authorization, each side claims only its authorized share
+ * with the capability committed at funding time.
+ */
+export async function claimRekberResolution(
+  account: WalletAccountV6,
+  params: {
+    custodyCommitment: bigint;
+    role: SettlementRole;
+    partySecret: bigint;
+  },
+): Promise<{ transactionHash: string }> {
+  return invokeSettlement(account, [
+    toFelt(10),
+    toFelt(params.custodyCommitment),
+    toFelt(params.role === "payer" ? 1 : 2),
+    toFelt(params.partySecret),
+  ]);
+}
+
 export async function getRekberCustody(
   custodyCommitment: bigint,
 ): Promise<RekberCustodyState | null> {
@@ -829,6 +929,14 @@ export async function getRekberCustody(
         Number(BigInt(result[21] ?? "0")),
       fulfillmentEvidenceCommitment:
         BigInt(result[22] ?? "0"),
+      disputeEvidenceCommitment:
+        BigInt(result[23] ?? "0"),
+      resolutionCommitment:
+        BigInt(result[24] ?? "0"),
+      resolutionPayerAmount:
+        BigInt(result[25] ?? "0"),
+      resolutionPayeeAmount:
+        BigInt(result[26] ?? "0"),
       fulfillmentSubmitted:
         BigInt(result[27] ?? "0") !== 0n,
       fulfillmentConfirmed:
@@ -839,6 +947,10 @@ export async function getRekberCustody(
         BigInt(result[30] ?? "0") !== 0n,
       resolutionAuthorized:
         BigInt(result[31] ?? "0") !== 0n,
+      resolutionPayerClaimed:
+        BigInt(result[32] ?? "0") !== 0n,
+      resolutionPayeeClaimed:
+        BigInt(result[33] ?? "0") !== 0n,
       consumed:
         BigInt(result[34] ?? "0") !== 0n,
       refunded:
@@ -868,7 +980,9 @@ export async function getRekberProof(
       ? "EscrowRekberCustodyFunded"
       : kind === "released"
         ? "EscrowRekberCustodyReleased"
-        : "EscrowRekberCustodyRefunded";
+        : kind === "refunded"
+          ? "EscrowRekberCustodyRefunded"
+          : "EscrowRekberCustodyResolved";
 
   const result =
     await getProvider().getEvents({
@@ -894,7 +1008,10 @@ export async function getRekberProof(
   if (!event) return null;
 
   const timestampIndex =
-    kind === "funded" ? 2 : 0;
+    kind === "funded" ||
+    kind === "resolved"
+      ? 2
+      : 0;
 
   return {
     kind,

@@ -79,16 +79,24 @@ import {
   SettlementFeedback,
 } from "@/components/room/escrow/SettlementFeedback";
 import {
+  RekberProtectionPanel,
+} from "@/components/room/escrow/RekberProtectionPanel";
+import {
   explorerUrl,
   shortAddress,
 } from "@/components/room/conversation/chatFormat";
 import {
   canonicalLocator,
+  findLatestMutualRefundConsentAction,
+  findLatestOwnDisputeEvidenceAction,
   formatDeadline,
   formatRefundDuration,
   hasCustody,
   toBigInt,
 } from "@/lib/deal-room/rekberView";
+import {
+  formatUnits,
+} from "@/lib/utils/units";
 
 interface LocalCoordination {
   actionLocator: string;
@@ -453,6 +461,34 @@ export function EscrowPanel({
         ? "payee"
         : localSecrets?.role ?? agreedRole;
 
+  const ownDisputeEvidenceRecord =
+    useMemo(
+      () =>
+        findLatestOwnDisputeEvidenceAction(
+          escrowActions,
+          custodyCommitment,
+          walletAddress,
+        ),
+      [
+        escrowActions,
+        custodyCommitment,
+        walletAddress,
+      ],
+    );
+
+  const mutualRefundConsentRecord =
+    useMemo(
+      () =>
+        findLatestMutualRefundConsentAction(
+          escrowActions,
+          custodyCommitment,
+        ),
+      [
+        escrowActions,
+        custodyCommitment,
+      ],
+    );
+
   const refundAfter = Number(
     createAction?.refundAfter ??
       custodyState?.refundAfter ??
@@ -469,7 +505,11 @@ export function EscrowPanel({
 
   const refundAvailable =
     Boolean(refundAfter) &&
-    refundRemainingSeconds === 0;
+    refundRemainingSeconds === 0 &&
+    Boolean(custodyState) &&
+    !custodyState!.fulfillmentSubmitted &&
+    !custodyState!.disputed &&
+    !custodyState!.consumed;
 
   const refundCountdown =
     refundAfter
@@ -800,8 +840,46 @@ export function EscrowPanel({
   const settled = Boolean(
     funded && custodyConsumed,
   );
+  const resolved = Boolean(
+    settled &&
+      custodyState?.resolutionAuthorized,
+  );
+  const refunded = Boolean(
+    settled &&
+      !resolved &&
+      custodyState?.refunded,
+  );
   const released =
-    settled && !custodyState?.refunded;
+    settled &&
+    !resolved &&
+    !refunded;
+
+  const displaySettlementAsset =
+    accepted
+      ? resolveSettlementAsset(
+          accepted.asset,
+        )
+      : null;
+
+  const resolutionPayerDisplay =
+    custodyState &&
+    displaySettlementAsset
+      ? formatUnits(
+          custodyState
+            .resolutionPayerAmount,
+          displaySettlementAsset.decimals,
+        )
+      : "0";
+
+  const resolutionPayeeDisplay =
+    custodyState &&
+    displaySettlementAsset
+      ? formatUnits(
+          custodyState
+            .resolutionPayeeAmount,
+          displaySettlementAsset.decimals,
+        )
+      : "0";
   const rekberConfigured = Boolean(
     CONTRACTS.escrowRekber,
   );
@@ -985,9 +1063,12 @@ export function EscrowPanel({
       }
 
       if (next?.consumed) {
-        const outcome = next.refunded
-          ? "refunded"
-          : "released";
+        const outcome =
+          next.resolutionAuthorized
+            ? "resolved"
+            : next.refunded
+              ? "refunded"
+              : "released";
         const proof =
           await getRekberProof(
             custodyCommitment,
@@ -2471,6 +2552,40 @@ export function EscrowPanel({
               )}
             </div>
 
+            {custodyCommitment &&
+              custodyState &&
+              role && (
+                <RekberProtectionPanel
+                  session={session}
+                  custodyCommitment={
+                    custodyCommitment
+                  }
+                  state={custodyState}
+                  role={role}
+                  secrets={localSecrets}
+                  dealOfferLocator={
+                    dealOfferLocator
+                  }
+                  peerAddress={
+                    peerAddress
+                  }
+                  privateDisputeAction={
+                    ownDisputeEvidenceRecord
+                      ?.action ?? null
+                  }
+                  mutualRefundConsentAction={
+                    mutualRefundConsentRecord
+                      ?.action ?? null
+                  }
+                  onSendCoordination={
+                    onSendCoordination
+                  }
+                  busy={busy}
+                  setBusy={setBusy}
+                  setError={setError}
+                />
+              )}
+
             {role === "payer" && !releaseRecord && (
               <button
                 type="button"
@@ -2562,22 +2677,37 @@ export function EscrowPanel({
                         : "text-[9px] font-medium uppercase tracking-[0.14em] text-amber"
                     }
                   >
-                    {released
-                      ? "Settled"
-                      : "Refunded"}
+                    {resolved
+                      ? "Resolved"
+                      : released
+                        ? "Settled"
+                        : "Refunded"}
                   </p>
 
-                  <p className="mt-2 text-3xl font-semibold text-paper">
-                    {accepted.amount}
-                    <span className="ml-2 text-base font-normal text-paper/45">
-                      {accepted.asset}
-                    </span>
-                  </p>
+                  {resolved ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm font-medium text-paper/75">
+                        Payer · {resolutionPayerDisplay} {accepted.asset}
+                      </p>
+                      <p className="text-sm font-medium text-paper/75">
+                        Payee · {resolutionPayeeDisplay} {accepted.asset}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-3xl font-semibold text-paper">
+                      {accepted.amount}
+                      <span className="ml-2 text-base font-normal text-paper/45">
+                        {accepted.asset}
+                      </span>
+                    </p>
+                  )}
 
                   <p className="mt-2 text-xs leading-relaxed text-paper/48">
-                    {released
-                      ? "Payment released to the Payee. This Escrow is now closed."
-                      : "Principal returned to the Payer. This Escrow is now closed."}
+                    {resolved
+                      ? "The disputed principal was settled using the authorized Payer/Payee split. This Escrow is now closed."
+                      : released
+                        ? "Payment released to the Payee. This Escrow is now closed."
+                        : "Principal returned to the Payer. This Escrow is now closed."}
                   </p>
                 </div>
 
@@ -2588,7 +2718,11 @@ export function EscrowPanel({
                       : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber text-sm text-ink"
                   }
                 >
-                  {released ? "✓" : "↩"}
+                  {resolved
+                    ? "↔"
+                    : released
+                      ? "✓"
+                      : "↩"}
                 </span>
               </div>
 
@@ -2607,7 +2741,7 @@ export function EscrowPanel({
 
               {!released && (
                 <p className="mt-3 text-[9px] leading-relaxed text-paper/30">
-                  The VINSS service fee paid during funding is non-refundable and is not part of the principal refund.
+                  The VINSS service fee paid during funding is non-refundable and is separate from the principal refund or resolution split.
                 </p>
               )}
 
@@ -2722,17 +2856,19 @@ export function EscrowPanel({
               </div>
             )}
 
-            <SettlementFeedback
-              outcome={
-                released
-                  ? "released"
-                  : "refunded"
-              }
-              role={role}
-              dealType={
-                accepted.dealType
-              }
-            />
+            {!resolved && (
+              <SettlementFeedback
+                outcome={
+                  released
+                    ? "released"
+                    : "refunded"
+                }
+                role={role}
+                dealType={
+                  accepted.dealType
+                }
+              />
+            )}
           </div>
         )}
 
@@ -2752,7 +2888,7 @@ export function EscrowPanel({
                 role: {role ?? "unknown"}
               </p>
               <p>
-                state: {settled ? (released ? "released" : "refunded") : funded ? "funded" : "coordinating"}
+                state: {settled ? (resolved ? "resolved" : released ? "released" : "refunded") : funded ? "funded" : "coordinating"}
               </p>
             </div>
           </details>

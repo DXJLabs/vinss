@@ -256,6 +256,15 @@ export interface EscrowActionPayload {
   // analytics, Agent context, or plaintext backend storage.
   releaseAuthorizationSecret?: string;
 
+  // For kind="dispute": plaintext reason stays inside encrypted direct
+  // coordination. Only this deterministic commitment is public on Rekber.
+  disputeEvidenceCommitment?: string;
+
+  // The Payee reveals this precommitted capability only when explicitly
+  // authorizing a full mutual principal refund. It is sensitive and must
+  // never enter logs, analytics, Agent context, or plaintext backend storage.
+  payeeRefundConsentSecret?: string;
+
   fundingTransactionHash?: string;
   settlementTransactionHash?: string;
   settlementOutcome?: "released" | "refunded";

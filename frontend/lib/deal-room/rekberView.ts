@@ -1,4 +1,7 @@
 import type { EscrowActionPayload } from "@/types/deal-room";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
 
 /*
  * Pure Rekber presentation/normalization helpers.
@@ -89,4 +92,82 @@ export function hasCustody(
     action.custodyCommitment,
   );
   return parsed === custody;
+}
+
+
+export interface EscrowCoordinationRecord {
+  action: EscrowActionPayload;
+}
+
+/*
+ * A dispute uses two wallet confirmations by design:
+ * 1) publish the reason only inside encrypted peer coordination;
+ * 2) lock its deterministic commitment in Rekber.
+ *
+ * Selecting only the current wallet's record prevents one side from using the
+ * counterparty's reason as its own dispute capability.
+ */
+export function findLatestOwnDisputeEvidenceAction<
+  T extends EscrowCoordinationRecord,
+>(
+  actions: readonly T[],
+  custody: bigint | null,
+  walletAddress: string,
+): T | null {
+  if (!custody || !walletAddress) {
+    return null;
+  }
+
+  return (
+    [...actions]
+      .reverse()
+      .find(
+        (item) =>
+          item.action.kind === "dispute" &&
+          hasCustody(
+            item.action,
+            custody,
+          ) &&
+          Boolean(
+            item.action.reason?.trim(),
+          ) &&
+          Boolean(
+            item.action
+              .disputeEvidenceCommitment,
+          ) &&
+          Boolean(
+            item.action.senderAddress &&
+              sameStarknetAddress(
+                item.action.senderAddress,
+                walletAddress,
+              ),
+          ),
+      ) ?? null
+  );
+}
+
+export function findLatestMutualRefundConsentAction<
+  T extends EscrowCoordinationRecord,
+>(
+  actions: readonly T[],
+  custody: bigint | null,
+): T | null {
+  if (!custody) return null;
+
+  return (
+    [...actions]
+      .reverse()
+      .find(
+        (item) =>
+          item.action.kind === "refund" &&
+          hasCustody(
+            item.action,
+            custody,
+          ) &&
+          Boolean(
+            item.action
+              .payeeRefundConsentSecret,
+          ),
+      ) ?? null
+  );
 }
