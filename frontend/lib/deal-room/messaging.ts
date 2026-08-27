@@ -30,7 +30,7 @@ import {
   type MessageRoute,
 } from "@/lib/privacy/messageRouting";
 import type { MessagePayload, SendActionResult } from "@/types/deal-room";
-import { VINSS_FEES } from "@/lib/fees";
+import { quoteMessageFee } from "@/lib/starknet/feePolicy";
 
 export interface PreparedMessageSend {
   actionLocator: bigint;
@@ -121,6 +121,11 @@ export async function sendMessage(
   ].map(toFelt);
 
 
+  // Fetch the authoritative minimum immediately before Ready X builds
+  // the private transaction. The helper accepts this quote (or a higher one)
+  // and validates it against its immutable FeePolicy reference.
+  const quotedFee = await quoteMessageFee();
+
   const treasuryAddress =
     process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
 
@@ -134,7 +139,7 @@ export async function sendMessage(
     {
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
-      amount: VINSS_FEES.message.baseUnits,
+      amount: toFelt(quotedFee),
       recipient: CONTRACTS.messageHelper,
     },
     {
@@ -147,8 +152,9 @@ export async function sendMessage(
       type: "invoke" as const,
       contract: CONTRACTS.messageHelper,
       calldata: [
-        toFelt(calldata.length + 1),
+        toFelt(calldata.length + 2),
         ...calldata,
+        toFelt(quotedFee),
         "${openNoteIds[0]}",
       ],
     },

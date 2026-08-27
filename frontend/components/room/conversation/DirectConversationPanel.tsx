@@ -19,6 +19,9 @@ import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 import {
   getRekberCustody,
 } from "@/lib/deal-room/settlement";
+import {
+  REKBER_COORDINATION_VERSION,
+} from "@/lib/deal-room/rekberAuthorization";
 import type {
   DiscoveredEscrowAction,
 } from "@/hooks/room/useRoomEscrow";
@@ -350,7 +353,8 @@ export function DirectConversationPanel({
     escrowActions.filter((item) => {
       if (
         item.action.kind !== "create" ||
-        item.action.coordinationVersion !== 2
+        item.action.coordinationVersion !==
+          REKBER_COORDINATION_VERSION
       ) {
         return false;
       }

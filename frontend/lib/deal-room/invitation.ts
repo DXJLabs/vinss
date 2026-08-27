@@ -4,6 +4,9 @@ import {
   shortStringToFelt,
   toFelt,
 } from "@/lib/privacy/envelope";
+import {
+  quoteRoomActivationFee,
+} from "@/lib/starknet/feePolicy";
 
 const INVITE_VERSION = 3 as const;
 const LEGACY_INVITE_VERSION = 2 as const;
@@ -188,6 +191,7 @@ function resolveInviteTtlMs(
 async function invokeInvite(
   account: WalletAccountV6,
   inviteCalldata: Array<bigint | number | string>,
+  quotedFee?: bigint,
 ): Promise<{ transaction_hash: string }> {
   if (!CONTRACTS.invite) {
     throw new Error(
@@ -212,10 +216,39 @@ async function invokeInvite(
     );
   }
 
-  const actions = [
+  // CREATE returns one revenue OpenNoteDeposit and therefore needs the
+  // authoritative room-activation quote plus the wallet-generated open note.
+  if (quotedFee !== undefined) {
+    return account.strk20InvokeTransaction([
+      {
+        type: "withdraw" as const,
+        token: CONTRACTS.messageHelperOpenNoteToken,
+        amount: toFelt(quotedFee),
+        recipient: CONTRACTS.invite,
+      },
+      {
+        type: "transfer" as const,
+        token: CONTRACTS.messageHelperOpenNoteToken,
+        amount: "OPEN" as const,
+        recipient: treasuryAddress,
+      },
+      {
+        type: "invoke" as const,
+        contract: CONTRACTS.invite,
+        calldata: [
+          toFelt(calldata.length + 2),
+          ...calldata,
+          toFelt(quotedFee),
+          "${openNoteIds[0]}",
+        ],
+      },
+    ]);
+  }
+
+  // CONSUME has no service-fee output. It still consumes a negligible private
+  // note so the containing STRK20 transaction has pool-level replay protection.
+  return account.strk20InvokeTransaction([
     {
-      // Consumes a private note, providing pool replay protection.
-      // 10 wei goes to VINSS treasury; Invite itself has no token output.
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "0xa",
@@ -229,9 +262,7 @@ async function invokeInvite(
         ...calldata,
       ],
     },
-  ];
-
-  return account.strk20InvokeTransaction(actions);
+  ]);
 }
 
 /**
@@ -366,10 +397,14 @@ export async function createInviteToken(
   }
 
   try {
-    // CREATE = [0, commitment, expires_at]
+    const quotedFee =
+      await quoteRoomActivationFee();
+
+    // CREATE = [0, commitment, expires_at, quoted_fee, open_note_id].
     await invokeInvite(
       account,
       [0, commitment, expiresAtSeconds],
+      quotedFee,
     );
   } catch (err) {
     const message =

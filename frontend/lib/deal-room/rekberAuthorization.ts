@@ -35,7 +35,7 @@ import {
   canonicalStarknetAddress,
 } from "@/lib/privacy/participantKeys";
 
-export const REKBER_COORDINATION_VERSION = 2;
+export const REKBER_COORDINATION_VERSION = 3;
 const FELT_PRIME =
   2n ** 251n + 17n * 2n ** 192n + 1n;
 
@@ -97,7 +97,7 @@ function address(
 function domain() {
   return {
     name: "VINSS Rekber",
-    version: "2",
+    version: "3",
     chainId:
       NETWORK === "mainnet"
         ? constants.StarknetChainId.SN_MAIN
@@ -130,6 +130,28 @@ export async function computeDealTermsCommitment(
     canonicalStarknetAddress(
       offer.recipientAddress ?? "",
     ),
+    offer.settlementPlan
+      ? [
+          offer.settlementPlan.version,
+          canonicalStarknetAddress(
+            offer.settlementPlan.payerAddress,
+          ),
+          canonicalStarknetAddress(
+            offer.settlementPlan.payeeAddress,
+          ),
+          canonicalStarknetAddress(
+            offer.settlementPlan.fulfillerAddress,
+          ),
+          canonicalStarknetAddress(
+            offer.settlementPlan.beneficiaryAddress,
+          ),
+          offer.settlementPlan.fulfillmentType,
+          offer.settlementPlan.verificationPolicy,
+          offer.settlementPlan.reviewWindowSeconds,
+          offer.settlementPlan.maxFulfillmentRounds,
+          offer.settlementPlan.maxRevisionRounds,
+        ]
+      : null,
   ]);
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -171,16 +193,13 @@ export function buildRekberSetupTypedData(
         },
         { name: "Payer", type: "ContractAddress" },
         { name: "Payee", type: "ContractAddress" },
-        {
-          name: "Release Authorization",
-          type: "felt",
-        },
+        { name: "Release Authorization", type: "felt" },
         { name: "Refund", type: "felt" },
-        {
-          name: "Payer Certificate",
-          type: "felt",
-        },
-        { name: "Refund After", type: "u128" },
+        { name: "Payer Confirmation", type: "felt" },
+        { name: "Payer Dispute", type: "felt" },
+        { name: "Revision Chain", type: "felt" },
+        { name: "Payer Certificate", type: "felt" },
+        { name: "Fulfillment Deadline", type: "u128" },
       ],
     },
     primaryType: "RekberSetup",
@@ -214,13 +233,25 @@ export function buildRekberSetupTypedData(
         setup.refundCommitment,
         "refund commitment",
       ),
+      "Payer Confirmation": decimalFelt(
+        setup.payerConfirmationCommitment,
+        "payer confirmation commitment",
+      ),
+      "Payer Dispute": decimalFelt(
+        setup.payerDisputeCommitment,
+        "payer dispute commitment",
+      ),
+      "Revision Chain": decimalFelt(
+        setup.revisionChainHead,
+        "revision chain head",
+      ),
       "Payer Certificate": decimalFelt(
         setup.payerCertificateCommitment,
         "payer certificate commitment",
       ),
-      "Refund After": decimalFelt(
+      "Fulfillment Deadline": decimalFelt(
         setup.refundAfter,
-        "refund boundary",
+        "fulfillment deadline",
       ),
     },
   };
@@ -245,27 +276,21 @@ export function buildRekberAcceptanceTypedData(
       RekberAcceptance: [
         { name: "Custody", type: "felt" },
         { name: "Deal", type: "felt" },
-        {
-          name: "Private Terms",
-          type: "felt",
-        },
+        { name: "Private Terms", type: "felt" },
         { name: "Payer", type: "ContractAddress" },
         { name: "Payee", type: "ContractAddress" },
-        {
-          name: "Release Authorization",
-          type: "felt",
-        },
+        { name: "Release Authorization", type: "felt" },
         { name: "Payee Claim", type: "felt" },
         { name: "Refund", type: "felt" },
-        {
-          name: "Payer Certificate",
-          type: "felt",
-        },
-        {
-          name: "Payee Certificate",
-          type: "felt",
-        },
-        { name: "Refund After", type: "u128" },
+        { name: "Payer Confirmation", type: "felt" },
+        { name: "Payer Dispute", type: "felt" },
+        { name: "Payee Dispute", type: "felt" },
+        { name: "Refund Consent", type: "felt" },
+        { name: "Fulfillment Chain", type: "felt" },
+        { name: "Revision Chain", type: "felt" },
+        { name: "Payer Certificate", type: "felt" },
+        { name: "Payee Certificate", type: "felt" },
+        { name: "Fulfillment Deadline", type: "u128" },
       ],
     },
     primaryType: "RekberAcceptance",
@@ -303,6 +328,30 @@ export function buildRekberAcceptanceTypedData(
         setup.refundCommitment,
         "refund commitment",
       ),
+      "Payer Confirmation": decimalFelt(
+        setup.payerConfirmationCommitment,
+        "payer confirmation commitment",
+      ),
+      "Payer Dispute": decimalFelt(
+        setup.payerDisputeCommitment,
+        "payer dispute commitment",
+      ),
+      "Payee Dispute": decimalFelt(
+        acceptance.payeeDisputeCommitment,
+        "payee dispute commitment",
+      ),
+      "Refund Consent": decimalFelt(
+        acceptance.payeeRefundConsentCommitment,
+        "payee refund consent commitment",
+      ),
+      "Fulfillment Chain": decimalFelt(
+        acceptance.fulfillmentChainHead,
+        "fulfillment chain head",
+      ),
+      "Revision Chain": decimalFelt(
+        setup.revisionChainHead,
+        "revision chain head",
+      ),
       "Payer Certificate": decimalFelt(
         setup.payerCertificateCommitment,
         "payer certificate commitment",
@@ -311,9 +360,9 @@ export function buildRekberAcceptanceTypedData(
         acceptance.payeeCertificateCommitment,
         "payee certificate commitment",
       ),
-      "Refund After": decimalFelt(
+      "Fulfillment Deadline": decimalFelt(
         acceptance.refundAfter,
-        "refund boundary",
+        "fulfillment deadline",
       ),
     },
   };

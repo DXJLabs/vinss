@@ -31,6 +31,10 @@ import {
   computeCertificateClaimCommitment,
   computeCertificateTokenId,
   computePayeeClaimCommitment,
+  computePayeeDisputeCommitment,
+  computePayeeRefundConsentCommitment,
+  computePayerConfirmationCommitment,
+  computePayerDisputeCommitment,
   computeRekberRefundCommitment,
   computeReleaseAuthorizationCommitment,
   depositEscrow,
@@ -62,11 +66,11 @@ import {
   CONTRACTS,
 } from "@/lib/starknet/constants";
 import {
+  verificationPolicyCode,
+} from "@/lib/deal-room/settlementPlan";
+import {
   humanizeError,
 } from "@/lib/errors/uiError";
-import {
-  VINSS_FEES,
-} from "@/lib/fees";
 import {
   EscrowAgreedAmount,
   EscrowPriceBreakdown,
@@ -378,6 +382,10 @@ export function EscrowPanel({
     rootOffer?.offerAction?.senderAddress ?? "";
   const agreedPayeeAddress =
     rootOffer?.offerAction?.recipientAddress ?? "";
+  const settlementPlan =
+    accepted?.settlementPlan ??
+    rootOffer?.offerAction?.settlementPlan ??
+    null;
   const agreedRole: SettlementRole | null =
     walletAddress &&
     agreedPayerAddress &&
@@ -673,6 +681,21 @@ export function EscrowPanel({
       refundCommitment: toBigInt(
         createAction.refundCommitment,
       ),
+      payerConfirmationCommitment:
+        toBigInt(
+          createAction
+            .payerConfirmationCommitment,
+        ),
+      payerDisputeCommitment:
+        toBigInt(
+          createAction
+            .payerDisputeCommitment,
+        ),
+      revisionChainHead:
+        toBigInt(
+          createAction
+            .revisionChainHead,
+        ),
       payerCertificateCommitment:
         toBigInt(
           createAction
@@ -682,6 +705,21 @@ export function EscrowPanel({
         toBigInt(
           acceptAction
             .payeeClaimCommitment,
+        ),
+      payeeDisputeCommitment:
+        toBigInt(
+          acceptAction
+            .payeeDisputeCommitment,
+        ),
+      payeeRefundConsentCommitment:
+        toBigInt(
+          acceptAction
+            .payeeRefundConsentCommitment,
+        ),
+      fulfillmentChainHead:
+        toBigInt(
+          acceptAction
+            .fulfillmentChainHead,
         ),
       payeeCertificateCommitment:
         toBigInt(
@@ -694,10 +732,17 @@ export function EscrowPanel({
       !settlementAsset?.address ||
       !expected.releaseAuthorizationCommitment ||
       !expected.refundCommitment ||
+      !expected.payerConfirmationCommitment ||
+      !expected.payerDisputeCommitment ||
+      expected.revisionChainHead === null ||
       !expected.payerCertificateCommitment ||
       !expected.payeeClaimCommitment ||
+      !expected.payeeDisputeCommitment ||
+      !expected.payeeRefundConsentCommitment ||
+      !expected.fulfillmentChainHead ||
       !expected.payeeCertificateCommitment ||
-      !refundAfter
+      !refundAfter ||
+      !settlementPlan
     ) {
       return {
         verified: false,
@@ -727,8 +772,20 @@ export function EscrowPanel({
         expected.releaseAuthorizationCommitment &&
       custodyState.payeeClaimCommitment ===
         expected.payeeClaimCommitment &&
+      custodyState.payeeDisputeCommitment ===
+        expected.payeeDisputeCommitment &&
+      custodyState.payeeRefundConsentCommitment ===
+        expected.payeeRefundConsentCommitment &&
+      custodyState.fulfillmentChainHead ===
+        expected.fulfillmentChainHead &&
       custodyState.refundCommitment ===
         expected.refundCommitment &&
+      custodyState.payerConfirmationCommitment ===
+        expected.payerConfirmationCommitment &&
+      custodyState.payerDisputeCommitment ===
+        expected.payerDisputeCommitment &&
+      custodyState.revisionChainHead ===
+        expected.revisionChainHead &&
       custodyState.payerCertificateCommitment ===
         expected.payerCertificateCommitment &&
       custodyState.payeeCertificateCommitment ===
@@ -737,6 +794,16 @@ export function EscrowPanel({
         refundAfter &&
       custodyState.amount ===
         expectedAmount &&
+      custodyState.reviewWindow ===
+        settlementPlan.reviewWindowSeconds &&
+      custodyState.verificationPolicy ===
+        verificationPolicyCode(
+          settlementPlan.verificationPolicy,
+        ) &&
+      custodyState.fulfillmentRoundsRemaining ===
+        settlementPlan.maxFulfillmentRounds &&
+      custodyState.revisionRoundsRemaining ===
+        settlementPlan.maxRevisionRounds &&
       sameStarknetAddress(
         custodyState.token,
         settlementAsset.address,
@@ -1094,6 +1161,13 @@ export function EscrowPanel({
       return;
     }
 
+    if (!settlementPlan) {
+      setError(
+        "The accepted Offer is missing its production Rekber settlement plan.",
+      );
+      return;
+    }
+
     const hours = Number(
       refundHours,
     );
@@ -1124,7 +1198,11 @@ export function EscrowPanel({
         const custody =
           generateRekberCustodyCommitment();
         const secrets =
-          generatePayerSettlementSecrets();
+          generatePayerSettlementSecrets(
+            custody,
+            settlementPlan
+              .maxRevisionRounds,
+          );
         const refundAt =
           Math.floor(Date.now() / 1000) +
           hours * 3600;
@@ -1141,6 +1219,14 @@ export function EscrowPanel({
             secrets.releaseAuthorizationSecret.toString(),
           refundSecret:
             secrets.refundSecret.toString(),
+          payerConfirmationSecret:
+            secrets.payerConfirmationSecret.toString(),
+          payerDisputeSecret:
+            secrets.payerDisputeSecret.toString(),
+          revisionChainSecrets:
+            secrets.revisionChainSecrets.map(
+              String,
+            ),
           certificateSecret:
             secrets.certificateSecret.toString(),
           savedAt:
@@ -1170,6 +1256,18 @@ export function EscrowPanel({
               custody,
               secrets.refundSecret,
             ).toString(),
+          payerConfirmationCommitment:
+            computePayerConfirmationCommitment(
+              custody,
+              secrets.payerConfirmationSecret,
+            ).toString(),
+          payerDisputeCommitment:
+            computePayerDisputeCommitment(
+              custody,
+              secrets.payerDisputeSecret,
+            ).toString(),
+          revisionChainHead:
+            secrets.revisionChainHead.toString(),
           payerCertificateCommitment:
             computeCertificateClaimCommitment(
               custody,
@@ -1285,6 +1383,13 @@ export function EscrowPanel({
       return;
     }
 
+    if (!settlementPlan) {
+      setError(
+        "The accepted Offer is missing its production Rekber settlement plan.",
+      );
+      return;
+    }
+
     coordinationLockRef.current = true;
     beginRekberAction("accept");
     setError(null);
@@ -1316,7 +1421,11 @@ export function EscrowPanel({
         );
 
         const secrets =
-          generatePayeeSettlementSecrets();
+          generatePayeeSettlementSecrets(
+            custodyCommitment,
+            settlementPlan
+              .maxFulfillmentRounds,
+          );
         const stored: StoredRekberSecrets = {
           version: 2,
           custodyCommitment:
@@ -1324,6 +1433,14 @@ export function EscrowPanel({
           role: "payee",
           payeeClaimSecret:
             secrets.payeeClaimSecret.toString(),
+          payeeDisputeSecret:
+            secrets.payeeDisputeSecret.toString(),
+          payeeRefundConsentSecret:
+            secrets.payeeRefundConsentSecret.toString(),
+          fulfillmentChainSecrets:
+            secrets.fulfillmentChainSecrets.map(
+              String,
+            ),
           certificateSecret:
             secrets.certificateSecret.toString(),
           savedAt:
@@ -1352,6 +1469,18 @@ export function EscrowPanel({
               custodyCommitment,
               secrets.payeeClaimSecret,
             ).toString(),
+          payeeDisputeCommitment:
+            computePayeeDisputeCommitment(
+              custodyCommitment,
+              secrets.payeeDisputeSecret,
+            ).toString(),
+          payeeRefundConsentCommitment:
+            computePayeeRefundConsentCommitment(
+              custodyCommitment,
+              secrets.payeeRefundConsentSecret,
+            ).toString(),
+          fulfillmentChainHead:
+            secrets.fulfillmentChainHead.toString(),
           payeeCertificateCommitment:
             computeCertificateClaimCommitment(
               custodyCommitment,
@@ -1472,6 +1601,21 @@ export function EscrowPanel({
     const refundCommitment = toBigInt(
       createAction.refundCommitment,
     );
+    const payerConfirmationCommitment =
+      toBigInt(
+        createAction
+          .payerConfirmationCommitment,
+      );
+    const payerDisputeCommitment =
+      toBigInt(
+        createAction
+          .payerDisputeCommitment,
+      );
+    const revisionChainHead =
+      toBigInt(
+        createAction
+          .revisionChainHead,
+      );
     const payerCertificateCommitment =
       toBigInt(
         createAction
@@ -1481,6 +1625,21 @@ export function EscrowPanel({
       toBigInt(
         acceptAction
           .payeeClaimCommitment,
+      );
+    const payeeDisputeCommitment =
+      toBigInt(
+        acceptAction
+          .payeeDisputeCommitment,
+      );
+    const payeeRefundConsentCommitment =
+      toBigInt(
+        acceptAction
+          .payeeRefundConsentCommitment,
+      );
+    const fulfillmentChainHead =
+      toBigInt(
+        acceptAction
+          .fulfillmentChainHead,
       );
     const payeeCertificateCommitment =
       toBigInt(
@@ -1495,10 +1654,17 @@ export function EscrowPanel({
     if (
       !releaseAuthorizationCommitment ||
       !refundCommitment ||
+      !payerConfirmationCommitment ||
+      !payerDisputeCommitment ||
+      revisionChainHead === null ||
       !payerCertificateCommitment ||
       !payeeClaimCommitment ||
+      !payeeDisputeCommitment ||
+      !payeeRefundConsentCommitment ||
+      !fulfillmentChainHead ||
       !payeeCertificateCommitment ||
       !refundAfter ||
+      !settlementPlan ||
       !settlementAsset?.address
     ) {
       setError(
@@ -1550,9 +1716,29 @@ export function EscrowPanel({
             releaseAuthorizationCommitment,
             payeeClaimCommitment,
             refundCommitment,
+            payerConfirmationCommitment,
+            payerDisputeCommitment,
+            payeeDisputeCommitment,
+            payeeRefundConsentCommitment,
+            fulfillmentChainHead,
+            revisionChainHead,
             payerCertificateCommitment,
             payeeCertificateCommitment,
             refundAfter,
+            reviewWindow:
+              settlementPlan
+                .reviewWindowSeconds,
+            verificationPolicy:
+              verificationPolicyCode(
+                settlementPlan
+                  .verificationPolicy,
+              ),
+            fulfillmentRounds:
+              settlementPlan
+                .maxFulfillmentRounds,
+            revisionRounds:
+              settlementPlan
+                .maxRevisionRounds,
             token:
               settlementAsset.address,
             amount,
@@ -1621,6 +1807,9 @@ export function EscrowPanel({
         ?.releaseAuthorizationSecret ||
       role !== "payer" ||
       !custodyState ||
+      !custodyState.fulfillmentConfirmed ||
+      custodyState.revisionPending ||
+      custodyState.disputed ||
       settled ||
       releaseRecord
     ) {
@@ -2223,10 +2412,9 @@ export function EscrowPanel({
               <EscrowPriceBreakdown
                 amount={accepted.amount}
                 asset={accepted.asset}
-                feeBps={VINSS_FEES.rekber.bps}
               />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the {VINSS_FEES.rekber.percent}% VINSS fee and locks it in the Escrow contract.
+                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the current on-chain VINSS service fee and locks it in the Escrow contract.
               </p>
               <button
                 type="button"
@@ -2304,7 +2492,13 @@ export function EscrowPanel({
               <button
                 type="button"
                 onClick={handleAuthorizeRelease}
-                disabled={busy || !localSecrets}
+                disabled={
+                  busy ||
+                  !localSecrets ||
+                  !custodyState?.fulfillmentConfirmed ||
+                  custodyState.revisionPending ||
+                  custodyState.disputed
+                }
                 className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
               >
                 {busy
@@ -2430,7 +2624,7 @@ export function EscrowPanel({
 
               {!released && (
                 <p className="mt-3 text-[9px] leading-relaxed text-paper/30">
-                  The {VINSS_FEES.rekber.percent}% VINSS fee paid during funding is not part of the principal refund.
+                  The VINSS service fee paid during funding is non-refundable and is not part of the principal refund.
                 </p>
               )}
 

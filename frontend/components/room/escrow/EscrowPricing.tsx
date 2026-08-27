@@ -2,11 +2,15 @@
 
 import {
   useEffect,
-  useMemo,
   useState,
 } from "react";
-import { quoteVinssFee } from "@/lib/agent";
-import { VINSS_FEES } from "@/lib/fees";
+import {
+  quoteRekberFee,
+} from "@/lib/starknet/feePolicy";
+import {
+  parseSettlementAmount,
+  resolveSettlementAsset,
+} from "@/lib/deal-room/escrow";
 
 type SupportedPriceAsset =
   | "STRK"
@@ -43,16 +47,27 @@ function normalizeAsset(
     : null;
 }
 
-function formatToken(
-  value: number,
-  asset: string,
+function formatBaseUnits(
+  value: bigint,
+  decimals: number,
 ): string {
-  return `${value.toLocaleString(
-    "en-US",
-    {
-      maximumFractionDigits: 6,
-    },
-  )} ${asset}`;
+  const base =
+    10n ** BigInt(decimals);
+  const whole = value / base;
+  const remainder =
+    value % base;
+
+  if (remainder === 0n) {
+    return whole.toString();
+  }
+
+  const fraction =
+    remainder
+      .toString()
+      .padStart(decimals, "0")
+      .replace(/0+$/, "");
+
+  return `${whole}.${fraction}`;
 }
 
 export function formatUsd(
@@ -207,23 +222,26 @@ function PriceLine({
   asset,
   usdPrice,
 }: {
-  tokenValue: number;
+  tokenValue: string;
   asset: string;
   usdPrice: number | null;
 }) {
+  const numericValue =
+    Number(tokenValue);
+  const canEstimateUsd =
+    usdPrice !== null &&
+    Number.isFinite(numericValue);
+
   return (
     <div className="text-right">
       <p className="text-xs font-medium text-paper/78">
-        {formatToken(
-          tokenValue,
-          asset,
-        )}
+        {tokenValue} {asset}
       </p>
-      {usdPrice !== null && (
+      {canEstimateUsd && (
         <p className="mt-0.5 text-[9px] text-paper/34">
           ≈{" "}
           {formatUsd(
-            tokenValue * usdPrice,
+            numericValue * usdPrice,
           )}
         </p>
       )}
@@ -311,20 +329,18 @@ export function EscrowAgreedAmount({
 export function EscrowPriceBreakdown({
   amount,
   asset,
-  feeBps = VINSS_FEES.rekber.bps,
 }: {
   amount: string;
   asset: string;
-  feeBps?: number;
 }) {
-  const quote = useMemo(
-    () =>
-      quoteVinssFee(
-        amount,
-        feeBps,
-      ),
-    [amount, feeBps],
-  );
+  const settlementAsset =
+    resolveSettlementAsset(asset);
+  const [feeBaseUnits, setFeeBaseUnits] =
+    useState<bigint | null>(null);
+  const [quoteLoading, setQuoteLoading] =
+    useState(false);
+  const [quoteError, setQuoteError] =
+    useState(false);
   const {
     price,
     loading,
@@ -332,7 +348,94 @@ export function EscrowPriceBreakdown({
     supported,
   } = useUsdPrice(asset);
 
-  if (!quote) return null;
+  let principalBaseUnits:
+    | bigint
+    | null = null;
+
+  if (settlementAsset) {
+    try {
+      principalBaseUnits =
+        parseSettlementAmount(
+          amount,
+          settlementAsset.decimals,
+        );
+    } catch {
+      principalBaseUnits = null;
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setFeeBaseUnits(null);
+    setQuoteError(false);
+
+    if (
+      !settlementAsset ||
+      principalBaseUnits === null
+    ) {
+      setQuoteLoading(false);
+      return;
+    }
+
+    setQuoteLoading(true);
+
+    void quoteRekberFee(
+      settlementAsset.address,
+      principalBaseUnits,
+    )
+      .then((quote) => {
+        if (!cancelled) {
+          setFeeBaseUnits(quote);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQuoteError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setQuoteLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    amount,
+    settlementAsset?.address,
+    settlementAsset?.decimals,
+  ]);
+
+  if (
+    !settlementAsset ||
+    principalBaseUnits === null
+  ) {
+    return null;
+  }
+
+  const principalToken =
+    formatBaseUnits(
+      principalBaseUnits,
+      settlementAsset.decimals,
+    );
+  const feeToken =
+    feeBaseUnits === null
+      ? null
+      : formatBaseUnits(
+          feeBaseUnits,
+          settlementAsset.decimals,
+        );
+  const totalToken =
+    feeBaseUnits === null
+      ? null
+      : formatBaseUnits(
+          principalBaseUnits +
+            feeBaseUnits,
+          settlementAsset.decimals,
+        );
 
   return (
     <div className="rounded-xl bg-paper/[0.025] p-4 ring-1 ring-wire/55">
@@ -340,11 +443,9 @@ export function EscrowPriceBreakdown({
         <p className="text-[9px] uppercase tracking-[0.13em] text-paper/34">
           Price breakdown
         </p>
-        {supported && (
-          <span className="text-[8px] uppercase tracking-[0.1em] text-paper/22">
-            USD estimate
-          </span>
-        )}
+        <span className="text-[8px] uppercase tracking-[0.1em] text-signal/60">
+          On-chain quote
+        </span>
       </div>
 
       <div className="mt-3 divide-y divide-wire/40">
@@ -353,9 +454,7 @@ export function EscrowPriceBreakdown({
             Principal amount
           </span>
           <PriceLine
-            tokenValue={
-              quote.amount
-            }
+            tokenValue={principalToken}
             asset={asset}
             usdPrice={price}
           />
@@ -363,67 +462,86 @@ export function EscrowPriceBreakdown({
 
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-xs text-paper/48">
-            VINSS service fee ·{" "}
-            {quote.feeBps / 100}%
+            VINSS service fee
           </span>
-          <PriceLine
-            tokenValue={
-              quote.fee
-            }
-            asset={asset}
-            usdPrice={price}
-          />
+          {feeToken !== null ? (
+            <PriceLine
+              tokenValue={feeToken}
+              asset={asset}
+              usdPrice={price}
+            />
+          ) : (
+            <span className="text-[10px] text-paper/32">
+              {quoteLoading
+                ? "Reading Rekber…"
+                : "Unavailable"}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-sm font-medium text-paper/75">
             Total secured
           </span>
-          <div className="text-right">
-            <p className="text-sm font-semibold text-paper">
-              {formatToken(
-                quote.total,
-                asset,
-              )}
-            </p>
-            {price !== null && (
-              <p className="mt-0.5 text-[10px] font-medium text-signal">
-                ≈{" "}
-                {formatUsd(
-                  quote.total *
-                    price,
-                )}
+          {totalToken !== null ? (
+            <div className="text-right">
+              <p className="text-sm font-semibold text-paper">
+                {totalToken} {asset}
               </p>
-            )}
-          </div>
+              {price !== null &&
+                Number.isFinite(
+                  Number(totalToken),
+                ) && (
+                  <p className="mt-0.5 text-[10px] font-medium text-signal">
+                    ≈{" "}
+                    {formatUsd(
+                      Number(totalToken) *
+                        price,
+                    )}
+                  </p>
+                )}
+            </div>
+          ) : (
+            <span className="text-[10px] text-paper/32">
+              —
+            </span>
+          )}
         </div>
       </div>
 
       <div className="mt-3 rounded-lg bg-paper/[0.025] px-3 py-2.5 text-[9px] leading-relaxed text-paper/30">
-        {supported ? (
-          price !== null ? (
-            <>
-              Exchange rate: 1{" "}
-              {asset.toUpperCase()} ≈{" "}
-              {formatUsd(price)}
-              {stale
-                ? " · using last known price."
-                : ". Price may change before confirmation."}
-            </>
-          ) : loading ? (
-            "Fetching latest market price…"
-          ) : (
-            "USD estimate is temporarily unavailable. Escrow can still continue normally."
-          )
+        {quoteError ? (
+          "The Rekber contract quote is unavailable. Funding stays blocked until the current on-chain fee can be read."
+        ) : quoteLoading ? (
+          "Reading the current VINSS service fee directly from Rekber…"
         ) : (
-          "USD estimate is available for STRK and USDC settlement assets."
+          <>
+            The VINSS fee shown above comes from the Rekber contract for this token and principal, including its configured pricing floors.
+          </>
         )}
       </div>
 
-      <p className="mt-2 text-[8px] leading-relaxed text-paper/22">
-        Privacy Pool and network fees are not included here.
-        Ready X shows those fees before confirmation.
-      </p>
+      <div className="mt-2 text-[8px] leading-relaxed text-paper/22">
+        {supported ? (
+          price !== null ? (
+            <>
+              Market estimate: 1{" "}
+              {asset.toUpperCase()} ≈{" "}
+              {formatUsd(price)}
+              {stale
+                ? " · last known price."
+                : "."}
+            </>
+          ) : loading ? (
+            "Fetching market estimate…"
+          ) : (
+            "USD market estimate unavailable."
+          )
+        ) : (
+          "USD estimate is available for STRK and USDC."
+        )}
+        {" "}Privacy Pool and network fees are separate and are shown by Ready X before confirmation.
+      </div>
     </div>
   );
 }

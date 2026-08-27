@@ -11,16 +11,62 @@ on:
         required: true
         type: choice
         options:
+          - VinssFeePolicy
           - VinssMessageHelper
           - VinssInvite
           - VinssOfferHelper
           - VinssPrivateEscrowHelper
           - VinssEscrowRekber
           - VinssSettlementCertificate
-      escrow_rekber_address:
-        description: "Required only when deploying VinssSettlementCertificate"
+
+      fee_policy_address:
+        description: "Required for Message / Invite / Offer / Rekber"
         required: false
+        default: ""
         type: string
+
+      sponsor_cost_strk_wei:
+        description: "FeePolicy sponsor cost per sponsored action, in STRK wei"
+        required: false
+        default: "2000000000000000000"
+        type: string
+
+      dispute_resolver_address:
+        description: "Rekber dispute resolver; blank uses Sepolia deployer"
+        required: false
+        default: ""
+        type: string
+
+      external_verifier_address:
+        description: "Optional Rekber external verifier; 0x0 disables external verification"
+        required: false
+        default: "0x0"
+        type: string
+
+      minimum_fee_usd_micros:
+        description: "Rekber minimum service fee in USD micros"
+        required: false
+        default: "750000"
+        type: string
+
+      max_oracle_age:
+        description: "Maximum accepted Pragma price age, seconds"
+        required: false
+        default: "3600"
+        type: string
+
+      min_oracle_sources:
+        description: "Minimum Pragma sources required on Sepolia"
+        required: false
+        default: "1"
+        type: string
+
+      escrow_rekber_address:
+        description: "Required only for VinssSettlementCertificate"
+        required: false
+        default: ""
+        type: string
+
       certificate_base_uri:
         description: "Public certificate metadata base URI"
         required: false
@@ -30,26 +76,165 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     defaults:
       run:
         working-directory: contracts
+        shell: bash
 
     env:
       STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
       ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
       PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
+
       PRIVACY_POOL_ADDRESS: "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91"
+
+      # Starknet STRK system token used by STRK20 / OpenNote revenue.
+      STRK_TOKEN_ADDRESS: "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
       OPEN_NOTE_TOKEN_ADDRESS: "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
+
+      # Pragma Sepolia production oracle.
+      PRAGMA_ORACLE_ADDRESS: "0x36031daa264c24520b11d93af622c848b2499b66b41d611bac95e13cfca131a"
+
+      # Pragma pair ids: UTF-8 felt encodings of STRK/USD and USDC/USD.
+      STRK_USD_PAIR: "6004514686061859652"
+      USDC_USD_PAIR: "6148332971638477636"
+
+      # Official Pragma-listed Starknet testnet USDC.
+      USDC_TOKEN_ADDRESS: "0x001d5b64feabc8ac7c839753994f469704c6fabdd45c8fe6d26ed57b5eb79057"
+
+      FEE_POLICY_ADDRESS: ${{ inputs.fee_policy_address }}
+      SPONSOR_COST_STRK_WEI: ${{ inputs.sponsor_cost_strk_wei }}
+      DISPUTE_RESOLVER_ADDRESS: ${{ inputs.dispute_resolver_address }}
+      EXTERNAL_VERIFIER_ADDRESS: ${{ inputs.external_verifier_address }}
+      MINIMUM_FEE_USD_MICROS: ${{ inputs.minimum_fee_usd_micros }}
+      MAX_ORACLE_AGE: ${{ inputs.max_oracle_age }}
+      MIN_ORACLE_SOURCES: ${{ inputs.min_oracle_sources }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify Starknet Sepolia RPC
+        run: |
+          set -euo pipefail
+          test -n "$STARKNET_RPC_URL"
+
+          CHAIN_ID="$(
+            curl --fail --silent --show-error \
+              -H 'content-type: application/json' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"starknet_chainId","params":[]}' \
+              "$STARKNET_RPC_URL" \
+            | jq -r '.result // empty'
+          )"
+
+          if [ "$CHAIN_ID" != "0x534e5f5345504f4c4941" ]; then
+            echo "Refusing deployment: RPC is not Starknet Sepolia."
+            echo "chain_id=$CHAIN_ID"
+            exit 1
+          fi
+
+          echo "RPC verified: SN_SEPOLIA."
+
+      - name: Validate deployment inputs
+        env:
+          CONTRACT_NAME: ${{ inputs.contract }}
+          ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
+          CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
+        run: |
+          set -euo pipefail
+
+          valid_address() {
+            [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
+          }
+
+          valid_uint() {
+            [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" != "0" ]
+          }
+
+          valid_address "$ACCOUNT_ADDRESS" || {
+            echo "Sepolia deployer address is missing or invalid."
+            exit 1
+          }
+
+          valid_address "$PRIVACY_POOL_ADDRESS" || exit 1
+          valid_address "$STRK_TOKEN_ADDRESS" || exit 1
+          valid_address "$OPEN_NOTE_TOKEN_ADDRESS" || exit 1
+          valid_address "$PRAGMA_ORACLE_ADDRESS" || exit 1
+          valid_address "$USDC_TOKEN_ADDRESS" || exit 1
+
+          valid_uint "$SPONSOR_COST_STRK_WEI" || {
+            echo "sponsor_cost_strk_wei must be a positive integer."
+            exit 1
+          }
+
+          valid_uint "$MAX_ORACLE_AGE" || {
+            echo "max_oracle_age must be a positive integer."
+            exit 1
+          }
+
+          valid_uint "$MIN_ORACLE_SOURCES" || {
+            echo "min_oracle_sources must be a positive integer."
+            exit 1
+          }
+
+          valid_uint "$MINIMUM_FEE_USD_MICROS" || {
+            echo "minimum_fee_usd_micros must be a positive integer."
+            exit 1
+          }
+
+          case "$CONTRACT_NAME" in
+            VinssFeePolicy)
+              ;;
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              valid_address "$FEE_POLICY_ADDRESS" || {
+                echo "A valid fee_policy_address is required for $CONTRACT_NAME."
+                exit 1
+              }
+              ;;
+            VinssPrivateEscrowHelper)
+              ;;
+            VinssEscrowRekber)
+              valid_address "$FEE_POLICY_ADDRESS" || {
+                echo "A valid fee_policy_address is required for Rekber."
+                exit 1
+              }
+
+              if [ -n "$DISPUTE_RESOLVER_ADDRESS" ]; then
+                valid_address "$DISPUTE_RESOLVER_ADDRESS" || {
+                  echo "dispute_resolver_address is invalid."
+                  exit 1
+                }
+              fi
+
+              valid_address "$EXTERNAL_VERIFIER_ADDRESS" || {
+                echo "external_verifier_address is invalid."
+                exit 1
+              }
+              ;;
+            VinssSettlementCertificate)
+              valid_address "$ESCROW_REKBER_ADDRESS" || {
+                echo "A valid escrow_rekber_address is required for the certificate."
+                exit 1
+              }
+
+              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
+                echo "certificate_base_uri must be HTTPS and end with /."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Unsupported contract: $CONTRACT_NAME"
+              exit 1
+              ;;
+          esac
+
       - name: Setup Scarb
         uses: software-mansion/setup-scarb@v1
         with:
-          scarb-version: 2.17.0
+          scarb-version: 2.20.1
+          cache: false
 
       - name: Setup Starknet Foundry
         uses: foundry-rs/setup-snfoundry@v3
@@ -72,7 +257,7 @@ jobs:
           ESCROW_REKBER_ADDRESS: ${{ inputs.escrow_rekber_address }}
           CERTIFICATE_BASE_URI: ${{ inputs.certificate_base_uri }}
         run: |
-          set -e
+          set -euo pipefail
 
           echo "class_hash=" >> "$GITHUB_OUTPUT"
           echo "contract_address=" >> "$GITHUB_OUTPUT"
@@ -81,6 +266,11 @@ jobs:
           test -n "$STARKNET_RPC_URL"
           test -n "$ACCOUNT_ADDRESS"
           test -n "$PRIVATE_KEY"
+
+          RESOLVER="$DISPUTE_RESOLVER_ADDRESS"
+          if [ -z "$RESOLVER" ]; then
+            RESOLVER="$ACCOUNT_ADDRESS"
+          fi
 
           sncast account import \
             --url "$STARKNET_RPC_URL" \
@@ -92,52 +282,54 @@ jobs:
 
           echo "=== DECLARE $CONTRACT_NAME ==="
 
-          OUTPUT=$(sncast \
-            --account vinss-deployer \
-            --wait \
-            --wait-timeout 180 \
-            declare \
-            --url "$STARKNET_RPC_URL" \
-            --contract-name "$CONTRACT_NAME" 2>&1) || true
+          OUTPUT="$(
+            sncast \
+              --account vinss-deployer \
+              --wait \
+              --wait-timeout 180 \
+              declare \
+              --url "$STARKNET_RPC_URL" \
+              --contract-name "$CONTRACT_NAME" 2>&1
+          )" || true
 
           echo "$OUTPUT" | tee declare-output.txt
 
-          CLASS_HASH=$(echo "$OUTPUT" \
-            | grep -i "Class Hash:" \
-            | awk '{print $3}' \
-            | head -1)
+          CLASS_HASH="$(
+            echo "$OUTPUT" \
+              | grep -i "Class Hash:" \
+              | awk '{print $3}' \
+              | tail -1
+          )"
 
           if [ -z "$CLASS_HASH" ]; then
-            CLASS_HASH=$(echo "$OUTPUT" \
-              | grep -oE '0x[0-9a-fA-F]{50,66}' \
-              | head -1)
+            CLASS_HASH="$(
+              echo "$OUTPUT" \
+                | grep -oE '0x[0-9a-fA-F]{50,66}' \
+                | head -1
+            )"
           fi
 
           if [ -z "$CLASS_HASH" ]; then
-            echo "Could not determine class hash"
+            echo "Could not determine class hash."
             exit 1
           fi
 
           echo "class_hash=$CLASS_HASH" >> "$GITHUB_OUTPUT"
 
           case "$CONTRACT_NAME" in
-            VinssMessageHelper|VinssOfferHelper|VinssInvite)
-              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
+            VinssFeePolicy)
+              DEPLOY_ARGS="$ACCOUNT_ADDRESS, $PRAGMA_ORACLE_ADDRESS, $STRK_USD_PAIR, $SPONSOR_COST_STRK_WEI, $MAX_ORACLE_AGE, $MIN_ORACLE_SOURCES"
               ;;
-            VinssPrivateEscrowHelper|VinssEscrowRekber)
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS, $FEE_POLICY_ADDRESS"
+              ;;
+            VinssPrivateEscrowHelper)
               DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
               ;;
+            VinssEscrowRekber)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $PRAGMA_ORACLE_ADDRESS, $FEE_POLICY_ADDRESS, $RESOLVER, $EXTERNAL_VERIFIER_ADDRESS, $STRK_TOKEN_ADDRESS, $USDC_TOKEN_ADDRESS, $STRK_USD_PAIR, $USDC_USD_PAIR, $MINIMUM_FEE_USD_MICROS, $MAX_ORACLE_AGE, $MIN_ORACLE_SOURCES"
+              ;;
             VinssSettlementCertificate)
-              if ! [[ "$ESCROW_REKBER_ADDRESS" =~ ^0x[0-9a-fA-F]{1,64}$ ]]; then
-                echo "A valid escrow_rekber_address is required for the certificate contract"
-                exit 1
-              fi
-
-              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
-                echo "certificate_base_uri must be an HTTPS URL ending with /"
-                exit 1
-              fi
-
               DEPLOY_ARGS="$ESCROW_REKBER_ADDRESS, \"$CERTIFICATE_BASE_URI\""
               ;;
             *)
@@ -147,35 +339,44 @@ jobs:
           esac
 
           echo "=== DEPLOY $CONTRACT_NAME ==="
+          echo "constructor arguments prepared"
 
-          DEPLOY_OUTPUT=$(sncast \
-            --account vinss-deployer \
-            --wait \
-            --wait-timeout 180 \
-            deploy \
-            --url "$STARKNET_RPC_URL" \
-            --class-hash "$CLASS_HASH" \
-            --arguments "$DEPLOY_ARGS" 2>&1) || true
+          DEPLOY_OUTPUT="$(
+            sncast \
+              --account vinss-deployer \
+              --wait \
+              --wait-timeout 180 \
+              deploy \
+              --url "$STARKNET_RPC_URL" \
+              --class-hash "$CLASS_HASH" \
+              --arguments "$DEPLOY_ARGS" 2>&1
+          )" || true
 
           echo "$DEPLOY_OUTPUT" | tee deploy-output.txt
 
-          CONTRACT_ADDRESS=$(echo "$DEPLOY_OUTPUT" \
-            | grep -i "Contract Address:" \
-            | awk '{print $3}' \
-            | tail -1)
+          CONTRACT_ADDRESS="$(
+            echo "$DEPLOY_OUTPUT" \
+              | grep -i "Contract Address:" \
+              | awk '{print $3}' \
+              | tail -1
+          )"
 
-          TX_HASH=$(echo "$DEPLOY_OUTPUT" \
-            | grep -i "Transaction Hash:" \
-            | awk '{print $3}' \
-            | tail -1)
+          TX_HASH="$(
+            echo "$DEPLOY_OUTPUT" \
+              | grep -i "Transaction Hash:" \
+              | awk '{print $3}' \
+              | tail -1
+          )"
 
           if [ -z "$CONTRACT_ADDRESS" ] || [ -z "$TX_HASH" ]; then
-            echo "Deployment did not produce contract address / tx hash"
+            echo "Deployment did not produce contract address / tx hash."
             exit 1
           fi
 
-          echo "contract_address=$CONTRACT_ADDRESS" >> "$GITHUB_OUTPUT"
-          echo "transaction_hash=$TX_HASH" >> "$GITHUB_OUTPUT"
+          {
+            echo "contract_address=$CONTRACT_ADDRESS"
+            echo "transaction_hash=$TX_HASH"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Markdown report
         if: always()

@@ -8,7 +8,7 @@ import {
   shortStringToFelt,
   toFelt,
 } from "@/lib/privacy/envelope";
-import { VINSS_FEES } from "@/lib/fees";
+import { quoteRekberFee } from "@/lib/starknet/feePolicy";
 
 const RELEASE_AUTH_DOMAIN =
   "VINSS_RELEASE_AUTH";
@@ -16,6 +16,18 @@ const PAYEE_CLAIM_DOMAIN =
   "VINSS_PAYEE_CLAIM";
 const REFUND_DOMAIN =
   "VINSS_ESCROW_REFUND";
+const PAYER_CONFIRM_DOMAIN =
+  "VINSS_PAYER_CONFIRM";
+const PAYER_DISPUTE_DOMAIN =
+  "VINSS_PAYER_DISPUTE";
+const PAYEE_DISPUTE_DOMAIN =
+  "VINSS_PAYEE_DISPUTE";
+const PAYEE_REFUND_CONSENT_DOMAIN =
+  "VINSS_REFUND_CONSENT";
+const FULFILLMENT_CHAIN_DOMAIN =
+  "VINSS_FULFILL_CHAIN";
+const REVISION_CHAIN_DOMAIN =
+  "VINSS_REVISION_CHAIN";
 const CERTIFICATE_CLAIM_DOMAIN =
   "VINSS_CERT_CLAIM";
 const CERTIFICATE_TOKEN_DOMAIN =
@@ -28,11 +40,19 @@ export type SettlementRole =
 export interface PayerSettlementSecrets {
   releaseAuthorizationSecret: bigint;
   refundSecret: bigint;
+  payerConfirmationSecret: bigint;
+  payerDisputeSecret: bigint;
+  revisionChainHead: bigint;
+  revisionChainSecrets: bigint[];
   certificateSecret: bigint;
 }
 
 export interface PayeeSettlementSecrets {
   payeeClaimSecret: bigint;
+  payeeDisputeSecret: bigint;
+  payeeRefundConsentSecret: bigint;
+  fulfillmentChainHead: bigint;
+  fulfillmentChainSecrets: bigint[];
   certificateSecret: bigint;
 }
 
@@ -41,14 +61,33 @@ export interface RekberCustodyState {
   releaseAuthorizationCommitment: bigint;
   payeeClaimCommitment: bigint;
   refundCommitment: bigint;
+  payerConfirmationCommitment: bigint;
+  payerDisputeCommitment: bigint;
+  payeeDisputeCommitment: bigint;
+  payeeRefundConsentCommitment: bigint;
+  fulfillmentChainHead: bigint;
+  revisionChainHead: bigint;
   payerCertificateCommitment: bigint;
   payeeCertificateCommitment: bigint;
   token: string;
   amount: bigint;
+  feeAmount: bigint;
   refundAfter: number;
+  reviewWindow: number;
+  reviewDeadline: number;
+  revisionDeadline: number;
+  verificationPolicy: number;
+  fulfillmentRoundsRemaining: number;
+  revisionRoundsRemaining: number;
+  fulfillmentSubmitted: boolean;
+  fulfillmentConfirmed: boolean;
+  revisionPending: boolean;
+  disputed: boolean;
+  resolutionAuthorized: boolean;
   consumed: boolean;
   refunded: boolean;
   createdAt: number;
+  fulfilledAt: number;
   settledAt: number;
 }
 
@@ -100,19 +139,110 @@ function poseidon(
   );
 }
 
-export function generatePayerSettlementSecrets(): PayerSettlementSecrets {
+function generateSecretChain(
+  custodyCommitment: bigint,
+  rounds: number,
+  domain: string,
+): {
+  head: bigint;
+  secrets: bigint[];
+} {
+  if (!Number.isInteger(rounds) || rounds < 0 || rounds > 8) {
+    throw new Error("Invalid Rekber secret-chain round count.");
+  }
+
+  if (rounds === 0) {
+    return {
+      head: 0n,
+      secrets: [],
+    };
+  }
+
+  const secrets =
+    new Array<bigint>(rounds);
+
+  secrets[rounds - 1] =
+    randomFelt();
+
+  for (
+    let index = rounds - 2;
+    index >= 0;
+    index--
+  ) {
+    secrets[index] = poseidon(
+      domain,
+      [
+        custodyCommitment,
+        secrets[index + 1]!,
+      ],
+    );
+  }
+
   return {
-    releaseAuthorizationSecret:
-      randomFelt(),
-    refundSecret: randomFelt(),
-    certificateSecret: randomFelt(),
+    head: poseidon(
+      domain,
+      [
+        custodyCommitment,
+        secrets[0]!,
+      ],
+    ),
+    secrets,
   };
 }
 
-export function generatePayeeSettlementSecrets(): PayeeSettlementSecrets {
+export function generatePayerSettlementSecrets(
+  custodyCommitment: bigint,
+  revisionRounds: number,
+): PayerSettlementSecrets {
+  const revisionChain =
+    generateSecretChain(
+      custodyCommitment,
+      revisionRounds,
+      REVISION_CHAIN_DOMAIN,
+    );
+
   return {
-    payeeClaimSecret: randomFelt(),
-    certificateSecret: randomFelt(),
+    releaseAuthorizationSecret:
+      randomFelt(),
+    refundSecret:
+      randomFelt(),
+    payerConfirmationSecret:
+      randomFelt(),
+    payerDisputeSecret:
+      randomFelt(),
+    revisionChainHead:
+      revisionChain.head,
+    revisionChainSecrets:
+      revisionChain.secrets,
+    certificateSecret:
+      randomFelt(),
+  };
+}
+
+export function generatePayeeSettlementSecrets(
+  custodyCommitment: bigint,
+  fulfillmentRounds: number,
+): PayeeSettlementSecrets {
+  const fulfillmentChain =
+    generateSecretChain(
+      custodyCommitment,
+      fulfillmentRounds,
+      FULFILLMENT_CHAIN_DOMAIN,
+    );
+
+  return {
+    payeeClaimSecret:
+      randomFelt(),
+    payeeDisputeSecret:
+      randomFelt(),
+    payeeRefundConsentSecret:
+      randomFelt(),
+    fulfillmentChainHead:
+      fulfillmentChain.head,
+    fulfillmentChainSecrets:
+      fulfillmentChain.secrets,
+    certificateSecret:
+      randomFelt(),
   };
 }
 
@@ -146,6 +276,46 @@ export function computeRekberRefundCommitment(
 ): bigint {
   return poseidon(
     REFUND_DOMAIN,
+    [custodyCommitment, secret],
+  );
+}
+
+export function computePayerConfirmationCommitment(
+  custodyCommitment: bigint,
+  secret: bigint,
+): bigint {
+  return poseidon(
+    PAYER_CONFIRM_DOMAIN,
+    [custodyCommitment, secret],
+  );
+}
+
+export function computePayerDisputeCommitment(
+  custodyCommitment: bigint,
+  secret: bigint,
+): bigint {
+  return poseidon(
+    PAYER_DISPUTE_DOMAIN,
+    [custodyCommitment, secret],
+  );
+}
+
+export function computePayeeDisputeCommitment(
+  custodyCommitment: bigint,
+  secret: bigint,
+): bigint {
+  return poseidon(
+    PAYEE_DISPUTE_DOMAIN,
+    [custodyCommitment, secret],
+  );
+}
+
+export function computePayeeRefundConsentCommitment(
+  custodyCommitment: bigint,
+  secret: bigint,
+): bigint {
+  return poseidon(
+    PAYEE_REFUND_CONSENT_DOMAIN,
     [custodyCommitment, secret],
   );
 }
@@ -197,9 +367,19 @@ export async function depositEscrow(
     releaseAuthorizationCommitment: bigint;
     payeeClaimCommitment: bigint;
     refundCommitment: bigint;
+    payerConfirmationCommitment: bigint;
+    payerDisputeCommitment: bigint;
+    payeeDisputeCommitment: bigint;
+    payeeRefundConsentCommitment: bigint;
+    fulfillmentChainHead: bigint;
+    revisionChainHead: bigint;
     payerCertificateCommitment: bigint;
     payeeCertificateCommitment: bigint;
     refundAfter: number;
+    reviewWindow: number;
+    verificationPolicy: number;
+    fulfillmentRounds: number;
+    revisionRounds: number;
     token: string;
     amount: bigint;
   },
@@ -218,16 +398,16 @@ export async function depositEscrow(
 
   const treasury =
     num.toHex(rawTreasury);
-  const token = num.toHex(params.token);
-  const fee =
-    params.amount /
-    BigInt(VINSS_FEES.rekber.divisor);
+  const token =
+    num.toHex(params.token);
 
-  if (fee <= 0n) {
-    throw new Error(
-      `Amount is too small for the ${VINSS_FEES.rekber.percent}% Rekber fee.`,
+  // Rekber requires an exact quote. Fetch it immediately before Ready X
+  // constructs the funding transaction.
+  const fee =
+    await quoteRekberFee(
+      token,
+      params.amount,
     );
-  }
 
   const payload = [
     toFelt(1),
@@ -238,14 +418,33 @@ export async function depositEscrow(
     toFelt(params.payeeClaimCommitment),
     toFelt(params.refundCommitment),
     toFelt(
+      params.payerConfirmationCommitment,
+    ),
+    toFelt(
+      params.payerDisputeCommitment,
+    ),
+    toFelt(
+      params.payeeDisputeCommitment,
+    ),
+    toFelt(
+      params.payeeRefundConsentCommitment,
+    ),
+    toFelt(params.fulfillmentChainHead),
+    toFelt(params.revisionChainHead),
+    toFelt(
       params.payerCertificateCommitment,
     ),
     toFelt(
       params.payeeCertificateCommitment,
     ),
     toFelt(params.refundAfter),
+    toFelt(params.reviewWindow),
+    toFelt(params.verificationPolicy),
+    toFelt(params.fulfillmentRounds),
+    toFelt(params.revisionRounds),
     token,
     toFelt(params.amount),
+    toFelt(fee),
     "${openNoteIds[0]}",
   ];
 
@@ -396,42 +595,70 @@ export async function getRekberCustody(
       });
 
     return {
-      custodyCommitment: BigInt(
-        result[0] ?? "0",
-      ),
+      custodyCommitment:
+        BigInt(result[0] ?? "0"),
       releaseAuthorizationCommitment:
         BigInt(result[1] ?? "0"),
-      payeeClaimCommitment: BigInt(
-        result[2] ?? "0",
-      ),
-      refundCommitment: BigInt(
-        result[3] ?? "0",
-      ),
-      payerCertificateCommitment:
+      payeeClaimCommitment:
+        BigInt(result[2] ?? "0"),
+      refundCommitment:
+        BigInt(result[3] ?? "0"),
+      payerConfirmationCommitment:
         BigInt(result[4] ?? "0"),
-      payeeCertificateCommitment:
+      payerDisputeCommitment:
         BigInt(result[5] ?? "0"),
-      token: num.toHex(
-        result[6] ?? "0",
-      ),
-      amount: BigInt(
-        result[7] ?? "0",
-      ),
-      refundAfter: Number(
+      payeeDisputeCommitment:
+        BigInt(result[6] ?? "0"),
+      payeeRefundConsentCommitment:
+        BigInt(result[7] ?? "0"),
+      fulfillmentChainHead:
         BigInt(result[8] ?? "0"),
-      ),
-      consumed:
-        BigInt(result[9] ?? "0") !==
-        0n,
-      refunded:
-        BigInt(result[10] ?? "0") !==
-        0n,
-      createdAt: Number(
+      revisionChainHead:
+        BigInt(result[9] ?? "0"),
+      payerCertificateCommitment:
+        BigInt(result[10] ?? "0"),
+      payeeCertificateCommitment:
         BigInt(result[11] ?? "0"),
-      ),
-      settledAt: Number(
-        BigInt(result[12] ?? "0"),
-      ),
+      token:
+        num.toHex(result[12] ?? "0"),
+      amount:
+        BigInt(result[13] ?? "0"),
+      feeAmount:
+        BigInt(result[14] ?? "0"),
+      refundAfter:
+        Number(BigInt(result[15] ?? "0")),
+      reviewWindow:
+        Number(BigInt(result[16] ?? "0")),
+      reviewDeadline:
+        Number(BigInt(result[17] ?? "0")),
+      revisionDeadline:
+        Number(BigInt(result[18] ?? "0")),
+      verificationPolicy:
+        Number(BigInt(result[19] ?? "0")),
+      fulfillmentRoundsRemaining:
+        Number(BigInt(result[20] ?? "0")),
+      revisionRoundsRemaining:
+        Number(BigInt(result[21] ?? "0")),
+      fulfillmentSubmitted:
+        BigInt(result[27] ?? "0") !== 0n,
+      fulfillmentConfirmed:
+        BigInt(result[28] ?? "0") !== 0n,
+      revisionPending:
+        BigInt(result[29] ?? "0") !== 0n,
+      disputed:
+        BigInt(result[30] ?? "0") !== 0n,
+      resolutionAuthorized:
+        BigInt(result[31] ?? "0") !== 0n,
+      consumed:
+        BigInt(result[34] ?? "0") !== 0n,
+      refunded:
+        BigInt(result[35] ?? "0") !== 0n,
+      createdAt:
+        Number(BigInt(result[36] ?? "0")),
+      fulfilledAt:
+        Number(BigInt(result[37] ?? "0")),
+      settledAt:
+        Number(BigInt(result[38] ?? "0")),
     };
   } catch {
     return null;

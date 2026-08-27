@@ -28,7 +28,7 @@ import {
 import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
-import { VINSS_FEES } from "@/lib/fees";
+import { quoteOfferFee } from "@/lib/starknet/feePolicy";
 
 const OFFER_ENVELOPE_VERSION = 2;
 const OFFER_COMMITMENT_DOMAIN = "VINSS_OFFER_COMMIT_V2";
@@ -162,13 +162,16 @@ export async function sendOfferAction(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // VinssOfferHelper returns one OpenNoteDeposit worth 10 STRK.
+  // Fetch the helper's authoritative FeePolicy quote immediately before
+  // Ready X builds the transaction. OfferHelper validates quoted_fee on-chain.
+  const quotedFee = await quoteOfferFee();
+
   // STRK20 invokes privacy_invoke itself, so no selector is prepended.
   const response = await account.strk20InvokeTransaction([
     {
       type: "withdraw",
       token: CONTRACTS.offerHelperOpenNoteToken,
-      amount: VINSS_FEES.offer.baseUnits,
+      amount: toFelt(quotedFee),
       recipient: CONTRACTS.offerHelper,
     },
     {
@@ -181,8 +184,9 @@ export async function sendOfferAction(
       type: "invoke",
       contract: CONTRACTS.offerHelper,
       calldata: [
-        toFelt(calldata.length + 1),
+        toFelt(calldata.length + 2),
         ...calldata,
+        toFelt(quotedFee),
         "${openNoteIds[0]}",
       ],
     },

@@ -205,7 +205,7 @@ export interface EscrowActionPayload {
   // Pairwise encryption provides confidentiality, while these SNIP-12 fields
   // prove which wallet authored the Rekber setup or acceptance. Signatures are
   // themselves encrypted inside the direct coordination payload.
-  coordinationVersion?: 2;
+  coordinationVersion?: 3;
   coordinationSignature?: string[];
 
   // Exact create/counter action whose terms became the accepted agreement.
@@ -234,6 +234,17 @@ export interface EscrowActionPayload {
   releaseAuthorizationCommitment?: string;
   payeeClaimCommitment?: string;
   refundCommitment?: string;
+
+  // Production Rekber lifecycle capabilities. These commitments are public
+  // only after funding; the preimages stay in encrypted local storage.
+  payerConfirmationCommitment?: string;
+  payerDisputeCommitment?: string;
+  payeeDisputeCommitment?: string;
+  payeeRefundConsentCommitment?: string;
+
+  // Heads of bounded one-way chains for repeat fulfillment/revision actions.
+  fulfillmentChainHead?: string;
+  revisionChainHead?: string;
 
   // Each party prepares an address-bound certificate claim before funding.
   // Claiming later is optional because ERC-721 ownership is public.

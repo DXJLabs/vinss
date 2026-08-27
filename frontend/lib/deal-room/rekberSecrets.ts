@@ -18,6 +18,15 @@ export interface StoredRekberSecrets {
   releaseAuthorizationSecret?: string;
   payeeClaimSecret?: string;
   refundSecret?: string;
+
+  payerConfirmationSecret?: string;
+  payerDisputeSecret?: string;
+  revisionChainSecrets?: string[];
+
+  payeeDisputeSecret?: string;
+  payeeRefundConsentSecret?: string;
+  fulfillmentChainSecrets?: string[];
+
   certificateSecret: string;
   savedAt: string;
 }
