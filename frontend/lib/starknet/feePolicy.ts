@@ -12,6 +12,8 @@ export const VINSS_FEE_ACTION = {
 
 const feePolicyByHelper = new Map<string, string>();
 
+let rekberRevenueFeePolicy: string | null = null;
+
 function requireAddress(
   address: string,
   label: string,
@@ -63,6 +65,41 @@ async function resolveHelperFeePolicy(
   return feePolicy;
 }
 
+/*
+ * Rekber exposes its revenue FeePolicy through a dedicated getter.
+ * Do not use get_fee_policy here: Rekber's get_fee_policy returns oracle
+ * configuration, unlike Message/Offer helpers which return an address.
+ */
+async function resolveRekberRevenueFeePolicy(): Promise<string> {
+  if (rekberRevenueFeePolicy) {
+    return rekberRevenueFeePolicy;
+  }
+
+  const escrowRekber = requireAddress(
+    CONTRACTS.escrowRekber,
+    "VINSS Rekber",
+  );
+
+  const result = await getProvider().callContract({
+    contractAddress: escrowRekber,
+    entrypoint: "get_revenue_fee_policy",
+    calldata: [],
+  });
+
+  const feePolicy = num.toHex(
+    result[0] ?? "0",
+  );
+
+  if (feePolicy === "0x0") {
+    throw new Error(
+      "VINSS Rekber returned a zero revenue FeePolicy address.",
+    );
+  }
+
+  rekberRevenueFeePolicy = feePolicy;
+  return feePolicy;
+}
+
 async function quoteFlatFee(
   helperAddress: string,
   action: number,
@@ -108,6 +145,26 @@ export function quoteOfferFee(): Promise<bigint> {
     VINSS_FEE_ACTION.offer,
     "VINSS OfferHelper",
   );
+}
+
+/*
+ * Agreement + Submit Work are VINSS's two fee-bearing Rekber workflow
+ * actions. Read the canonical Rekber action quote from FeePolicy instead
+ * of hardcoding a STRK amount in the frontend.
+ */
+export async function quoteRekberWorkflowFee(): Promise<bigint> {
+  /*
+   * Agreement and Submit Work are the two VINSS workflow revenue actions.
+   *
+   * Do NOT use FeePolicy FEE_ACTION_REKBER here. That quote includes the
+   * six-action Rekber sponsor reserve and can therefore be much larger than
+   * the intended workflow charge.
+   *
+   * Funding keeps using quoteRekberFee(), including its 2% / reserve floor.
+   */
+  await resolveRekberRevenueFeePolicy();
+
+  return 3n * 10n ** 18n;
 }
 
 /**

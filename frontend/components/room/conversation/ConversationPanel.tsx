@@ -30,6 +30,10 @@ import type {
   DealType,
   WorkReviewDecision,
 } from "@/types/deal-room";
+import type {
+  RekberWorkEvidencePacket,
+  RekberWorkReviewPacket,
+} from "@/lib/privacy/rekberEvidenceChannel";
 
 export type {
   ConversationEntry,
@@ -73,6 +77,14 @@ interface ConversationPanelProps {
   onLoadAttachment: (
     attachment: AttachmentRef,
   ) => Promise<Blob>;
+  onLoadWorkEvidence: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkEvidencePacket | null>;
+  onLoadWorkReview: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkReviewPacket | null>;
   onSubmitWork: (input: {
     custodyCommitment: string;
     dealType?: DealType;
@@ -130,6 +142,8 @@ export function ConversationPanel({
   onSendMessage,
   onSendAttachment,
   onLoadAttachment,
+  onLoadWorkEvidence,
+  onLoadWorkReview,
   onSubmitWork,
   onReviewWork,
   onOpenEscrowReview,
@@ -283,6 +297,12 @@ export function ConversationPanel({
           }
           onLoadAttachment={
             onLoadAttachment
+          }
+          onLoadWorkEvidence={
+            onLoadWorkEvidence
+          }
+          onLoadWorkReview={
+            onLoadWorkReview
           }
           onSubmitWork={
             onSubmitWork

@@ -25,6 +25,9 @@ import {
 import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
+import {
+  quoteRekberWorkflowFee,
+} from "@/lib/starknet/feePolicy";
 
 const PRIVATE_ESCROW_ENVELOPE_VERSION = 2;
 const ESCROW_COMMITMENT_DOMAIN =
@@ -62,6 +65,7 @@ async function invokeHelper(
   account: WalletAccountV6,
   contractAddress: string,
   calldata: string[],
+  revenueFee: bigint,
 ): Promise<{ transaction_hash: string }> {
   const token =
     CONTRACTS.messageHelperOpenNoteToken;
@@ -75,15 +79,23 @@ async function invokeHelper(
     );
   }
 
-  // An invoke-only STRK20 bundle has no spent note/nullifier and therefore
-  // does not satisfy pool-level replay protection. Consume a negligible
-  // 10 wei STRK note, matching the Invite flow, so setup/approval actions
-  // are accepted by the pool and cannot be replayed.
+  /*
+   * Only the payer's Rekber Agreement/create action is revenue-bearing.
+   * Every other encrypted coordination action consumes 10 wei solely for
+   * Privacy Pool replay protection and must not create another VINSS fee.
+   */
+  const replayOrRevenueAmount =
+    revenueFee > 0n
+      ? revenueFee
+      : 10n;
+
   return account.strk20InvokeTransaction([
     {
       type: "withdraw",
       token,
-      amount: "0xa",
+      amount: toFelt(
+        replayOrRevenueAmount,
+      ),
       recipient: num.toHex(rawTreasury),
     },
     {
@@ -187,10 +199,27 @@ export async function sendEscrowCoordinationAction(
     ...ciphertextChunks,
   ].map(toFelt);
 
+  /*
+   * Rekber economics:
+   * payer Agreement/create = VINSS revenue;
+   * payee acceptance and later coordination = replay protection only.
+   */
+  /*
+   * Both Rekber Agreement approvals are paid private actions.
+   * Payer create and Payee accept each carry the VINSS workflow fee.
+   * Later coordination remains replay-only unless explicitly priced elsewhere.
+   */
+  const revenueFee =
+    payload.kind === "create" ||
+    payload.kind === "accept"
+      ? await quoteRekberWorkflowFee()
+      : 0n;
+
   const response = await invokeHelper(
     account,
     CONTRACTS.privateEscrowHelper,
     calldata,
+    revenueFee,
   );
 
   return {

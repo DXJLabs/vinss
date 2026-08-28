@@ -19,7 +19,7 @@ export function RekberTimelineNotice({
   onAction,
 }: RekberTimelineNoticeProps) {
   return (
-    <li className="flex justify-center">
+    <li className="order-last flex justify-center">
       <div className="w-[94%] max-w-md rounded-xl border border-signal/20 bg-signal/[0.035] px-4 py-3">
         <p className="font-display text-[8px] uppercase tracking-[0.15em] text-signal/75">
           Rekber update

@@ -47,6 +47,10 @@ import {
   selectPreparedCustodies,
   selectRekberCreateActions,
 } from "@/lib/deal-room/directConversationView";
+import type {
+  RekberWorkEvidencePacket,
+  RekberWorkReviewPacket,
+} from "@/lib/privacy/rekberEvidenceChannel";
 
 interface DirectConversationPanelProps {
   entries: ConversationEntry[];
@@ -70,6 +74,14 @@ interface DirectConversationPanelProps {
   onLoadAttachment: (
     attachment: AttachmentRef,
   ) => Promise<Blob>;
+  onLoadWorkEvidence: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkEvidencePacket | null>;
+  onLoadWorkReview: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkReviewPacket | null>;
   onSubmitWork: (input: {
     custodyCommitment: string;
     dealType?: DealType;
@@ -124,6 +136,8 @@ export function DirectConversationPanel({
   onSendMessage,
   onSendAttachment,
   onLoadAttachment,
+  onLoadWorkEvidence,
+  onLoadWorkReview,
   onSubmitWork,
   onReviewWork,
   onOpenEscrowReview,
@@ -179,6 +193,20 @@ export function DirectConversationPanel({
       "match" | "mismatch"
     >
   >({});
+
+  const [
+    currentWorkEvidence,
+    setCurrentWorkEvidence,
+  ] = useState<RekberWorkEvidencePacket | null>(
+    null,
+  );
+
+  const [
+    currentWorkReview,
+    setCurrentWorkReview,
+  ] = useState<RekberWorkReviewPacket | null>(
+    null,
+  );
 
   const pairEntries =
     selectDirectPairEntries(
@@ -336,6 +364,90 @@ export function DirectConversationPanel({
     };
   }, [currentCustody]);
 
+  useEffect(() => {
+    const evidenceCommitment =
+      currentRekberState
+        ?.fulfillmentEvidenceCommitment;
+
+    if (
+      !currentCustody ||
+      !currentRekberState
+        ?.fulfillmentSubmitted ||
+      !evidenceCommitment ||
+      evidenceCommitment === 0n
+    ) {
+      setCurrentWorkEvidence(null);
+      setCurrentWorkReview(null);
+      return;
+    }
+
+    let stopped = false;
+    let running = false;
+
+    const sync = async () => {
+      if (stopped || running) {
+        return;
+      }
+
+      running = true;
+
+      try {
+        const custody =
+          BigInt(
+            currentCustody,
+          ).toString();
+
+        const evidence =
+          evidenceCommitment
+            .toString();
+
+        const [work, review] =
+          await Promise.all([
+            onLoadWorkEvidence(
+              custody,
+              evidence,
+            ),
+            onLoadWorkReview(
+              custody,
+              evidence,
+            ),
+          ]);
+
+        if (!stopped) {
+          setCurrentWorkEvidence(work);
+          setCurrentWorkReview(review);
+        }
+      } catch (error) {
+        console.debug(
+          "[VINSS REKBER EVIDENCE SYNC]",
+          error,
+        );
+      } finally {
+        running = false;
+      }
+    };
+
+    void sync();
+
+    const timer =
+      window.setInterval(
+        () => void sync(),
+        2000,
+      );
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    currentCustody,
+    currentRekberState
+      ?.fulfillmentSubmitted,
+    currentRekberState
+      ?.fulfillmentEvidenceCommitment
+      .toString(),
+  ]);
+
   const isCurrentPayer =
     sameStarknetAddress(
       currentPayerAddress,
@@ -389,7 +501,7 @@ export function DirectConversationPanel({
               title:
                 "Changes requested",
               body:
-                "The Payer requested changes. Complete the revision and submit the updated work evidence.",
+                "Changes were requested. Update the work and submit it again.",
               actionLabel:
                 "Submit revision",
               onAction: () =>
@@ -403,7 +515,7 @@ export function DirectConversationPanel({
                 title:
                   "Payment secured",
                 body:
-                  `${currentDealAmount} ${currentDealAsset} is secured in Rekber. Complete the agreed work, then submit your evidence.`,
+                  "Payment is secured. Submit the agreed work before the deadline.",
                 actionLabel:
                   evidenceUi
                     .actionLabel,
@@ -416,7 +528,7 @@ export function DirectConversationPanel({
                 title:
                   "Work submitted",
                 body:
-                  "Your work submission is recorded on Starknet. Waiting for the Payer to review it.",
+                  "Work submitted. Waiting for review.",
               }
         : currentRekberState
             .fulfillmentSubmitted
@@ -424,13 +536,7 @@ export function DirectConversationPanel({
               title:
                 "Work submitted",
               body:
-                `The Payee submitted work for ${currentDealAmount} ${currentDealAsset}. Review the delivery before approving settlement.`,
-              actionLabel:
-                "Review work",
-              onAction: () =>
-                onOpenEscrow(
-                  fundedDealEntry,
-                ),
+                "Work submitted. Check the evidence below before you decide.",
             }
           : null
       : null;
@@ -440,8 +546,122 @@ export function DirectConversationPanel({
    * Rekber is now the workflow source of truth, so hide those
    * duplicate historical cards for the active custody.
    */
-  const visiblePairEntries =
-    pairEntries.filter((entry) => {
+  const currentPayeeAddress =
+    fundedDealEntry
+      ?.offerAction
+      ?.settlementPlan
+      ?.payeeAddress ??
+    (isCurrentPayer
+      ? peerAddress
+      : walletAddress);
+
+  const currentEvidenceEntry:
+    ConversationEntry | null =
+      currentCustody &&
+      currentRekberState
+        ?.fulfillmentSubmitted &&
+      currentWorkEvidence
+        ? {
+            id:
+              `rekber-work:${currentRekberState.fulfillmentEvidenceCommitment.toString(16)}`,
+            kind: "message",
+            summary:
+              currentWorkEvidence.note ||
+              currentWorkEvidence
+                .attachment?.fileName ||
+              "Work submitted",
+            transactionHash: "",
+            actionLocator:
+              currentRekberState
+                .fulfillmentEvidenceCommitment
+                .toString(16),
+            sentAt:
+              currentWorkEvidence
+                .submittedAt,
+            scope: "direct",
+            senderAddress:
+              currentPayeeAddress,
+            recipientAddress:
+              currentPayerAddress,
+            workEvidence: {
+              type:
+                "work_submission",
+              custodyCommitment:
+                currentCustody,
+              dealType:
+                currentWorkEvidence
+                  .dealType,
+              note:
+                currentWorkEvidence.note,
+              fileName:
+                currentWorkEvidence
+                  .attachment?.fileName,
+              fileType:
+                currentWorkEvidence
+                  .attachment?.mimeType,
+              fileSize:
+                currentWorkEvidence
+                  .attachment?.size,
+              fileSha256:
+                currentWorkEvidence
+                  .attachment?.sha256,
+            },
+            attachment:
+              currentWorkEvidence
+                .attachment,
+          }
+        : null;
+
+  /*
+   * Alice's review decision is a private Rekber timeline event.
+   * Both parties render the same encrypted decision locally:
+   * Alice sees her own action, Bob sees the counterparty decision.
+   *
+   * No extra MessageHelper transaction is created for this UI item.
+   */
+  const currentReviewEntry:
+    ConversationEntry | null =
+      currentCustody &&
+      currentWorkReview
+        ? {
+            id:
+              `rekber-review:${currentWorkReview.evidenceCommitment}`,
+            kind: "message",
+            summary:
+              currentWorkReview.decision === "approved"
+                ? "Work approved"
+                : currentWorkReview.decision === "revision_requested"
+                  ? "Changes requested"
+                  : "Work rejected",
+            transactionHash: "",
+            actionLocator:
+              `review-${currentWorkReview.evidenceCommitment}`,
+            sentAt:
+              currentWorkReview.reviewedAt,
+            scope: "direct",
+            senderAddress:
+              currentPayerAddress,
+            recipientAddress:
+              currentPayeeAddress,
+            workEvidence: {
+              type: "work_review",
+              custodyCommitment:
+                currentWorkReview
+                  .custodyCommitment,
+              submissionLocator:
+                currentWorkReview
+                  .submissionLocator,
+              decision:
+                currentWorkReview
+                  .decision,
+              note:
+                currentWorkReview.note,
+            },
+          }
+        : null;
+
+  const visiblePairEntries = [
+    ...pairEntries.filter((entry) => {
       const evidence =
         entry.workEvidence;
 
@@ -460,7 +680,22 @@ export function DirectConversationPanel({
           currentCustody,
         )
       );
-    });
+    }),
+    ...(currentEvidenceEntry
+      ? [currentEvidenceEntry]
+      : []),
+    ...(currentReviewEntry
+      ? [currentReviewEntry]
+      : []),
+  ].sort(
+    (left, right) =>
+      new Date(
+        left.sentAt,
+      ).getTime() -
+      new Date(
+        right.sentAt,
+      ).getTime(),
+  );
 
   const canSubmitWork =
     Boolean(
@@ -775,11 +1010,11 @@ export function DirectConversationPanel({
         <div
           ref={scrollBoxRef}
           onScroll={updateScrollIntent}
-          className="min-h-[360px] max-h-[58vh] overflow-y-auto overscroll-contain border-x border-wire/60 bg-black/10"
+          className="flex min-h-[360px] max-h-[58vh] flex-col overflow-y-auto overscroll-contain border-x border-wire/60 bg-black/10"
         >
         {currentRekberState &&
           fundedDealEntry && (
-            <div className="mx-4 mt-4 overflow-hidden rounded-2xl border border-signal/20 bg-vault/45 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+            <div className="order-2 mx-4 mb-4 mt-2 overflow-hidden rounded-2xl border border-signal/20 bg-vault/45 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
               <div className="flex items-start justify-between gap-4 border-b border-wire/60 px-4 py-3.5">
                 <div>
                   <div className="flex items-center gap-2">
@@ -843,7 +1078,7 @@ export function DirectConversationPanel({
                       }
                     />
                     <p className="mt-2 text-[8px] text-paper/45">
-                      Fulfillment
+                      Work
                     </p>
                     <p className="mt-0.5 text-[8px] text-paper/30">
                       {currentRekberState.revisionPending
@@ -857,12 +1092,13 @@ export function DirectConversationPanel({
                   <div>
                     <div
                       className={
-                        currentRekberState.fulfillmentConfirmed &&
-                        !currentRekberState.revisionPending
+                        currentReleaseApproved
                           ? "h-1 rounded-full bg-signal"
                           : currentRekberState.revisionPending
                             ? "h-1 rounded-full bg-amber-300/70"
-                            : "h-1 rounded-full bg-paper/10"
+                            : currentRekberState.fulfillmentSubmitted
+                              ? "h-1 rounded-full bg-signal/45"
+                              : "h-1 rounded-full bg-paper/10"
                       }
                     />
                     <p className="mt-2 text-[8px] text-paper/45">
@@ -877,9 +1113,13 @@ export function DirectConversationPanel({
                     >
                       {currentRekberState.revisionPending
                         ? "Changes"
-                        : currentRekberState.fulfillmentConfirmed
+                        : currentReleaseApproved
                           ? "Approved ✓"
-                          : "Waiting"}
+                          : currentRekberState.disputed
+                            ? "Dispute"
+                            : currentRekberState.fulfillmentSubmitted
+                              ? "Review"
+                              : "Waiting"}
                     </p>
                   </div>
 
@@ -918,18 +1158,14 @@ export function DirectConversationPanel({
                           ? isCurrentPayer
                             ? "Release approved. Waiting for the Payee to claim payment."
                             : `${currentDealAmount} ${currentDealAsset} is ready to claim.`
-                          : currentRekberState.fulfillmentConfirmed
+                          : currentReleaseApproved
                             ? isCurrentPayer
-                              ? "Fulfillment is confirmed. Continue to settlement."
-                              : "Fulfillment confirmed. Waiting for the Payer to authorize payment."
+                              ? "Work approved. Waiting for the Payee to claim payment."
+                              : "Work approved. Your payment is ready to claim."
                             : currentRekberState.fulfillmentSubmitted
                               ? isCurrentPayer
-                                ? currentRekberState.verificationPolicy === 2
-                                  ? "Fulfillment was submitted. Confirm receipt or open a dispute."
-                                  : "Fulfillment is under review."
-                                : currentRekberState.verificationPolicy === 2
-                                  ? "Fulfillment submitted. Waiting for counterparty confirmation."
-                                  : "Fulfillment submitted. Review window is active."
+                                ? "Work submitted. Check the evidence before you decide."
+                                : "Work submitted. Waiting for review."
                               : isCurrentPayer
                                 ? `Payment is secured. Waiting for the Payee to ${evidenceUi.actionLabel.toLowerCase()}.`
                                 : `Payment is secured. ${evidenceUi.actionLabel} only when the agreed obligation is complete.`}
@@ -988,25 +1224,6 @@ export function DirectConversationPanel({
                   )}
 
                 {!currentRekberState.consumed &&
-                  isCurrentPayer &&
-                  currentRekberState.fulfillmentConfirmed &&
-                  !currentRekberState.revisionPending &&
-                  !currentReleaseApproved && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        onOpenEscrow(
-                          fundedDealEntry,
-                        )
-                      }
-                      className="mt-3 w-full rounded-xl bg-signal px-4 py-3 font-display text-[9px] uppercase tracking-[0.12em] text-ink disabled:opacity-30"
-                    >
-                      Continue settlement →
-                    </button>
-                  )}
-
-                {!currentRekberState.consumed &&
                   !isCurrentPayer &&
                   currentReleaseApproved && (
                     <button
@@ -1058,7 +1275,7 @@ export function DirectConversationPanel({
             </p>
           </div>
         ) : (
-          <ul className="space-y-4 p-4 sm:p-5">
+          <ul className="order-1 flex flex-col gap-4 p-4 sm:p-5">
             {rekberTimelineNotice && (
               <RekberTimelineNotice
                 title={
@@ -1232,13 +1449,6 @@ export function DirectConversationPanel({
                       activeDealType,
                   );
 
-                const review =
-                  latestReviewBySubmission.get(
-                    normalizeLocator(
-                      entry.actionLocator,
-                    ),
-                  );
-
                 const matchesCurrentCustody =
                   canonicalCustodyKey(
                     evidence
@@ -1247,6 +1457,16 @@ export function DirectConversationPanel({
                   canonicalCustodyKey(
                     currentCustody,
                   );
+
+                const review =
+                  latestReviewBySubmission.get(
+                    normalizeLocator(
+                      entry.actionLocator,
+                    ),
+                  ) ??
+                  (matchesCurrentCustody
+                    ? currentWorkReview
+                    : undefined);
 
                 const submitReview =
                   async (

@@ -8,7 +8,10 @@ import {
   shortStringToFelt,
   toFelt,
 } from "@/lib/privacy/envelope";
-import { quoteRekberFee } from "@/lib/starknet/feePolicy";
+import {
+  quoteRekberFee,
+  quoteRekberWorkflowFee,
+} from "@/lib/starknet/feePolicy";
 
 const RELEASE_AUTH_DOMAIN =
   "VINSS_RELEASE_AUTH";
@@ -672,6 +675,7 @@ export function buildRequestRevisionInvoke(
 async function invokeRekberWorkflowAction(
   account: WalletAccountV6,
   payload: Array<bigint | number | string>,
+  chargeRevenue = false,
 ): Promise<{ transactionHash: string }> {
   const token =
     CONTRACTS.messageHelperOpenNoteToken;
@@ -689,19 +693,26 @@ async function invokeRekberWorkflowAction(
    * STRK20 currently permits only one external invoke per
    * private transaction.
    *
-   * Workflow actions therefore invoke Rekber directly and
-   * consume a negligible 10 wei STRK note for replay
-   * protection. They never bundle MessageHelper + Rekber.
+   * Submit Work is the Payee's fee-bearing Rekber action.
+   * Confirm/revision/dispute lifecycle calls keep only the
+   * negligible replay-protection spend and collect no revenue.
    */
   const calldata =
     payload.map((value) => toFelt(value));
+
+  const spendAmount =
+    chargeRevenue
+      ? await quoteRekberWorkflowFee()
+      : 10n;
 
   const response =
     await account.strk20InvokeTransaction([
       {
         type: "withdraw",
         token,
-        amount: "0xa",
+        amount: toFelt(
+          spendAmount,
+        ),
         recipient:
           num.toHex(rawTreasury),
       },
@@ -713,6 +724,48 @@ async function invokeRekberWorkflowAction(
           toFelt(calldata.length),
           ...calldata,
         ],
+      },
+    ]);
+
+  return {
+    transactionHash:
+      response.transaction_hash,
+  };
+}
+
+/**
+ * Charge one VINSS Rekber workflow action without changing custody state.
+ *
+ * Used only when the product action itself is intentionally off-chain:
+ * submission_review approval and rejection. The encrypted decision is stored
+ * separately; this transaction only collects the configured 3 STRK revenue.
+ */
+export async function chargeRekberWorkflowAction(
+  account: WalletAccountV6,
+): Promise<{ transactionHash: string }> {
+  const token =
+    CONTRACTS.messageHelperOpenNoteToken;
+  const rawTreasury =
+    process.env
+      .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (!token || !rawTreasury) {
+    throw new Error(
+      "Rekber workflow fee is not configured.",
+    );
+  }
+
+  const fee =
+    await quoteRekberWorkflowFee();
+
+  const response =
+    await account.strk20InvokeTransaction([
+      {
+        type: "withdraw",
+        token,
+        amount: toFelt(fee),
+        recipient:
+          num.toHex(rawTreasury),
       },
     ]);
 
@@ -738,6 +791,7 @@ export async function submitRekberFulfillment(
       params.chainSecret,
       params.evidenceCommitment,
     ],
+    true,
   );
 }
 
@@ -749,6 +803,10 @@ export async function confirmRekberFulfillment(
     evidenceCommitment: bigint;
   },
 ): Promise<{ transactionHash: string }> {
+  /*
+   * Payer approval is a paid Rekber action.
+   * Keep fee + confirmation inside one Ready X transaction.
+   */
   return invokeRekberWorkflowAction(
     account,
     [
@@ -757,6 +815,7 @@ export async function confirmRekberFulfillment(
       params.confirmationSecret,
       params.evidenceCommitment,
     ],
+    true,
   );
 }
 
@@ -768,6 +827,10 @@ export async function requestRekberRevision(
     reasonCommitment: bigint;
   },
 ): Promise<{ transactionHash: string }> {
+  /*
+   * Revision changes Rekber rights and is priced as one paid workflow action.
+   * The 3 STRK revenue spend is bundled with request_revision.
+   */
   return invokeRekberWorkflowAction(
     account,
     [
@@ -776,6 +839,7 @@ export async function requestRekberRevision(
       params.chainSecret,
       params.reasonCommitment,
     ],
+    true,
   );
 }
 

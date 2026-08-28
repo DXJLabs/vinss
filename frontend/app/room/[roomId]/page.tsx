@@ -123,6 +123,8 @@ export default function DealRoomPage() {
     handleSendMessage,
     sendDirectAttachment,
     loadDirectAttachment,
+    loadDirectWorkEvidence,
+    loadDirectWorkReview,
     sendDirectWorkSubmission,
     sendDirectWorkReview,
     handleRefresh,
@@ -675,6 +677,8 @@ export default function DealRoomPage() {
           onSendMessage={handleSendMessage}
           onSendAttachment={sendDirectAttachment}
           onLoadAttachment={loadDirectAttachment}
+          onLoadWorkEvidence={loadDirectWorkEvidence}
+          onLoadWorkReview={loadDirectWorkReview}
           onSubmitWork={sendDirectWorkSubmission}
           onReviewWork={sendDirectWorkReview}
           onOpenEscrowReview={() => {

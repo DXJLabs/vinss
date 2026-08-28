@@ -37,7 +37,7 @@ export function evidenceUiForDealType(
         submitButton: "Submit Work →",
         approveButton: "Approve work",
         revisionButton: "Request revision",
-        rejectButton: "Open dispute",
+        rejectButton: "Reject",
       };
 
     case "bounty":

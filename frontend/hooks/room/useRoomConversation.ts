@@ -244,6 +244,10 @@ export function useRoomConversation({
       direct.sendDirectAttachment,
     loadDirectAttachment:
       direct.loadDirectAttachment,
+    loadDirectWorkEvidence:
+      direct.loadDirectWorkEvidence,
+    loadDirectWorkReview:
+      direct.loadDirectWorkReview,
     sendDirectWorkSubmission:
       direct.sendDirectWorkSubmission,
     sendDirectWorkReview:

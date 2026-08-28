@@ -41,6 +41,14 @@ import {
   uploadDirectAttachment,
 } from "@/lib/privacy/directAttachments";
 import {
+  loadRekberWorkEvidence,
+  loadRekberWorkReview,
+  saveRekberWorkEvidence,
+  saveRekberWorkReview,
+  type RekberWorkEvidencePacket,
+  type RekberWorkReviewPacket,
+} from "@/lib/privacy/rekberEvidenceChannel";
+import {
   locatorHex,
   uniqueIdentities,
 } from "@/lib/deal-room/directMessageRouting";
@@ -56,6 +64,7 @@ import {
 } from "@/lib/deal-room/workConfirmation";
 
 import {
+  chargeRekberWorkflowAction,
   confirmRekberFulfillment as confirmWorkOnRekber,
   getRekberCustody as getWorkRekberState,
   requestRekberRevision as requestWorkRevisionOnRekber,
@@ -92,6 +101,14 @@ interface UseDirectConversationResult {
   loadDirectAttachment: (
     attachment: AttachmentRef,
   ) => Promise<Blob>;
+  loadDirectWorkEvidence: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkEvidencePacket | null>;
+  loadDirectWorkReview: (
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ) => Promise<RekberWorkReviewPacket | null>;
   sendDirectWorkSubmission: (input: {
     custodyCommitment: string;
     dealType?: DealType;
@@ -974,6 +991,48 @@ export function useDirectConversation({
     );
   }
 
+  async function loadDirectWorkEvidence(
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ): Promise<RekberWorkEvidencePacket | null> {
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      throw new Error(
+        "This private chat is not ready yet.",
+      );
+    }
+
+    return loadRekberWorkEvidence(
+      BACKEND_URL,
+      directKey,
+      custodyCommitment,
+      evidenceCommitment,
+    );
+  }
+
+  async function loadDirectWorkReview(
+    custodyCommitment: string,
+    evidenceCommitment: string,
+  ): Promise<RekberWorkReviewPacket | null> {
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      throw new Error(
+        "This private chat is not ready yet.",
+      );
+    }
+
+    return loadRekberWorkReview(
+      BACKEND_URL,
+      directKey,
+      custodyCommitment,
+      evidenceCommitment,
+    );
+  }
+
   async function sendDirectAttachment(
     file: File,
     caption = "",
@@ -1324,6 +1383,16 @@ export function useDirectConversation({
       return false;
     }
 
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      setError(
+        "This private chat is not ready yet.",
+      );
+      return false;
+    }
+
     setBusy(true);
     setError(null);
 
@@ -1392,6 +1461,48 @@ export function useDirectConversation({
           String(file?.size ?? 0),
           fileSha256,
         ]);
+
+      /*
+       * The readable note/file stays encrypted off-chain. Starknet stores only
+       * evidenceCommitment. This avoids a second paid MessageHelper transaction
+       * while still letting the Payer open the exact submitted evidence.
+       */
+      const existingEvidence =
+        await loadRekberWorkEvidence(
+          BACKEND_URL,
+          directKey,
+          custodyCommitment.toString(),
+          evidenceCommitment.toString(),
+        );
+
+      if (!existingEvidence) {
+        const attachment =
+          file
+            ? await uploadDirectAttachment(
+                BACKEND_URL,
+                directKey,
+                file,
+              )
+            : undefined;
+
+        await saveRekberWorkEvidence(
+          BACKEND_URL,
+          directKey,
+          {
+            version: 1,
+            custodyCommitment:
+              custodyCommitment.toString(),
+            evidenceCommitment:
+              evidenceCommitment.toString(),
+            dealType:
+              input.dealType,
+            note,
+            submittedAt:
+              new Date().toISOString(),
+            attachment,
+          },
+        );
+      }
 
       const walletPromise =
         submitWorkOnRekber(
@@ -1536,6 +1647,16 @@ export function useDirectConversation({
       return false;
     }
 
+    const directKey =
+      await resolveDirectKey();
+
+    if (!directKey) {
+      setError(
+        "This private chat is not ready yet.",
+      );
+      return false;
+    }
+
     setBusy(true);
     setError(null);
 
@@ -1564,6 +1685,43 @@ export function useDirectConversation({
           "PAYER_SECRET_MISSING",
         );
       }
+
+      const evidenceCommitment =
+        custody
+          .fulfillmentEvidenceCommitment;
+
+      if (
+        !custody
+          .fulfillmentSubmitted ||
+        evidenceCommitment === 0n
+      ) {
+        throw new Error(
+          "FULFILLMENT_REQUIRED",
+        );
+      }
+
+      const persistReview =
+        async () =>
+          saveRekberWorkReview(
+            BACKEND_URL,
+            directKey,
+            {
+              version: 1,
+              custodyCommitment:
+                custodyCommitment.toString(),
+              evidenceCommitment:
+                evidenceCommitment.toString(),
+              submissionLocator:
+                input.submissionLocator,
+              decision:
+                input.decision,
+              note:
+                input.note?.trim() ||
+                undefined,
+              reviewedAt:
+                new Date().toISOString(),
+            },
+          );
 
       if (
         input.decision ===
@@ -1606,6 +1764,7 @@ export function useDirectConversation({
           },
         );
 
+        await persistReview();
         return true;
       }
 
@@ -1630,6 +1789,15 @@ export function useDirectConversation({
             );
           }
 
+          /*
+           * submission_review needs no additional custody mutation, but
+           * Approve is still one paid VINSS workflow action.
+           */
+          await chargeRekberWorkflowAction(
+            session.account,
+          );
+
+          await persistReview();
           return true;
         }
 
@@ -1666,6 +1834,7 @@ export function useDirectConversation({
             },
           );
 
+          await persistReview();
           return true;
         }
 
@@ -1674,9 +1843,17 @@ export function useDirectConversation({
         );
       }
 
-      setError(
-        "Reject is handled through the Rekber dispute flow, not a work message.",
-      );
+      if (
+        input.decision === "rejected"
+      ) {
+        /*
+         * Reject does not move funds and does not open a dispute yet. Bob gets
+         * the next choice: accept the rejection or challenge it.
+         */
+        await persistReview();
+        return true;
+      }
+
       return false;
     } catch (err) {
       const raw =
@@ -2166,6 +2343,8 @@ export function useDirectConversation({
     sendDirectMessage,
     sendDirectAttachment,
     loadDirectAttachment,
+    loadDirectWorkEvidence,
+    loadDirectWorkReview,
     sendDirectWorkSubmission,
     sendDirectWorkReview,
     refreshDirect,
