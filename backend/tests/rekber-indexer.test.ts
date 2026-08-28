@@ -14,3 +14,16 @@ test("rekber indexer identity isolates network and contract", () => {
     createRekberIndexerIdentity("mainnet", "0xabc"),
   );
 });
+
+
+test("resolved Rekber event shape carries both allocations", () => {
+  const sample = {
+    eventKind: "resolved" as const,
+    resolutionPayerAmount: "30",
+    resolutionPayeeAmount: "70",
+  };
+
+  assert.equal(sample.eventKind, "resolved");
+  assert.equal(sample.resolutionPayerAmount, "30");
+  assert.equal(sample.resolutionPayeeAmount, "70");
+});

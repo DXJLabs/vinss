@@ -29,6 +29,9 @@ interface RekberEventRow {
   amount: string | null;
   refund_after: string | null;
   output_note_id: string | null;
+  resolution_commitment: string | null;
+  resolution_payer_amount: string | null;
+  resolution_payee_amount: string | null;
   event_timestamp: string;
   block_number: string;
   transaction_hash: string;
@@ -62,6 +65,12 @@ function toEvent(row: RekberEventRow): IndexedRekberEvent {
     refundAfter:
       row.refund_after === null ? undefined : Number(row.refund_after),
     outputNoteId: row.output_note_id ?? undefined,
+    resolutionCommitment:
+      row.resolution_commitment ?? undefined,
+    resolutionPayerAmount:
+      row.resolution_payer_amount ?? undefined,
+    resolutionPayeeAmount:
+      row.resolution_payee_amount ?? undefined,
     timestamp: Number(row.event_timestamp),
     blockNumber: Number(row.block_number),
     transactionHash: row.transaction_hash,
@@ -81,7 +90,7 @@ export class RekberStore {
       CREATE TABLE IF NOT EXISTS rekber_events (
         network TEXT NOT NULL,
         event_kind TEXT NOT NULL CHECK (
-          event_kind IN ('funded', 'released', 'refunded')
+          event_kind IN ('funded', 'released', 'refunded', 'resolved')
         ),
         contract_address TEXT NOT NULL,
         custody_commitment TEXT NOT NULL,
@@ -89,6 +98,9 @@ export class RekberStore {
         amount TEXT,
         refund_after BIGINT,
         output_note_id TEXT,
+        resolution_commitment TEXT,
+        resolution_payer_amount NUMERIC(78, 0),
+        resolution_payee_amount NUMERIC(78, 0),
         event_timestamp BIGINT NOT NULL,
         block_number BIGINT NOT NULL,
         transaction_hash TEXT NOT NULL,
@@ -101,6 +113,32 @@ export class RekberStore {
           custody_commitment
         )
       )
+    `);
+
+    // Existing deployments predate the resolved event; migrate in place.
+    await this.pool.query(`
+      ALTER TABLE rekber_events
+        ADD COLUMN IF NOT EXISTS resolution_commitment TEXT,
+        ADD COLUMN IF NOT EXISTS resolution_payer_amount NUMERIC(78, 0),
+        ADD COLUMN IF NOT EXISTS resolution_payee_amount NUMERIC(78, 0)
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE rekber_events
+        DROP CONSTRAINT IF EXISTS rekber_events_event_kind_check
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE rekber_events
+        ADD CONSTRAINT rekber_events_event_kind_check
+        CHECK (
+          event_kind IN (
+            'funded',
+            'released',
+            'refunded',
+            'resolved'
+          )
+        )
     `);
 
     await this.pool.query(`
@@ -300,13 +338,17 @@ export class RekberStore {
           amount,
           refund_after,
           output_note_id,
+          resolution_commitment,
+          resolution_payer_amount,
+          resolution_payee_amount,
           event_timestamp,
           block_number,
           transaction_hash
         )
         VALUES (
           $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11
+          $7, $8, $9, $10, $11,
+          $12, $13, $14
         )
         ON CONFLICT (
           network,
@@ -325,6 +367,9 @@ export class RekberStore {
         event.amount ?? null,
         event.refundAfter ?? null,
         event.outputNoteId ?? null,
+        event.resolutionCommitment ?? null,
+        event.resolutionPayerAmount ?? null,
+        event.resolutionPayeeAmount ?? null,
         event.timestamp,
         event.blockNumber,
         event.transactionHash,
@@ -352,6 +397,9 @@ export class RekberStore {
           amount,
           refund_after::text,
           output_note_id,
+          resolution_commitment,
+          resolution_payer_amount::text,
+          resolution_payee_amount::text,
           event_timestamp::text,
           block_number::text,
           transaction_hash,
@@ -401,6 +449,9 @@ export class RekberStore {
           amount,
           refund_after::text,
           output_note_id,
+          resolution_commitment,
+          resolution_payer_amount::text,
+          resolution_payee_amount::text,
           event_timestamp::text,
           block_number::text,
           transaction_hash,
@@ -457,6 +508,12 @@ export class RekberStore {
           amount: event.amount,
           refundAfter: event.refundAfter,
           outputNoteId: event.outputNoteId,
+          resolutionCommitment:
+            event.resolutionCommitment,
+          resolutionPayerAmount:
+            event.resolutionPayerAmount,
+          resolutionPayeeAmount:
+            event.resolutionPayeeAmount,
           timestamp: event.timestamp,
         },
       };

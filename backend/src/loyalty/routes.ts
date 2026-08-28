@@ -17,12 +17,15 @@ export const loyaltyRouter = Router();
 const ACTIONS: LoyaltyAction[] = [
   "message_sent",
   "offer_created",
+  "offer_countered",
   "offer_accepted",
-  "escrow_created",
-  "escrow_funded",
-  "deal_completed",
-  "invite_user",
-  "successful_referral",
+  "work_submitted",
+  "work_reviewed",
+  "referral_joined",
+  "referral_activated",
+  "referral_converted",
+  "rekber_released",
+  "rekber_refunded",
 ];
 
 loyaltyRouter.get(

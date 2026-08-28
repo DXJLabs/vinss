@@ -12,6 +12,7 @@ const EVENT_NAMES: Record<RekberEventKind, readonly string[]> = {
   funded: ["EscrowRekberCustodyFunded"],
   released: ["EscrowRekberCustodyReleased"],
   refunded: ["EscrowRekberCustodyRefunded"],
+  resolved: ["EscrowRekberCustodyResolved"],
 };
 
 function sleep(milliseconds: number): Promise<void> {
@@ -46,6 +47,7 @@ export class RekberEventSource {
       funded: EVENT_NAMES.funded.map(hash.getSelectorFromName),
       released: EVENT_NAMES.released.map(hash.getSelectorFromName),
       refunded: EVENT_NAMES.refunded.map(hash.getSelectorFromName),
+      resolved: EVENT_NAMES.resolved.map(hash.getSelectorFromName),
     };
 
     this.selectorToKind = new Map(
@@ -83,6 +85,7 @@ export class RekberEventSource {
             ...this.selectors.funded,
             ...this.selectors.released,
             ...this.selectors.refunded,
+            ...this.selectors.resolved,
           ],
         ],
         chunk_size: this.eventPageSize,
@@ -139,6 +142,34 @@ export class RekberEventSource {
         }
 
         if (!thirdKey) {
+          continue;
+        }
+
+        if (eventKind === "resolved") {
+          if (event.data.length < 3) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            resolutionCommitment:
+              canonicalFelt(thirdKey),
+            resolutionPayerAmount:
+              BigInt(
+                event.data[0] ?? "0",
+              ).toString(),
+            resolutionPayeeAmount:
+              BigInt(
+                event.data[1] ?? "0",
+              ).toString(),
+            timestamp:
+              Number(
+                BigInt(
+                  event.data[2] ?? "0",
+                ),
+              ),
+          });
+
           continue;
         }
 

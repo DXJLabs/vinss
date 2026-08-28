@@ -1,21 +1,15 @@
 import type { StarknetNetwork } from "../config.js";
+import {
+  BASE_POINTS,
+  basePointsForAction,
+  CERTIFICATE_TIERS,
+} from "./rules.js";
 import type {
   LoyaltyAccount,
   LoyaltyAction,
   LoyaltyEvent,
   LoyaltyLevel,
 } from "./types.js";
-
-const POINTS: Record<LoyaltyAction, number> = {
-  message_sent: 1,
-  offer_created: 25,
-  offer_accepted: 50,
-  escrow_created: 50,
-  escrow_funded: 100,
-  deal_completed: 250,
-  invite_user: 100,
-  successful_referral: 500,
-};
 
 const LEVELS: Array<{
   level: LoyaltyLevel;
@@ -74,7 +68,7 @@ function eventKey(
 export function pointsForAction(
   action: LoyaltyAction,
 ): number {
-  return POINTS[action];
+  return basePointsForAction(action);
 }
 
 export function getLevel(points: number) {
@@ -158,7 +152,12 @@ export function awardAction(
 
 export function getLoyaltyRules() {
   return {
-    points: { ...POINTS },
+    points: { ...BASE_POINTS },
+    certificateMultipliers:
+      CERTIFICATE_TIERS.map((entry) => ({
+        ...entry,
+        multiplier: entry.multiplierBps / 10_000,
+      })),
     levels: LEVELS.map((entry) => ({ ...entry })),
   };
 }

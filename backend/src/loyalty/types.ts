@@ -1,4 +1,5 @@
 import type { StarknetNetwork } from "../config.js";
+import type { LoyaltyBaseAction } from "./rules.js";
 
 export type LoyaltyLevel =
   | "STARTER"
@@ -8,15 +9,7 @@ export type LoyaltyLevel =
   | "PLATINUM"
   | "DIAMOND";
 
-export type LoyaltyAction =
-  | "message_sent"
-  | "offer_created"
-  | "offer_accepted"
-  | "escrow_created"
-  | "escrow_funded"
-  | "deal_completed"
-  | "invite_user"
-  | "successful_referral";
+export type LoyaltyAction = LoyaltyBaseAction;
 
 export interface LoyaltyAccount {
   network: StarknetNetwork;

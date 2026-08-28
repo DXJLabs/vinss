@@ -31,7 +31,11 @@ export interface IndexedAction extends DiscoveredAction {
   indexedAt: string;
 }
 
-export type RekberEventKind = "funded" | "released" | "refunded";
+export type RekberEventKind =
+  | "funded"
+  | "released"
+  | "refunded"
+  | "resolved";
 
 export type ActivityKind =
   DiscoverKind | `rekber_${RekberEventKind}` | "certificate_issued";
@@ -45,6 +49,9 @@ export interface IndexedRekberEvent {
   amount?: string;
   refundAfter?: number;
   outputNoteId?: string;
+  resolutionCommitment?: string;
+  resolutionPayerAmount?: string;
+  resolutionPayeeAmount?: string;
   timestamp: number;
   blockNumber: number;
   transactionHash: string;
@@ -80,6 +87,9 @@ export interface GlobalActivityItem {
     amount?: string;
     refundAfter?: number;
     outputNoteId?: string;
+    resolutionCommitment?: string;
+    resolutionPayerAmount?: string;
+    resolutionPayeeAmount?: string;
     timestamp: number;
   };
   certificate?: {

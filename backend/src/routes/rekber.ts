@@ -8,6 +8,7 @@ const VALID_EVENTS: readonly RekberEventKind[] = [
   "funded",
   "released",
   "refunded",
+  "resolved",
 ];
 
 function parseLimit(value: unknown): number {
