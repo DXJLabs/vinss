@@ -715,6 +715,29 @@ export function DirectConversationPanel({
     ) &&
     isCurrentPayer;
 
+  /*
+   * Revision is a bounded on-chain right, not a generic UI option.
+   *
+   * Only submission-review deals can request revisions. Hide the action once
+   * either the revision chain or fulfillment chain has no rounds left, or when
+   * the current review window/state no longer permits another revision.
+   * The Rekber contract remains authoritative and enforces the same invariant.
+   */
+  const canRequestRevision =
+    Boolean(
+      currentRekberState &&
+      currentRekberState.verificationPolicy === 1 &&
+      currentRekberState.revisionRoundsRemaining > 0 &&
+      currentRekberState.fulfillmentRoundsRemaining > 0 &&
+      currentRekberState.fulfillmentSubmitted &&
+      currentRekberState.fulfillmentConfirmed &&
+      !currentRekberState.revisionPending &&
+      !currentRekberState.disputed &&
+      !currentRekberState.consumed &&
+      currentRekberState.reviewDeadline >
+        Math.floor(Date.now() / 1000),
+    );
+
   const latestReviewBySubmission =
     new Map<
       string,
@@ -1672,18 +1695,20 @@ export function DirectConversationPanel({
                         matchesCurrentCustody &&
                         !review && (
                           <div className="mt-3 grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() =>
-                                void submitReview(
-                                  "revision_requested",
-                                )
-                              }
-                              className="border border-amber-400/25 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-amber-300 disabled:opacity-30"
-                            >
-                              {entryUi.revisionButton}
-                            </button>
+                            {canRequestRevision && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void submitReview(
+                                    "revision_requested",
+                                  )
+                                }
+                                className="border border-amber-400/25 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-amber-300 disabled:opacity-30"
+                              >
+                                {entryUi.revisionButton}
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -1693,7 +1718,11 @@ export function DirectConversationPanel({
                                   "rejected",
                                 )
                               }
-                              className="border border-danger/30 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-danger disabled:opacity-30"
+                              className={
+                                canRequestRevision
+                                  ? "border border-danger/30 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-danger disabled:opacity-30"
+                                  : "col-span-2 border border-danger/30 px-2 py-2 font-display text-[8px] uppercase tracking-[0.1em] text-danger disabled:opacity-30"
+                              }
                             >
                               {entryUi.rejectButton}
                             </button>
