@@ -353,62 +353,55 @@ export function useRoomOffers({
   }
 
   /**
-   * Reply through the exact pairwise key that opened the immutable parent.
-   * This keeps counter/accept/reject readable even when a wallet has stale
-   * participant announcements from another browser or device.
+   * Resolve a lifecycle reply for one authenticated immutable parent.
+   *
+   * The historical matched route proves this wallet actually decrypted the
+   * parent Offer. It must NOT become the encryption key for a new action:
+   * Counter/Accept/Reject always use the current Alice<->Bob pairwise key so
+   * both wallets derive the same route from their active room identities.
    */
   async function resolveReplyContext(
     source: ConversationEntry,
     peerAddress: string,
   ): Promise<DirectOfferContext> {
-    const peer = participants.find(
-      (participant) =>
-        sameStarknetAddress(
-          participant.address,
-          peerAddress,
-        ),
-    );
+    const parentLocator =
+      stripLocator(
+        source.actionLocator,
+      );
 
     let matchedRoute =
       matchedOfferRoutesRef.current.get(
-        stripLocator(source.actionLocator),
+        parentLocator,
       );
 
-    // Cached cards can render before the first discovery pass finishes.
-    // Reconcile once before allowing an immutable lifecycle transaction.
+    /*
+     * Cached cards can render before discovery authenticates their ciphertext.
+     * Refresh once before allowing a lifecycle reply.
+     */
     if (!matchedRoute) {
       await handleOfferRefresh(true);
+
       matchedRoute =
         matchedOfferRoutesRef.current.get(
-          stripLocator(source.actionLocator),
+          parentLocator,
         );
     }
 
-    // Never guess a new key for a reply: that would create a valid on-chain
-    // action which the intended wallet cannot decrypt.
-    if (!peer || !matchedRoute) {
+    if (!matchedRoute) {
       throw new Error(
-        "The private Offer reply route is not ready. Refresh both wallets and try again.",
+        "The private parent Offer is not authenticated yet. Sync the room and try again.",
       );
     }
 
-    const encryptionKey =
-      matchedRoute.encryptionKey ?? channelKey;
-
-    if (!encryptionKey) {
-      throw new Error("The private Offer route is not ready.");
-    }
-
-    return {
-      peer,
-      route: {
-        recipientIdentity:
-          canonicalStarknetAddress(peerAddress),
-        encryptionKey,
-        routingKey:
-          matchedRoute.routingKey ?? encryptionKey,
-      },
-    };
+    /*
+     * Parent authentication and reply routing are deliberately separate.
+     * Reusing a historical ECDH route can create a valid on-chain Counter that
+     * only the sender can render locally while the recipient cannot decrypt it.
+     */
+    return resolveDirectContext(
+      peerAddress,
+      peerAddress,
+    );
   }
 
   // Reflect a prepared action before Ready X takes over the mobile screen.
@@ -941,6 +934,7 @@ export function useRoomOffers({
     action: (
       markPrepared: () => void,
     ) => Promise<void>,
+    onWalletHandoff?: () => void,
   ): Promise<boolean> {
     setBusy(true);
     setError(null);
@@ -956,6 +950,9 @@ export function useRoomOffers({
 
     let startCallbackTimeout:
       (() => void) | null = null;
+
+    let walletHandoffNotified =
+      false;
 
     const callbackTimeoutPromise =
       new Promise<never>(
@@ -989,6 +986,19 @@ export function useRoomOffers({
       await Promise.race([
         action(() => {
           startCallbackTimeout?.();
+
+          /*
+           * UI navigation is independent from blockchain confirmation.
+           * Once Ready X receives the prepared action, return the user-facing
+           * surface to Chat while immutable confirmation continues in background.
+           */
+          if (
+            !walletHandoffNotified
+          ) {
+            walletHandoffNotified =
+              true;
+            onWalletHandoff?.();
+          }
         }),
         callbackTimeoutPromise,
       ]);
@@ -1012,17 +1022,34 @@ export function useRoomOffers({
           `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
         );
 
-      if (callbackDelayed) {
+      const explicitUserCancellation =
+        /USER_REFUSED|USER_REJECTED|REJECTED_BY_USER|CANCELLED_BY_USER|ACTION_REJECTED/i.test(
+          raw,
+        );
+
+      const hasPreparedAction =
+        prepared.size > 0;
+
+      /*
+       * Blockchain state is authoritative.
+       *
+       * Ready/Mises may return a generic error even after the private action
+       * was successfully submitted. Any post-preparation error is therefore
+       * reconciled against encrypted on-chain discovery unless the user
+       * explicitly rejected/cancelled the wallet request.
+       */
+      if (
+        callbackDelayed ||
+        (
+          hasPreparedAction &&
+          !explicitUserCancellation
+        )
+      ) {
         console.warn(
-          `[VINSS OFFER ${scope} CALLBACK DELAYED]`,
+          `[VINSS OFFER ${scope} WALLET RESULT AMBIGUOUS]`,
           err,
         );
 
-        /*
-         * Callback timeout is ambiguous: Ready X may already have submitted
-         * the transaction. Do not show a false failure or delete the prepared
-         * action until encrypted discovery has had time to reconcile it.
-         */
         setError(null);
 
         void recoverDelayedOffer(
@@ -1033,8 +1060,8 @@ export function useRoomOffers({
         return true;
       }
 
-      // Explicit wallet rejection/RPC failure means there is no reason to
-      // leave a fake Accepted/Counter card blocking the original Offer.
+      // Explicit cancellation, or a failure before preparation, cannot have
+      // produced the prepared immutable Offer action and can safely be retried.
       discardPreparedOffers(
         prepared,
       );
@@ -1077,6 +1104,7 @@ export function useRoomOffers({
   async function createDirectOffer(
     peerAddress: string,
     terms: OfferTermsInput,
+    onWalletHandoff?: () => void,
   ): Promise<boolean> {
     if (!session || !channelKey) {
       setError("Connect your wallet before creating an offer.");
@@ -1140,6 +1168,7 @@ export function useRoomOffers({
           kind: "create",
         });
       },
+      onWalletHandoff,
     );
   }
 
@@ -1149,6 +1178,7 @@ export function useRoomOffers({
   async function counterDirectOffer(
     source: ConversationEntry,
     terms: OfferTermsInput,
+    onWalletHandoff?: () => void,
   ): Promise<boolean> {
     if (!session || !channelKey || !source.offerAction) {
       setError("This offer cannot be countered right now.");
@@ -1233,6 +1263,7 @@ export function useRoomOffers({
           kind: "counter",
         });
       },
+      onWalletHandoff,
     );
   }
 
@@ -1241,6 +1272,7 @@ export function useRoomOffers({
    */
   async function acceptDirectOffer(
     source: ConversationEntry,
+    onWalletHandoff?: () => void,
   ): Promise<boolean> {
     if (!session || !channelKey || !source.offerAction) {
       setError("This offer cannot be accepted right now.");
@@ -1327,6 +1359,7 @@ export function useRoomOffers({
           kind: "accept",
         });
       },
+      onWalletHandoff,
     );
   }
 
@@ -1335,6 +1368,7 @@ export function useRoomOffers({
    */
   async function rejectDirectOffer(
     source: ConversationEntry,
+    onWalletHandoff?: () => void,
   ): Promise<boolean> {
     if (!session || !channelKey || !source.offerAction) {
       setError("This offer cannot be rejected right now.");
@@ -1411,6 +1445,7 @@ export function useRoomOffers({
           kind: "reject",
         });
       },
+      onWalletHandoff,
     );
   }
 

@@ -715,8 +715,26 @@ export default function DealRoomPage() {
             await handleRefresh(false);
             await handleOfferRefresh(true);
           }}
-          onAcceptOffer={acceptDirectOffer}
-          onRejectOffer={rejectDirectOffer}
+          onAcceptOffer={(entry) =>
+            acceptDirectOffer(
+              entry,
+              () => {
+                // Ready X owns the signature step; return to Chat immediately
+                // while blockchain confirmation continues in the background.
+                setCounterSource(null);
+                setTab("timeline");
+              },
+            )
+          }
+          onRejectOffer={(entry) =>
+            rejectDirectOffer(
+              entry,
+              () => {
+                setCounterSource(null);
+                setTab("timeline");
+              },
+            )
+          }
           onOfferRead={markOfferRead}
           onCounterOffer={(entry) => {
             // Counter editing happens in the Offer tab, but stays bound to this parent.
@@ -784,8 +802,30 @@ export default function DealRoomPage() {
                   counterSource={counterSource}
                   busy={busy}
                   agentDraft={agentOfferDraft}
-                  onCreate={createDirectOffer}
-                  onCounter={counterDirectOffer}
+                  onCreate={(peerAddress, terms) =>
+                    createDirectOffer(
+                      peerAddress,
+                      terms,
+                      () => {
+                        /*
+                         * Close the Offer sheet at wallet handoff rather than
+                         * waiting for a potentially delayed Ready callback.
+                         */
+                        setCounterSource(null);
+                        setTab("timeline");
+                      },
+                    )
+                  }
+                  onCounter={(source, terms) =>
+                    counterDirectOffer(
+                      source,
+                      terms,
+                      () => {
+                        setCounterSource(null);
+                        setTab("timeline");
+                      },
+                    )
+                  }
                   onCancelCounter={() =>
                     setCounterSource(null)
                   }

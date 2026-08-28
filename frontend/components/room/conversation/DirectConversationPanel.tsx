@@ -31,6 +31,9 @@ import type {
 import {
   EncryptedAttachmentPreview,
 } from "@/components/room/conversation/EncryptedAttachmentPreview";
+import {
+  RekberTimelineNotice,
+} from "@/components/room/conversation/RekberTimelineNotice";
 import { useStarkIdentity } from "@/hooks/useStarkIdentity";
 import {
   evidenceUiForDealType,
@@ -369,6 +372,68 @@ export function DirectConversationPanel({
     fundedDealEntry
       ?.offerAction
       ?.asset ?? "";
+
+  /*
+   * These are timeline notifications derived directly from Rekber custody.
+   * No extra MessageHelper transaction or fee is required, and reopening the
+   * room always reconstructs the same notification from blockchain state.
+   */
+  const rekberTimelineNotice =
+    currentRekberState &&
+    fundedDealEntry &&
+    !currentRekberState.consumed
+      ? !isCurrentPayer
+        ? currentRekberState
+            .revisionPending
+          ? {
+              title:
+                "Changes requested",
+              body:
+                "The Payer requested changes. Complete the revision and submit the updated work evidence.",
+              actionLabel:
+                "Submit revision",
+              onAction: () =>
+                setShowWorkComposer(
+                  true,
+                ),
+            }
+          : !currentRekberState
+              .fulfillmentSubmitted
+            ? {
+                title:
+                  "Payment secured",
+                body:
+                  `${currentDealAmount} ${currentDealAsset} is secured in Rekber. Complete the agreed work, then submit your evidence.`,
+                actionLabel:
+                  evidenceUi
+                    .actionLabel,
+                onAction: () =>
+                  setShowWorkComposer(
+                    true,
+                  ),
+              }
+            : {
+                title:
+                  "Work submitted",
+                body:
+                  "Your work submission is recorded on Starknet. Waiting for the Payer to review it.",
+              }
+        : currentRekberState
+            .fulfillmentSubmitted
+          ? {
+              title:
+                "Work submitted",
+              body:
+                `The Payee submitted work for ${currentDealAmount} ${currentDealAsset}. Review the delivery before approving settlement.`,
+              actionLabel:
+                "Review work",
+              onAction: () =>
+                onOpenEscrow(
+                  fundedDealEntry,
+                ),
+            }
+          : null
+      : null;
 
   /*
    * Work/review used to be rendered as Message cards.
@@ -975,7 +1040,8 @@ export function DirectConversationPanel({
             </div>
           )}
 
-        {visiblePairEntries.length === 0 ? (
+        {visiblePairEntries.length === 0 &&
+        !rekberTimelineNotice ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-signal/20 bg-signal/5">
               <span className="text-base text-signal">
@@ -993,6 +1059,25 @@ export function DirectConversationPanel({
           </div>
         ) : (
           <ul className="space-y-4 p-4 sm:p-5">
+            {rekberTimelineNotice && (
+              <RekberTimelineNotice
+                title={
+                  rekberTimelineNotice.title
+                }
+                body={
+                  rekberTimelineNotice.body
+                }
+                actionLabel={
+                  rekberTimelineNotice
+                    .actionLabel
+                }
+                onAction={
+                  rekberTimelineNotice
+                    .onAction
+                }
+              />
+            )}
+
             {visiblePairEntries.map((entry) => {
               if (
                 entry.kind ===
@@ -1702,6 +1787,28 @@ export function DirectConversationPanel({
                 if (
                   submitted
                 ) {
+                  /*
+                   * onSubmitWork returns true only after Rekber custody proves
+                   * the submission. Pull once immediately so the worker sees
+                   * "Work submitted" without waiting for the normal 2s poll.
+                   */
+                  try {
+                    const next =
+                      await getRekberCustody(
+                        BigInt(
+                          fundedDealEntry
+                            .offerAction!
+                            .custodyCommitment!,
+                        ),
+                      );
+
+                    setCurrentRekberState(
+                      next,
+                    );
+                  } catch {
+                    // Normal custody polling will retry automatically.
+                  }
+
                   setShowWorkComposer(
                     false,
                   );

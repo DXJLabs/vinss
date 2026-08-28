@@ -230,11 +230,14 @@ export function MessageBubble({
   const showSender = mode === "group";
 
   /*
-   * A message is visible only after the wallet returned a confirmed
-   * transaction hash. This prevents abandoned Ready X attempts from
-   * becoming permanent ghost messages in the conversation.
+   * Outgoing messages appear immediately after preparation.
+   *
+   * An empty transactionHash means the exact locator is still waiting for
+   * blockchain confirmation. The existing spinner represents that state.
+   * Failed prepared messages are removed by useDirectConversation after
+   * blockchain reconciliation; presentation must not hide pending state.
    */
-  if (!entry.transactionHash || hidden) {
+  if (hidden) {
     return null;
   }
 

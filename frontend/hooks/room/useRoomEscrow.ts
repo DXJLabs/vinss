@@ -563,52 +563,60 @@ export function useRoomEscrow({
         ),
       ]);
 
-    if (
-      first.kind === "wallet"
-    ) {
-      stopDiscovery = true;
-      void refreshEscrowActions();
-      return first.result;
-    }
+    const resultFromProof = (
+      transactionHash: string,
+    ): SendActionResult => ({
+      transactionHash,
+      actionLocator:
+        preparedLocator,
+      payloadCommitment:
+        preparedCommitment,
+    });
 
+    /*
+     * Blockchain discovery is authoritative for Rekber coordination.
+     *
+     * Ready X/Mises can report success, timeout, or even a generic error
+     * after the private action has already reached Starknet. Never advance
+     * setup/approval from the wallet callback alone.
+     */
     if (
       first.kind === "discovery" &&
       first.match
     ) {
       stopDiscovery = true;
 
-      // Do not surface a late Ready X timeout after the exact locator is
-      // already visible through on-chain discovery.
+      // A late wallet callback is irrelevant after the exact immutable
+      // action locator already has an indexed Starknet transaction proof.
       void walletPromise.catch(
-        (err) => {
-          const raw =
-            err instanceof Error
-              ? err.message
-              : String(err);
-
-          if (
-            !/(?:timeout|timed out)/i.test(
-              raw,
-            )
-          ) {
-            console.error(
-              "[VINSS ESCROW COORDINATION LATE WALLET ERROR]",
-              err,
-            );
-          }
-        },
+        () => undefined,
       );
 
       void refreshEscrowActions();
 
-      return {
-        transactionHash:
-          first.match.transactionHash,
-        actionLocator:
-          preparedLocator,
-        payloadCommitment:
-          preparedCommitment,
-      };
+      return resultFromProof(
+        first.match.transactionHash,
+      );
+    }
+
+    /*
+     * A 45s discovery timeout must also terminate a wallet promise that
+     * never resolves. Previously VINSS fell back to `await walletPromise`
+     * here, which could leave the UI stuck forever at step 2/2.
+     */
+    if (
+      first.kind === "discovery" &&
+      !first.match
+    ) {
+      stopDiscovery = true;
+
+      void walletPromise.catch(
+        () => undefined,
+      );
+
+      throw new Error(
+        "Rekber coordination was not confirmed on-chain. Sync the room before retrying.",
+      );
     }
 
     if (
@@ -620,46 +628,48 @@ export function useRoomEscrow({
           ? first.error.message
           : String(first.error);
 
-      if (
-        !/(?:timeout|timed out)/i.test(
+      const explicitUserCancellation =
+        /(?:user.*(?:reject|refus|cancel|denied)|rejected by user|cancelled by user|action_rejected)/i.test(
           raw,
-        )
-      ) {
+        );
+
+      /*
+       * An explicit user cancellation can fail immediately. Any other wallet
+       * error remains ambiguous and must be checked against Starknet first.
+       */
+      if (explicitUserCancellation) {
         stopDiscovery = true;
         throw first.error;
       }
+    }
 
-      // The wallet says Timeout, but the transaction may already be on-chain.
-      const confirmed =
-        await confirmationPromise;
+    /*
+     * Even a successful wallet callback is only transport information.
+     * Wait for the exact prepared locator to appear in encrypted discovery.
+     */
+    const confirmed =
+      await confirmationPromise;
 
-      stopDiscovery = true;
+    stopDiscovery = true;
 
-      if (confirmed) {
-        void refreshEscrowActions();
+    if (confirmed) {
+      void refreshEscrowActions();
 
-        return {
-          transactionHash:
-            confirmed.transactionHash,
-          actionLocator:
-            preparedLocator,
-          payloadCommitment:
-            preparedCommitment,
-        };
-      }
+      return resultFromProof(
+        confirmed.transactionHash,
+      );
+    }
 
+    if (
+      first.kind ===
+      "wallet_error"
+    ) {
       throw first.error;
     }
 
-    // Discovery window ended first without a match. Fall back to the wallet
-    // result so a real rejection/error is still reported.
-    const result =
-      await walletPromise;
-
-    stopDiscovery = true;
-    void refreshEscrowActions();
-
-    return result;
+    throw new Error(
+      "Ready X returned, but the Rekber action was not confirmed on-chain. Sync before retrying.",
+    );
   }
   return {
     escrowIdentityReady:

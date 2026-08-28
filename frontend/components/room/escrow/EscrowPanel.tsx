@@ -381,8 +381,13 @@ export function EscrowPanel({
     ],
   );
 
+  /*
+   * Indexed Starknet discovery is authoritative.
+   * Local coordination is only an optimistic fallback after this client has
+   * already received a transaction result.
+   */
   const createRecord =
-    localCreate ?? discoveredCreate;
+    discoveredCreate ?? localCreate;
   const createAction =
     createRecord?.action ?? null;
   const discoveredAccept = useMemo(
@@ -407,7 +412,7 @@ export function EscrowPanel({
   );
 
   const acceptRecord =
-    localAccept ?? discoveredAccept;
+    discoveredAccept ?? localAccept;
   const acceptAction =
     acceptRecord?.action ?? null;
 
@@ -909,11 +914,28 @@ export function EscrowPanel({
       return;
     }
 
+    /*
+     * Setup and Payee approval are complete only when their immutable
+     * coordination action is discovered again with a Starknet tx proof.
+     * Local state or a Ready X callback must never advance these stages.
+     */
+    const setupConfirmed =
+      action === "setup" &&
+      Boolean(
+        discoveredCreate
+          ?.transactionHash,
+      );
+
+    const acceptanceConfirmed =
+      action === "accept" &&
+      Boolean(
+        discoveredAccept
+          ?.transactionHash,
+      );
+
     const completed =
-      (action === "setup" &&
-        Boolean(createAction)) ||
-      (action === "accept" &&
-        Boolean(acceptAction)) ||
+      setupConfirmed ||
+      acceptanceConfirmed ||
       (action === "fund" &&
         funded) ||
       (action === "release" &&
@@ -929,11 +951,34 @@ export function EscrowPanel({
         certificateClaimed);
 
     if (completed) {
+      /*
+       * Blockchain proof also recovers a Ready X callback that never returns.
+       * Clear every coordination-only lock so the UI cannot remain stuck on
+       * "2/2" after Starknet has already accepted the action.
+       */
+      if (setupConfirmed) {
+        setPendingPayerSetup(null);
+        setCoordinationPhase("idle");
+        coordinationLockRef.current =
+          false;
+      }
+
+      if (acceptanceConfirmed) {
+        setPendingPayeeAcceptance(
+          null,
+        );
+        setCoordinationPhase("idle");
+        coordinationLockRef.current =
+          false;
+      }
+
       finishRekberAction(action);
     }
   }, [
-    createAction,
-    acceptAction,
+    discoveredCreate
+      ?.transactionHash,
+    discoveredAccept
+      ?.transactionHash,
     funded,
     releaseRecord,
     released,
@@ -2339,7 +2384,7 @@ export function EscrowPanel({
               <>
                 <div className="rounded-xl border border-amber/25 bg-amber/[0.045] p-3">
                   <p className="text-xs font-medium text-amber">
-                    Step 1 · Prepare Escrow
+                    Step 1 · Prepare Rekber agreement
                   </p>
                   <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
                     After the Payee approves this setup, the deposit button for {accepted.amount} {accepted.asset} will appear on this wallet.
@@ -2376,7 +2421,7 @@ export function EscrowPanel({
                 </label>
 
                 <div className="rounded-xl bg-paper/[0.02] px-3 py-2.5 text-[9px] leading-relaxed text-paper/35">
-                  Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the approval, then <strong className="text-paper/60">(2) send</strong> the private setup. Complete both once.
+                  Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the Rekber agreement, then <strong className="text-paper/60">(2) publish</strong> the private setup. Setup is complete only after VINSS finds its Starknet proof.
                 </div>
 
                 <button
@@ -2391,12 +2436,12 @@ export function EscrowPanel({
                   className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
                 >
                   {coordinationPhase === "payer-signature"
-                    ? "1/2 · Sign in Ready X…"
+                    ? "1/2 · Sign Rekber agreement…"
                     : coordinationPhase === "payer-send"
-                      ? "2/2 · Send setup in Ready X…"
+                      ? "2/2 · Verifying setup on Starknet…"
                       : pendingPayerSetup
-                        ? "Continue setup →"
-                        : "Prepare Escrow →"}
+                        ? "2/2 · Publish setup →"
+                        : "Prepare Rekber agreement →"}
                 </button>
               </>
             )}

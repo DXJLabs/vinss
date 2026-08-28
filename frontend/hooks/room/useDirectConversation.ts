@@ -51,6 +51,9 @@ import {
 import {
   computeRekberEvidenceCommitment,
 } from "@/lib/deal-room/rekberEvidence";
+import {
+  waitForFulfillmentConfirmation,
+} from "@/lib/deal-room/workConfirmation";
 
 import {
   confirmRekberFulfillment as confirmWorkOnRekber,
@@ -571,6 +574,156 @@ export function useDirectConversation({
     await historyWriteChainRef.current;
   }
 
+  /*
+   * Prepared message state is optimistic only.
+   *
+   * Ready X/Mises is transport; discovery of the exact immutable locator is
+   * authoritative. A confirmed locator upgrades the spinner to ✓. If the
+   * locator never appears during the reconciliation window, the optimistic
+   * bubble is removed automatically and the text can be retried.
+   */
+  async function reconcilePreparedMessage(
+    preparedLocator: string,
+    storageKey: string,
+    body: string,
+  ): Promise<void> {
+    if (
+      !channelKey ||
+      !session ||
+      !selectedPeer
+    ) {
+      return;
+    }
+
+    const target =
+      preparedLocator
+        .replace(/^0x/, "")
+        .toLowerCase();
+
+    const deadline =
+      Date.now() + 45_000;
+
+    while (Date.now() < deadline) {
+      try {
+        const routes =
+          await buildDiscoveryRoutes();
+
+        if (routes.length > 0) {
+          const discovered =
+            await discoverMessages(
+              BACKEND_URL,
+              channelKey,
+              routes,
+            );
+
+          const confirmed =
+            discovered.find(
+              (item) =>
+                item.message.scope ===
+                  "direct" &&
+                locatorHex(
+                  item.actionLocator,
+                ) === target &&
+                sameStarknetAddress(
+                  item.message
+                    .senderIdentity
+                    ?.address,
+                  session
+                    .account.address,
+                ) &&
+                sameStarknetAddress(
+                  item.message
+                    .recipientAddress,
+                  selectedPeer.address,
+                ),
+            );
+
+          if (confirmed) {
+            window.localStorage.removeItem(
+              storageKey,
+            );
+
+            setMessagePending(false);
+
+            setEntries((previous) => {
+              const next =
+                previous.map(
+                  (entry) =>
+                    entry.actionLocator
+                      .replace(
+                        /^0x/,
+                        "",
+                      )
+                      .toLowerCase() ===
+                    target
+                      ? {
+                          ...entry,
+                          transactionHash:
+                            confirmed
+                              .transactionHash,
+                        }
+                      : entry,
+                );
+
+              void persistHistory(next);
+
+              return next;
+            });
+
+            setError(null);
+            return;
+          }
+        }
+      } catch {
+        // RPC/indexer lag is expected briefly after wallet submission.
+      }
+
+      await new Promise<void>(
+        (resolve) =>
+          window.setTimeout(
+            resolve,
+            1_500,
+          ),
+      );
+    }
+
+    /*
+     * No immutable locator appeared on-chain during reconciliation.
+     * Delete only this optimistic message; confirmed history is untouched.
+     */
+    setEntries((previous) => {
+      const next =
+        previous.filter(
+          (entry) =>
+            entry.transactionHash ||
+            entry.actionLocator
+              .replace(/^0x/, "")
+              .toLowerCase() !==
+              target,
+        );
+
+      void persistHistory(next);
+
+      return next;
+    });
+
+    window.localStorage.removeItem(
+      storageKey,
+    );
+
+    setMessagePending(false);
+
+    setDraft((current) =>
+      current.trim()
+        ? current
+        : body,
+    );
+
+    setError(
+      "Message was not confirmed on-chain. Try again.",
+    );
+  }
+
   async function sendDirectMessage():
     Promise<void> {
     if (messagePending) {
@@ -720,145 +873,75 @@ export function useDirectConversation({
         },
       );
 
-      const result = await Promise.race([
+      await Promise.race([
         sendPromise,
         callbackTimeoutPromise,
       ]);
 
-      window.localStorage.removeItem(
-        storageKey,
-      );
-
-      setMessagePending(false);
-
-      const confirmedLocator =
-        result.actionLocator.toString(16);
-
-      setEntries((previous) => {
-        let matched = false;
-
-        const next = previous.map(
-          (entry) => {
-            if (
-              entry.actionLocator ===
-              confirmedLocator
-            ) {
-              matched = true;
-
-              return {
-                ...entry,
-                transactionHash:
-                  result.transactionHash,
-              };
-            }
-
-            return entry;
-          },
+      if (!preparedLocator) {
+        throw new Error(
+          "Message preparation did not produce an action locator.",
         );
+      }
 
-        if (matched) return next;
+      /*
+       * A wallet success is still not a blockchain confirmation.
+       * Keep the spinner and reconcile the exact locator in background.
+       */
+      setMessagePending(true);
+      setError(null);
 
-        return [
-          ...next,
-          {
-            id: `direct:${confirmedLocator}`,
-            kind: "message",
-            summary: body,
-            transactionHash:
-              result.transactionHash,
-            actionLocator:
-              confirmedLocator,
-            sentAt,
-            scope: "direct",
-            senderAddress:
-              session.account.address,
-            recipientAddress:
-              selectedPeer.address,
-          },
-        ];
-      });
+      void reconcilePreparedMessage(
+        preparedLocator,
+        storageKey,
+        body,
+      );
     } catch (err) {
-      const raw =
-        err instanceof Error
-          ? err.message
-          : String(err);
-
-      // Ready X may successfully submit the Starknet transaction while the
-      // browser loses or delays the wallet callback during a mobile remount.
-      // A callback timeout is therefore a recoverable pending state, not a
-      // transaction failure. Discovery will reconcile the public locator.
-      const callbackDelayed =
-        raw ===
-        "VINSS_DIRECT_CALLBACK_TIMEOUT";
-
-      if (
-        callbackDelayed &&
-        preparedLocator
-      ) {
+      /*
+       * Once onPrepared produced a locator, any Ready X/Mises result is
+       * ambiguous. Mobile wallets can report timeout/refusal even after the
+       * Starknet transaction was accepted, so never delete it from wallet
+       * status alone. Reconcile against blockchain discovery first.
+       */
+      if (preparedLocator) {
         console.warn(
-          "[VINSS DIRECT CALLBACK DELAYED]",
+          "[VINSS DIRECT WALLET RESULT AMBIGUOUS]",
           {
             actionLocator:
               preparedLocator,
+            error: err,
           },
         );
 
         setMessagePending(true);
         setError(null);
 
-        // Trigger one immediate discovery pass instead of waiting for the
-        // normal polling interval to reconcile the confirmed transaction.
-        void refreshDirect(true);
+        void reconcilePreparedMessage(
+          preparedLocator,
+          storageKey,
+          body,
+        );
+
         return;
       }
 
+      /*
+       * Failure before preparation cannot have produced the immutable
+       * MessageHelper action, so there is nothing optimistic to keep.
+       */
       console.error(
         "[VINSS DIRECT SEND ERROR]",
         err,
       );
 
-      const definitelyFailed =
-        /USER_REFUSED|INVALID_REQUEST_PAYLOAD|NOT_REGISTERED|INSUFFICIENT_PRIVATE_BALANCE|PRIVACY_LEAK/i.test(
-          raw,
-        );
-
-      if (definitelyFailed) {
-        window.localStorage.removeItem(
-          storageKey,
-        );
-        setMessagePending(false);
-
-        if (preparedLocator) {
-          setEntries((previous) =>
-            previous.filter(
-              (entry) =>
-                entry.actionLocator !==
-                preparedLocator,
-            ),
-          );
-        }
-
-        setDraft(body);
-        setError(
-          humanizeError(
-            err,
-            "Private message could not be sent.",
-          ),
-        );
-
-        return;
-      }
-
-      if (preparedLocator) {
-        setMessagePending(true);
-        setError(
-          "Message is being confirmed in the background.",
-        );
-        return;
-      }
-
       setMessagePending(false);
-      setDraft(body);
+
+      setDraft((current) =>
+        current.trim()
+          ? current
+          : body,
+      );
+
       setError(
         humanizeError(
           err,
@@ -1310,24 +1393,94 @@ export function useDirectConversation({
           fileSha256,
         ]);
 
-      await submitWorkOnRekber(
-        session.account,
-        {
-          custodyCommitment,
-          chainSecret:
-            BigInt(chainSecretRaw),
-          evidenceCommitment,
-        },
-      );
+      const walletPromise =
+        submitWorkOnRekber(
+          session.account,
+          {
+            custodyCommitment,
+            chainSecret:
+              BigInt(chainSecretRaw),
+            evidenceCommitment,
+          },
+        );
 
       /*
-       * Do not create a MessageHelper record here.
-       * Both wallets derive workflow status from Rekber custody.
+       * Blockchain custody is authoritative.
+       *
+       * Ready X/Mises may resolve, timeout, or report an error after the
+       * work transaction already reached Starknet. Poll the exact custody
+       * and evidence commitment instead of advancing from wallet UI alone.
        */
-      setError(null);
-      void refreshDirect(true);
+      const confirmationPromise =
+        waitForFulfillmentConfirmation({
+          custodyCommitment,
+          evidenceCommitment,
+          previousRoundsRemaining:
+            custody
+              .fulfillmentRoundsRemaining,
+        });
 
-      return true;
+      const walletOutcome =
+        walletPromise
+          .then(() => ({
+            kind: "wallet" as const,
+          }))
+          .catch((error) => ({
+            kind:
+              "wallet_error" as const,
+            error,
+          }));
+
+      const first =
+        await Promise.race([
+          walletOutcome,
+          confirmationPromise.then(
+            (state) => ({
+              kind:
+                "chain" as const,
+              state,
+            }),
+          ),
+        ]);
+
+      if (
+        first.kind === "chain" &&
+        first.state
+      ) {
+        // Suppress a late mobile-wallet rejection after Starknet has proved
+        // that this exact evidence commitment was already accepted.
+        void walletPromise.catch(
+          () => undefined,
+        );
+
+        setError(null);
+        void refreshDirect(true);
+        return true;
+      }
+
+      const confirmed =
+        await confirmationPromise;
+
+      if (confirmed) {
+        void walletPromise.catch(
+          () => undefined,
+        );
+
+        setError(null);
+        void refreshDirect(true);
+        return true;
+      }
+
+      if (
+        first.kind ===
+        "wallet_error"
+      ) {
+        throw first.error;
+      }
+
+      throw new Error(
+        "Work submission was not confirmed on-chain. Check Rekber before retrying.",
+      );
     } catch (err) {
       const raw =
         err instanceof Error
