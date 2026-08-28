@@ -1847,9 +1847,14 @@ export function useDirectConversation({
         input.decision === "rejected"
       ) {
         /*
-         * Reject does not move funds and does not open a dispute yet. Bob gets
-         * the next choice: accept the rejection or challenge it.
+         * Reject does not move funds or open a dispute yet.
+         * It is still one paid VINSS review action. Bob gets the next choice:
+         * accept the rejection or challenge it.
          */
+        await chargeRekberWorkflowAction(
+          session.account,
+        );
+
         await persistReview();
         return true;
       }
