@@ -16,12 +16,21 @@ import {
   verifyDisputeAttestations,
 } from "../dispute/attestation.js";
 import {
+  sanitizeDisputeRekberBinding,
+  verifyDisputeRekberBinding,
+} from "../dispute/binding.js";
+import {
   readAndVerifyDisputeCustody,
+  readVerifiedPrincipalUsdMicros,
 } from "../dispute/chain.js";
 import {
   computeDisputeCaseCommitment,
   sanitizeDisputeCase,
 } from "../dispute/evidence.js";
+import {
+  authorizeDisputeResolution,
+  type DisputeExecutionResult,
+} from "../dispute/executor.js";
 import {
   evaluateDisputeCase,
 } from "../dispute/service.js";
@@ -29,17 +38,16 @@ import {
 interface DisputeRequestBody {
   case?: unknown;
   attestations?: unknown;
+  binding?: unknown;
   provider?: unknown;
 }
 
 function publicError(
   error: unknown,
 ): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Invalid dispute request.";
+  return error instanceof Error
+    ? error.message
+    : "Invalid dispute request.";
 }
 
 export function createDisputeRouter(
@@ -64,13 +72,26 @@ export function createDisputeRouter(
             body.case,
           );
 
+        const binding =
+          sanitizeDisputeRekberBinding(
+            body.binding,
+          );
+
+        const custody =
+          await readAndVerifyDisputeCustody(
+            config,
+            disputeCase,
+          );
+
         /*
-         * Do not issue signatures over a stale/fabricated lifecycle snapshot.
-         * Challenge creation itself is bound to current Rekber state.
+         * Never ask Alice/Bob to sign an AutoSplit mandate until the backend
+         * proves they are the wallets that signed this exact Rekber Agreement.
          */
-        await readAndVerifyDisputeCustody(
+        await verifyDisputeRekberBinding(
           config,
           disputeCase,
+          custody,
+          binding,
         );
 
         return res.json({
@@ -144,20 +165,40 @@ export function createDisputeRouter(
             body.attestations,
           );
 
-        /*
-         * Re-read Rekber after signatures are collected. A dispute can resolve
-         * or consume custody between challenge and evaluation.
-         */
-        await readAndVerifyDisputeCustody(
-          config,
-          disputeCase,
-        );
+        const binding =
+          sanitizeDisputeRekberBinding(
+            body.binding,
+          );
 
-        await verifyDisputeAttestations(
-          config,
-          disputeCase,
-          attestations,
-        );
+        /*
+         * Re-read every authority at execution time. Browser lifecycle flags,
+         * wallet identity and USD value are never trusted for AutoResolve.
+         */
+        const custody =
+          await readAndVerifyDisputeCustody(
+            config,
+            disputeCase,
+          );
+
+        await Promise.all([
+          verifyDisputeAttestations(
+            config,
+            disputeCase,
+            attestations,
+          ),
+          verifyDisputeRekberBinding(
+            config,
+            disputeCase,
+            custody,
+            binding,
+          ),
+        ]);
+
+        const verifiedPrincipalUsdMicros =
+          await readVerifiedPrincipalUsdMicros(
+            config,
+            custody,
+          );
 
         const result =
           await evaluateDisputeCase(
@@ -165,22 +206,47 @@ export function createDisputeRouter(
             {
               provider:
                 body.provider,
+              trust: {
+                partyBindingVerified:
+                  true,
+                ...(verifiedPrincipalUsdMicros !==
+                undefined
+                  ? {
+                      verifiedPrincipalUsdMicros,
+                    }
+                  : {}),
+              },
             },
           );
+
+        let execution:
+          DisputeExecutionResult = {
+            status:
+              "not_eligible",
+          };
+
+        if (
+          result.policy.status ===
+          "AUTO_RESOLVE"
+        ) {
+          execution =
+            await authorizeDisputeResolution(
+              config,
+              custody,
+              result.caseCommitment,
+              result.decision,
+            );
+        }
 
         return res.json({
           ...result,
           network:
             config.network,
-
-          // Explicitly state the capability boundary to consumers.
-          execution:
-            "not_enabled",
+          execution,
         });
       } catch (error) {
         /*
-         * Never log request bodies or evidence. Provider errors are already
-         * identity-only logged by the Agent runtime.
+         * Do not log evidence, signatures or resolver credentials.
          */
         return res
           .status(400)

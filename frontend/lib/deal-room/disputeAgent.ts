@@ -81,6 +81,17 @@ export interface DisputeAgentDecision {
   flags: string[];
 }
 
+export interface DisputeExecutionResult {
+  status:
+    | "authorized"
+    | "already_authorized"
+    | "not_enabled"
+    | "not_eligible";
+  transactionHash?: string;
+  payerAmount?: string;
+  payeeAmount?: string;
+}
+
 export interface DisputeAgentResult {
   caseCommitment: string;
   decision: DisputeAgentDecision;
@@ -94,7 +105,131 @@ export interface DisputeAgentResult {
   provider: string;
   model: string;
   network: string;
-  execution: "not_enabled";
+  execution: DisputeExecutionResult;
+}
+
+/**
+ * Minimal proof that the Payer/Payee are the wallets that signed the original
+ * Rekber Agreement. No private Rekber secret/preimage is disclosed.
+ */
+export interface DisputeRekberBinding {
+  setup: {
+    custodyCommitment: string;
+    dealOfferLocator: string;
+    dealTermsCommitment: string;
+    payerAddress: string;
+    payeeAddress: string;
+    releaseAuthorizationCommitment: string;
+    refundCommitment: string;
+    payerConfirmationCommitment: string;
+    payerDisputeCommitment: string;
+    revisionChainHead: string;
+    payerCertificateCommitment: string;
+    fulfillmentDeadline: string;
+    signature: string[];
+  };
+  acceptance: {
+    custodyCommitment: string;
+    dealOfferLocator: string;
+    dealTermsCommitment: string;
+    payerAddress: string;
+    payeeAddress: string;
+    payeeClaimCommitment: string;
+    payeeDisputeCommitment: string;
+    payeeRefundConsentCommitment: string;
+    fulfillmentChainHead: string;
+    payeeCertificateCommitment: string;
+    fulfillmentDeadline: string;
+    signature: string[];
+  };
+}
+
+function bindingField(
+  value: string | undefined,
+  label: string,
+): string {
+  if (!value) {
+    throw new Error(
+      `Rekber arbitration binding is missing ${label}.`,
+    );
+  }
+
+  return value;
+}
+
+export function buildDisputeRekberBinding(
+  setup: EscrowActionPayload,
+  acceptance: EscrowActionPayload,
+): DisputeRekberBinding {
+  if (
+    setup.kind !== "create" ||
+    acceptance.kind !== "accept" ||
+    setup.coordinationVersion !== 3 ||
+    acceptance.coordinationVersion !== 3 ||
+    !setup.coordinationSignature?.length ||
+    !acceptance.coordinationSignature?.length
+  ) {
+    throw new Error(
+      "The signed Rekber Agreement is not ready for arbitration.",
+    );
+  }
+
+  return {
+    setup: {
+      custodyCommitment:
+        bindingField(setup.custodyCommitment, "setup custody"),
+      dealOfferLocator:
+        bindingField(setup.dealOfferLocator, "setup deal"),
+      dealTermsCommitment:
+        bindingField(setup.dealTermsCommitment, "private terms commitment"),
+      payerAddress:
+        bindingField(setup.senderAddress, "payer"),
+      payeeAddress:
+        bindingField(setup.recipientAddress, "payee"),
+      releaseAuthorizationCommitment:
+        bindingField(setup.releaseAuthorizationCommitment, "release commitment"),
+      refundCommitment:
+        bindingField(setup.refundCommitment, "refund commitment"),
+      payerConfirmationCommitment:
+        bindingField(setup.payerConfirmationCommitment, "payer confirmation commitment"),
+      payerDisputeCommitment:
+        bindingField(setup.payerDisputeCommitment, "payer dispute commitment"),
+      revisionChainHead:
+        bindingField(setup.revisionChainHead, "revision chain"),
+      payerCertificateCommitment:
+        bindingField(setup.payerCertificateCommitment, "payer certificate commitment"),
+      fulfillmentDeadline:
+        bindingField(setup.refundAfter, "fulfillment deadline"),
+      signature:
+        setup.coordinationSignature,
+    },
+    acceptance: {
+      custodyCommitment:
+        bindingField(acceptance.custodyCommitment, "acceptance custody"),
+      dealOfferLocator:
+        bindingField(acceptance.dealOfferLocator, "acceptance deal"),
+      dealTermsCommitment:
+        bindingField(acceptance.dealTermsCommitment, "acceptance private terms commitment"),
+      payerAddress:
+        bindingField(acceptance.recipientAddress, "acceptance payer"),
+      payeeAddress:
+        bindingField(acceptance.senderAddress, "acceptance payee"),
+      payeeClaimCommitment:
+        bindingField(acceptance.payeeClaimCommitment, "payee claim commitment"),
+      payeeDisputeCommitment:
+        bindingField(acceptance.payeeDisputeCommitment, "payee dispute commitment"),
+      payeeRefundConsentCommitment:
+        bindingField(acceptance.payeeRefundConsentCommitment, "refund consent commitment"),
+      fulfillmentChainHead:
+        bindingField(acceptance.fulfillmentChainHead, "fulfillment chain"),
+      payeeCertificateCommitment:
+        bindingField(acceptance.payeeCertificateCommitment, "payee certificate commitment"),
+      fulfillmentDeadline:
+        bindingField(acceptance.refundAfter, "acceptance fulfillment deadline"),
+      signature:
+        acceptance.coordinationSignature,
+    },
+  };
 }
 
 export interface EscrowCoordinationRecord {
@@ -371,11 +506,13 @@ async function postJson<T>(
 
 export function requestDisputeAgentChallenge(
   disputeCase: DisputeAgentCase,
+  binding: DisputeRekberBinding,
 ): Promise<DisputeAgentChallenge> {
   return postJson(
     "/dispute/challenge",
     {
       case: disputeCase,
+      binding,
     },
   );
 }
@@ -386,12 +523,14 @@ export function evaluateDisputeWithAgent(
     payer: string[];
     payee: string[];
   },
+  binding: DisputeRekberBinding,
 ): Promise<DisputeAgentResult> {
   return postJson(
     "/dispute/evaluate",
     {
       case: disputeCase,
       attestations,
+      binding,
     },
   );
 }

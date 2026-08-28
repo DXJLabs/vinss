@@ -200,18 +200,17 @@ export async function sendEscrowCoordinationAction(
   ].map(toFelt);
 
   /*
-   * Rekber economics:
-   * payer Agreement/create = VINSS revenue;
-   * payee acceptance and later coordination = replay protection only.
-   */
-  /*
-   * Both Rekber Agreement approvals are paid private actions.
-   * Payer create and Payee accept each carry the VINSS workflow fee.
-   * Later coordination remains replay-only unless explicitly priced elsewhere.
+   * Paid private Rekber coordination:
+   * - payer Agreement
+   * - payee Agreement
+   * - every explicit dispute coordination action (reason/evidence/signature)
+   *
+   * Fund confirmations and other background synchronization remain replay-only.
    */
   const revenueFee =
     payload.kind === "create" ||
-    payload.kind === "accept"
+    payload.kind === "accept" ||
+    payload.kind === "dispute"
       ? await quoteRekberWorkflowFee()
       : 0n;
 

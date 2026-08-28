@@ -126,4 +126,5 @@ export interface DisputePolicyTrust {
 export interface EvaluateDisputeOptions {
   provider?: VinssLlmSelection;
   policy?: Partial<DisputePolicyConfig>;
+  trust?: DisputePolicyTrust;
 }

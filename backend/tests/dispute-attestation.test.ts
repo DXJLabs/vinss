@@ -281,6 +281,14 @@ test(
       payer.message.Custody,
       "0xabc",
     );
+    assert.equal(
+      payer.message.Consent,
+      "Arbitrate",
+    );
+    assert.equal(
+      payer.message.Execution,
+      "AutoSplit",
+    );
   },
 );
 

@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -20,6 +22,7 @@ import type {
 } from "@/lib/deal-room/settlement";
 import {
   buildDisputeAgentCase,
+  buildDisputeRekberBinding,
   createDisputeAgentPacket,
   evaluateDisputeWithAgent,
   findLatestDisputeAgentPacket,
@@ -42,6 +45,8 @@ interface UseDisputeAgentReviewOptions {
   payeeAddress: string;
   dealOfferLocator: string;
   offerSnapshot: EscrowOfferSnapshot | null;
+  rekberSetup: EscrowActionPayload | null;
+  rekberAcceptance: EscrowActionPayload | null;
   escrowActions:
     readonly EscrowCoordinationRecord[];
   peerAddress: string;
@@ -62,6 +67,8 @@ export function useDisputeAgentReview({
   payeeAddress,
   dealOfferLocator,
   offerSnapshot,
+  rekberSetup,
+  rekberAcceptance,
   escrowActions,
   peerAddress,
   onSendCoordination,
@@ -138,6 +145,28 @@ export function useDisputeAgentReview({
       payerPacket,
       payeePacket,
       state,
+    ]);
+
+  const binding =
+    useMemo(() => {
+      if (
+        !rekberSetup ||
+        !rekberAcceptance
+      ) {
+        return null;
+      }
+
+      try {
+        return buildDisputeRekberBinding(
+          rekberSetup,
+          rekberAcceptance,
+        );
+      } catch {
+        return null;
+      }
+    }, [
+      rekberSetup,
+      rekberAcceptance,
     ]);
 
   const [
@@ -246,6 +275,7 @@ export function useDisputeAgentReview({
     if (
       !role ||
       !disputeCase ||
+      !binding ||
       !peerAddress
     ) {
       return false;
@@ -262,6 +292,7 @@ export function useDisputeAgentReview({
         const challenge =
           await requestDisputeAgentChallenge(
             disputeCase,
+            binding,
           );
 
         const signature =
@@ -300,6 +331,7 @@ export function useDisputeAgentReview({
     Promise<boolean> {
     if (
       !disputeCase ||
+      !binding ||
       !payerSignature ||
       !payeeSignature
     ) {
@@ -318,6 +350,7 @@ export function useDisputeAgentReview({
               payee:
                 payeeSignature,
             },
+            binding,
           );
 
         /*
@@ -328,6 +361,61 @@ export function useDisputeAgentReview({
       },
     );
   }
+
+  const autoEvaluationRef =
+    useRef("");
+
+  /*
+   * The second verified arbitration signature is the trigger.
+   *
+   * Only the Payer client starts evaluation so Alice/Bob do not race two LLM
+   * requests for the same case. The backend still verifies BOTH signatures.
+   * If evaluation fails, the guard is released after a short delay so normal
+   * room synchronization can retry without another wallet signature.
+   */
+  useEffect(() => {
+    if (
+      role !== "payer" ||
+      !caseCommitment ||
+      !payerSignature ||
+      !payeeSignature ||
+      result
+    ) {
+      return;
+    }
+
+    const key =
+      `${caseCommitment}:` +
+      payerSignature.join(":") +
+      ":" +
+      payeeSignature.join(":");
+
+    if (
+      autoEvaluationRef.current === key
+    ) {
+      return;
+    }
+
+    autoEvaluationRef.current = key;
+
+    void evaluate().then((ok) => {
+      if (!ok) {
+        window.setTimeout(() => {
+          if (
+            autoEvaluationRef.current === key
+          ) {
+            autoEvaluationRef.current = "";
+          }
+        }, 5_000);
+      }
+    });
+  }, [
+    role,
+    caseCommitment,
+    payerSignature,
+    payeeSignature,
+    result,
+  ]);
 
   const ownPacket =
     role === "payer"

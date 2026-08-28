@@ -32,6 +32,8 @@ interface DisputeAgentReviewProps {
   payeeAddress: string;
   dealOfferLocator: string;
   offerSnapshot: EscrowOfferSnapshot | null;
+  rekberSetup: EscrowActionPayload | null;
+  rekberAcceptance: EscrowActionPayload | null;
   escrowActions:
     readonly EscrowCoordinationRecord[];
   peerAddress: string;
@@ -65,6 +67,8 @@ export function DisputeAgentReview({
   payeeAddress,
   dealOfferLocator,
   offerSnapshot,
+  rekberSetup,
+  rekberAcceptance,
   escrowActions,
   peerAddress,
   onSendCoordination,
@@ -87,6 +91,8 @@ export function DisputeAgentReview({
       payeeAddress,
       dealOfferLocator,
       offerSnapshot,
+      rekberSetup,
+      rekberAcceptance,
       escrowActions,
       peerAddress,
       onSendCoordination,
@@ -232,18 +238,16 @@ export function DisputeAgentReview({
       {review.payerSignature &&
         review.payeeSignature &&
         !review.result && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void review.evaluate()
-            }
-            className="mt-3 w-full rounded-xl bg-signal px-4 py-3 text-xs font-medium text-ink disabled:opacity-30"
-          >
-            {busy
-              ? "Agent reviewing…"
-              : "Request Agent decision →"}
-          </button>
+          <div className="mt-3 rounded-xl border border-signal/15 bg-signal/[0.035] px-4 py-3">
+            <p className="text-xs font-medium text-signal">
+              {busy
+                ? "Agent reviewing dispute…"
+                : "Both signatures verified"}
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-paper/40">
+              Agent arbitration starts automatically.
+            </p>
+          </div>
         )}
 
       {review.result && (
@@ -253,7 +257,15 @@ export function DisputeAgentReview({
               Agent decision
             </p>
             <span className="text-[9px] uppercase tracking-[0.1em] text-paper/30">
-              Advisory only
+              {review.result.execution.status ===
+                "authorized" ||
+              review.result.execution.status ===
+                "already_authorized"
+                ? "Split authorized"
+                : review.result.policy.status ===
+                    "NEEDS_REVIEW"
+                  ? "Needs review"
+                  : "Policy checked"}
             </span>
           </div>
 

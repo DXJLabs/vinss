@@ -110,6 +110,10 @@ export function buildDisputeAttestationTypedData(
           name: "Consent",
           type: "shortstring",
         },
+        {
+          name: "Execution",
+          type: "shortstring",
+        },
       ],
     },
     primaryType:
@@ -133,7 +137,9 @@ export function buildDisputeAttestationTypedData(
       Wallet:
         num.toHex(wallet),
       Consent:
-        "Review",
+        "Arbitrate",
+      Execution:
+        "AutoSplit",
     },
   };
 }

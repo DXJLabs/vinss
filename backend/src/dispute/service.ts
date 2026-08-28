@@ -108,7 +108,7 @@ export async function evaluateDisputeCase(
        * the declared wallets to the original Rekber payer/payee signatures or
        * derive USD valuation from a trusted oracle. Fail closed until D4.
        */
-      {
+      options.trust ?? {
         partyBindingVerified:
           false,
       },

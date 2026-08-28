@@ -2622,6 +2622,12 @@ export function EscrowPanel({
                       ?.offerSnapshot ??
                     null
                   }
+                  rekberSetup={
+                    createAction
+                  }
+                  rekberAcceptance={
+                    acceptAction
+                  }
                   escrowActions={
                     escrowActions
                   }

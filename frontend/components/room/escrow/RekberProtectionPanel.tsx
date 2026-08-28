@@ -38,6 +38,8 @@ interface RekberProtectionPanelProps {
   payerAddress: string;
   payeeAddress: string;
   offerSnapshot: EscrowOfferSnapshot | null;
+  rekberSetup: EscrowActionPayload | null;
+  rekberAcceptance: EscrowActionPayload | null;
   escrowActions:
     readonly EscrowCoordinationRecord[];
   peerAddress: string;
@@ -62,6 +64,8 @@ export function RekberProtectionPanel({
   payerAddress,
   payeeAddress,
   offerSnapshot,
+  rekberSetup,
+  rekberAcceptance,
   escrowActions,
   peerAddress,
   privateDisputeAction,
@@ -219,6 +223,12 @@ export function RekberProtectionPanel({
           }
           offerSnapshot={
             offerSnapshot
+          }
+          rekberSetup={
+            rekberSetup
+          }
+          rekberAcceptance={
+            rekberAcceptance
           }
           escrowActions={
             escrowActions

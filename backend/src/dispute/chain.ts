@@ -1,6 +1,7 @@
 import {
   RpcProvider,
   num,
+  shortString,
 } from "starknet";
 
 import type {
@@ -13,8 +14,20 @@ import type {
 
 export interface VerifiedRekberCustody {
   custodyCommitment: string;
+  releaseAuthorizationCommitment: string;
+  payeeClaimCommitment: string;
+  refundCommitment: string;
+  payerConfirmationCommitment: string;
+  payerDisputeCommitment: string;
+  payeeDisputeCommitment: string;
+  payeeRefundConsentCommitment: string;
+  fulfillmentChainHead: string;
+  revisionChainHead: string;
+  payerCertificateCommitment: string;
+  payeeCertificateCommitment: string;
   token: string;
   amount: string;
+  fulfillmentDeadline: string;
   verificationPolicy: number;
   fulfillmentEvidenceCommitment: string;
   fulfillmentSubmitted: boolean;
@@ -54,11 +67,37 @@ export function parseRekberCustodyResult(
   return {
     custodyCommitment:
       feltAt(result, 0),
+    releaseAuthorizationCommitment:
+      feltAt(result, 1),
+    payeeClaimCommitment:
+      feltAt(result, 2),
+    refundCommitment:
+      feltAt(result, 3),
+    payerConfirmationCommitment:
+      feltAt(result, 4),
+    payerDisputeCommitment:
+      feltAt(result, 5),
+    payeeDisputeCommitment:
+      feltAt(result, 6),
+    payeeRefundConsentCommitment:
+      feltAt(result, 7),
+    fulfillmentChainHead:
+      feltAt(result, 8),
+    revisionChainHead:
+      feltAt(result, 9),
+    payerCertificateCommitment:
+      feltAt(result, 10),
+    payeeCertificateCommitment:
+      feltAt(result, 11),
     token:
       feltAt(result, 12),
     amount:
       BigInt(
         result[13] ?? "0",
+      ).toString(),
+    fulfillmentDeadline:
+      BigInt(
+        result[15] ?? "0",
       ).toString(),
     verificationPolicy:
       Number(
@@ -236,6 +275,192 @@ export function assertDisputeCaseMatchesCustody(
     throw new Error(
       "Rekber resolution is already authorized.",
     );
+  }
+}
+
+/**
+ * Browser USD values are not trusted for automated arbitration.
+ *
+ * Canonical USDC raw units already equal USD micros (6 decimals). STRK uses
+ * the live Pragma median and Rekber's own freshness/source thresholds.
+ */
+export async function readVerifiedPrincipalUsdMicros(
+  config: AppConfig,
+  custody: VerifiedRekberCustody,
+): Promise<number | undefined> {
+  const provider =
+    new RpcProvider({
+      nodeUrl:
+        config.rpcUrl,
+    });
+
+  try {
+    const tokens =
+      await provider.callContract({
+        contractAddress:
+          config.contracts.escrowRekber,
+        entrypoint:
+          "get_supported_tokens",
+        calldata: [],
+      });
+
+    const strk =
+      feltAt(tokens, 0);
+    const usdc =
+      feltAt(tokens, 1);
+
+    if (
+      sameFelt(
+        custody.token,
+        usdc,
+      )
+    ) {
+      const micros =
+        BigInt(
+          custody.amount,
+        );
+
+      return micros <=
+        BigInt(
+          Number.MAX_SAFE_INTEGER,
+        )
+        ? Number(micros)
+        : undefined;
+    }
+
+    if (
+      !sameFelt(
+        custody.token,
+        strk,
+      )
+    ) {
+      return undefined;
+    }
+
+    const [
+      oracleResult,
+      feePolicy,
+    ] = await Promise.all([
+      provider.callContract({
+        contractAddress:
+          config.contracts.escrowRekber,
+        entrypoint:
+          "get_pragma_oracle",
+        calldata: [],
+      }),
+      provider.callContract({
+        contractAddress:
+          config.contracts.escrowRekber,
+        entrypoint:
+          "get_fee_policy",
+        calldata: [],
+      }),
+    ]);
+
+    const oracle =
+      feltAt(
+        oracleResult,
+        0,
+      );
+
+    const quote =
+      await provider.callContract({
+        contractAddress:
+          oracle,
+        entrypoint:
+          "get_data_median",
+        // Pragma DataType::SpotEntry("STRK/USD").
+        calldata: [
+          "0x0",
+          shortString
+            .encodeShortString(
+              "STRK/USD",
+            ),
+        ],
+      });
+
+    const price =
+      BigInt(
+        quote[0] ?? "0",
+      );
+    const decimals =
+      BigInt(
+        quote[1] ?? "0",
+      );
+    const updatedAt =
+      Number(
+        BigInt(
+          quote[2] ?? "0",
+        ),
+      );
+    const sources =
+      Number(
+        BigInt(
+          quote[3] ?? "0",
+        ),
+      );
+
+    const maxAge =
+      Number(
+        BigInt(
+          feePolicy[1] ?? "0",
+        ),
+      );
+    const minSources =
+      Number(
+        BigInt(
+          feePolicy[2] ?? "0",
+        ),
+      );
+
+    const now =
+      Math.floor(
+        Date.now() / 1000,
+      );
+
+    if (
+      price <= 0n ||
+      decimals > 30n ||
+      updatedAt <= 0 ||
+      updatedAt > now ||
+      now - updatedAt >
+        maxAge ||
+      sources < minSources
+    ) {
+      return undefined;
+    }
+
+    const numerator =
+      BigInt(custody.amount) *
+      price *
+      1_000_000n;
+
+    const denominator =
+      (10n ** 18n) *
+      (10n ** decimals);
+
+    const micros =
+      (
+        numerator +
+        denominator -
+        1n
+      ) /
+      denominator;
+
+    if (
+      micros <= 0n ||
+      micros >
+        BigInt(
+          Number.MAX_SAFE_INTEGER,
+        )
+    ) {
+      return undefined;
+    }
+
+    return Number(micros);
+  } catch {
+    // Fail closed. Missing/stale oracle data prevents AUTO_RESOLVE.
+    return undefined;
   }
 }
 

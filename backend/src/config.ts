@@ -38,6 +38,11 @@ export interface AppConfig {
     feeBps: number;
     defaultProvider: VinssLlmSelection;
   };
+  dispute?: {
+    autoResolveEnabled: boolean;
+    resolverAddress: string;
+    resolverPrivateKey: string;
+  };
   features: {
     agent: boolean;
     loyalty: boolean;
@@ -210,6 +215,48 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  const disputeAutoResolveEnabled =
+    parseBoolean(
+      env.DISPUTE_AUTO_RESOLVE_ENABLED,
+      false,
+    );
+
+  const resolverAddress =
+    env.DISPUTE_RESOLVER_ADDRESS
+      ?.trim()
+      ? parseAddress(
+          env.DISPUTE_RESOLVER_ADDRESS.trim(),
+          "DISPUTE_RESOLVER_ADDRESS",
+        )
+      : "";
+
+  const resolverPrivateKey =
+    env.DISPUTE_RESOLVER_PRIVATE_KEY
+      ?.trim() ?? "";
+
+  if (
+    resolverPrivateKey &&
+    !/^0x[0-9a-fA-F]+$/.test(
+      resolverPrivateKey,
+    )
+  ) {
+    throw new Error(
+      "DISPUTE_RESOLVER_PRIVATE_KEY must be a 0x-prefixed felt.",
+    );
+  }
+
+  if (
+    disputeAutoResolveEnabled &&
+    (
+      !resolverAddress ||
+      !resolverPrivateKey
+    )
+  ) {
+    throw new Error(
+      "Automatic dispute resolution requires a dedicated resolver address and private key.",
+    );
+  }
+
   return {
     port: parseInteger(env.PORT, "PORT", {
       fallback: 4000,
@@ -305,6 +352,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         max: 10_000,
       }),
       defaultProvider: parseLlmSelection(env.VINSS_LLM_PROVIDER),
+    },
+    dispute: {
+      autoResolveEnabled:
+        disputeAutoResolveEnabled,
+      resolverAddress,
+      resolverPrivateKey,
     },
     features: {
       agent: parseBoolean(

@@ -502,6 +502,7 @@ export async function depositEscrow(
 async function invokeSettlement(
   account: WalletAccountV6,
   payload: string[],
+  chargeRevenue = false,
 ): Promise<{ transactionHash: string }> {
   const custodyValue = payload[1];
 
@@ -536,26 +537,75 @@ async function invokeSettlement(
     "${openNoteIds[0]}",
   ];
 
+  const revenueToken =
+    CONTRACTS.messageHelperOpenNoteToken;
+  const rawTreasury =
+    process.env
+      .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
+
+  if (
+    chargeRevenue &&
+    (!revenueToken || !rawTreasury)
+  ) {
+    throw new Error(
+      "Rekber workflow fee is not configured.",
+    );
+  }
+
+  /*
+   * Resolution claims return the custody asset through an OPEN note while the
+   * VINSS action fee is always charged in STRK. Both happen in the same Ready X
+   * transaction; there is still only one external contract invoke.
+   */
   const response =
-    await account.strk20InvokeTransaction([
-      {
-        type: "transfer",
-        token,
-        amount: "OPEN",
-        recipient: num.toHex(
-          account.address,
-        ),
-      },
-      {
-        type: "invoke",
-        contract:
-          requireRekberAddress(),
-        calldata: [
-          toFelt(calldata.length),
-          ...calldata,
-        ],
-      },
-    ]);
+    chargeRevenue
+      ? await account.strk20InvokeTransaction([
+          {
+            type: "withdraw",
+            token: revenueToken!,
+            amount: toFelt(
+              await quoteRekberWorkflowFee(),
+            ),
+            recipient:
+              num.toHex(rawTreasury!),
+          },
+          {
+            type: "transfer",
+            token,
+            amount: "OPEN",
+            recipient: num.toHex(
+              account.address,
+            ),
+          },
+          {
+            type: "invoke",
+            contract:
+              requireRekberAddress(),
+            calldata: [
+              toFelt(calldata.length),
+              ...calldata,
+            ],
+          },
+        ])
+      : await account.strk20InvokeTransaction([
+          {
+            type: "transfer",
+            token,
+            amount: "OPEN",
+            recipient: num.toHex(
+              account.address,
+            ),
+          },
+          {
+            type: "invoke",
+            contract:
+              requireRekberAddress(),
+            calldata: [
+              toFelt(calldata.length),
+              ...calldata,
+            ],
+          },
+        ]);
 
   return {
     transactionHash:
@@ -867,6 +917,7 @@ export async function openRekberDispute(
       params.disputeSecret,
       params.evidenceCommitment,
     ],
+    true,
   );
 }
 
@@ -920,12 +971,16 @@ export async function claimRekberResolution(
     partySecret: bigint;
   },
 ): Promise<{ transactionHash: string }> {
-  return invokeSettlement(account, [
-    toFelt(10),
-    toFelt(params.custodyCommitment),
-    toFelt(params.role === "payer" ? 1 : 2),
-    toFelt(params.partySecret),
-  ]);
+  return invokeSettlement(
+    account,
+    [
+      toFelt(10),
+      toFelt(params.custodyCommitment),
+      toFelt(params.role === "payer" ? 1 : 2),
+      toFelt(params.partySecret),
+    ],
+    true,
+  );
 }
 
 export async function getRekberCustody(
