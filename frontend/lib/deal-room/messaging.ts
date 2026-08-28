@@ -104,14 +104,6 @@ export async function sendMessage(
     ciphertextChunks,
   );
 
-  // Persist recovery metadata BEFORE Ready X takes over the screen.
-  if (onPrepared) {
-    await onPrepared({
-      actionLocator,
-      payloadCommitment,
-    });
-  }
-
   const additionalInvokes =
     buildAdditionalInvokes
       ? await buildAdditionalInvokes({
@@ -190,6 +182,18 @@ export async function sendMessage(
       }),
     ),
   ];
+
+  /*
+   * Mark recovery state only after every preflight step succeeds.
+   * Otherwise a FeePolicy/config failure can create a ghost pending
+   * message even though Ready X was never invoked.
+   */
+  if (onPrepared) {
+    await onPrepared({
+      actionLocator,
+      payloadCommitment,
+    });
+  }
 
   let response;
   try {

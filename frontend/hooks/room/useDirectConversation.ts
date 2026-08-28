@@ -633,11 +633,35 @@ export function useDirectConversation({
 
     let preparedLocator: string | null =
       null;
+    let startCallbackTimeout:
+      (() => void) | null = null;
+    let callbackTimeoutId:
+      number | null = null;
 
     setBusy(true);
     setError(null);
 
     try {
+      const callbackTimeoutPromise =
+        new Promise<never>(
+          (_, reject) => {
+            startCallbackTimeout = () => {
+              if (callbackTimeoutId !== null) {
+                return;
+              }
+
+              callbackTimeoutId =
+                window.setTimeout(() => {
+                  reject(
+                    new Error(
+                      "VINSS_DIRECT_CALLBACK_TIMEOUT",
+                    ),
+                  );
+                }, 20_000);
+            };
+          },
+        );
+
       const sendPromise = sendMessage(
         session.account,
         channelKey,
@@ -646,6 +670,8 @@ export function useDirectConversation({
         (prepared) => {
           preparedLocator =
             prepared.actionLocator.toString(16);
+
+          startCallbackTimeout?.();
 
           setMessagePending(true);
 
@@ -696,17 +722,7 @@ export function useDirectConversation({
 
       const result = await Promise.race([
         sendPromise,
-        new Promise<never>(
-          (_, reject) => {
-            window.setTimeout(() => {
-              reject(
-                new Error(
-                  "VINSS_DIRECT_CALLBACK_TIMEOUT",
-                ),
-              );
-            }, 20_000);
-          },
-        ),
+        callbackTimeoutPromise,
       ]);
 
       window.localStorage.removeItem(
@@ -850,6 +866,12 @@ export function useDirectConversation({
         ),
       );
     } finally {
+      if (callbackTimeoutId !== null) {
+        window.clearTimeout(
+          callbackTimeoutId,
+        );
+      }
+
       setBusy(false);
     }
   }
