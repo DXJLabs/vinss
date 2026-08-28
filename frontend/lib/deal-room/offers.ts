@@ -142,15 +142,6 @@ export async function sendOfferAction(
     ciphertextChunks,
   );
 
-  // Reflect recovery metadata before Ready X can background the app.
-  // A delayed wallet callback must not make an already-submitted Offer look failed.
-  if (onPrepared) {
-    await onPrepared({
-      actionLocator,
-      payloadCommitment,
-    });
-  }
-
   // Keep calldata aligned with VinssOfferHelper.privacy_invoke V2.
   const calldata = [
     OFFER_ENVELOPE_VERSION,
@@ -165,6 +156,23 @@ export async function sendOfferAction(
   // Fetch the helper's authoritative FeePolicy quote immediately before
   // Ready X builds the transaction. OfferHelper validates quoted_fee on-chain.
   const quotedFee = await quoteOfferFee();
+
+  /*
+   * Persist recovery state only after encryption, calldata and FeePolicy
+   * preflight succeed. Otherwise a failed preflight can leave a ghost Offer
+   * even though Ready X was never invoked.
+   */
+  /*
+   * Create optimistic recovery state only after FeePolicy/config preflight.
+   * Otherwise an RPC/preflight failure could leave a ghost Offer even though
+   * Ready X was never invoked.
+   */
+  if (onPrepared) {
+    await onPrepared({
+      actionLocator,
+      payloadCommitment,
+    });
+  }
 
   // STRK20 invokes privacy_invoke itself, so no selector is prepended.
   const response = await account.strk20InvokeTransaction([

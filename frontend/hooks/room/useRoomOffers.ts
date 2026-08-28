@@ -45,6 +45,7 @@ export interface OfferTermsInput {
   paymentTerms: string;
   conditions?: string;
   expiresAt?: string;
+  reason?: string;
 }
 
 interface UseRoomOffersOptions {
@@ -132,6 +133,23 @@ export function useRoomOffers({
 
   const sentOfferReadReceiptsRef =
     useRef<Set<string>>(new Set());
+
+  // One Offer action can be prepared before the mobile wallet returns.
+  // Keep that optimistic locator isolated so a failed wallet attempt can
+  // be removed without touching confirmed Offer history.
+  const activePreparedOfferLocatorsRef =
+    useRef<Set<string>>(new Set());
+
+  const startOfferCallbackTimeoutRef =
+    useRef<(() => void) | null>(null);
+
+  /*
+   * A delayed Ready X callback may reconcile after the user has already
+   * started another Offer action. Generation guards prevent an old recovery
+   * task from changing the UI state of a newer action.
+   */
+  const offerRecoveryGenerationRef =
+    useRef(0);
 
   // Locally remember which pairwise route actually decrypted each action.
   // Lifecycle replies must use this proven route instead of re-deriving a
@@ -395,6 +413,11 @@ export function useRoomOffers({
 
   // Reflect a prepared action before Ready X takes over the mobile screen.
   // The locator is the exact on-chain identity used by later discovery.
+  /*
+   * Prepared Offer state exists only for the Ready X handoff.
+   * It has no transaction hash and must be removable after a real wallet
+   * failure so create/counter/accept/reject can safely be retried.
+   */
   function appendPreparedOffer(
     actionLocator: bigint,
     action: OfferActionPayload,
@@ -416,6 +439,21 @@ export function useRoomOffers({
         action.recipientAddress,
       offerAction: action,
     };
+
+    const preparedLocator =
+      stripLocator(
+        entry.actionLocator,
+      );
+
+    activePreparedOfferLocatorsRef
+      .current.add(
+        preparedLocator,
+      );
+
+    // The callback timer starts here, after FeePolicy/config preflight,
+    // immediately before Ready X is invoked.
+    startOfferCallbackTimeoutRef
+      .current?.();
 
     setOfferEntries((previous) => {
       const withoutSameLocator =
@@ -451,6 +489,10 @@ export function useRoomOffers({
   }
 
   // Merge one locally confirmed action immediately while discovery catches up.
+  /*
+   * A wallet-confirmed action replaces its optimistic copy by immutable
+   * action locator. Never create a second lifecycle record for the same tx.
+   */
   function appendLocalOffer(
     result: SendActionResult,
     action: OfferActionPayload,
@@ -467,6 +509,13 @@ export function useRoomOffers({
       recipientAddress: action.recipientAddress,
       offerAction: action,
     };
+
+    activePreparedOfferLocatorsRef
+      .current.delete(
+        stripLocator(
+          entry.actionLocator,
+        ),
+      );
 
     setOfferEntries((previous) => {
       // Replace an existing copy if auto discovery won the race.
@@ -503,6 +552,10 @@ export function useRoomOffers({
    * Each pairwise key gets two candidate recipient identities:
    * - this wallet, for incoming actions;
    * - the peer wallet, for our own outgoing actions.
+   */
+  /*
+   * Offer discovery remains keyless on the backend.
+   * Candidate routes and ciphertext decryption are evaluated only client-side.
    */
   async function handleOfferRefresh(silent = false) {
     if (
@@ -775,44 +828,172 @@ export function useRoomOffers({
     }
   }
 
+  function discardPreparedOffers(
+    locators: Set<string>,
+  ) {
+    if (locators.size === 0) {
+      return;
+    }
+
+    setOfferEntries((previous) => {
+      const next =
+        previous.filter(
+          (entry) =>
+            Boolean(
+              entry.transactionHash,
+            ) ||
+            !locators.has(
+              stripLocator(
+                entry.actionLocator,
+              ),
+            ),
+        );
+
+      void persistOfferHistory(
+        next,
+      );
+
+      return next;
+    });
+
+    for (const locator of locators) {
+      activePreparedOfferLocatorsRef
+        .current.delete(locator);
+    }
+  }
+
+  /*
+   * Ready X can submit successfully while its mobile callback arrives late.
+   * Keep the prepared card during a short reconciliation window and let
+   * encrypted Offer discovery decide whether the immutable action exists.
+   *
+   * Only after repeated successful polling fails to find the locator do we
+   * remove the optimistic card and allow the user to retry.
+   */
+  async function recoverDelayedOffer(
+    locators: Set<string>,
+    generation: number,
+  ): Promise<void> {
+    const attempts = 8;
+
+    for (
+      let attempt = 0;
+      attempt < attempts;
+      attempt += 1
+    ) {
+      if (
+        offerRecoveryGenerationRef.current !==
+        generation
+      ) {
+        return;
+      }
+
+      await handleOfferRefresh(true);
+
+      const confirmed =
+        [...locators].every(
+          (locator) =>
+            matchedOfferRoutesRef.current.has(
+              locator,
+            ),
+        );
+
+      if (confirmed) {
+        setError(null);
+        return;
+      }
+
+      await new Promise<void>(
+        (resolve) =>
+          window.setTimeout(
+            resolve,
+            5_000,
+          ),
+      );
+    }
+
+    if (
+      offerRecoveryGenerationRef.current !==
+      generation
+    ) {
+      return;
+    }
+
+    discardPreparedOffers(
+      locators,
+    );
+
+    setError(
+      "Offer was not confirmed. You can try again.",
+    );
+  }
+
   /**
-   * Run one wallet-backed Offer action behind a consistent error boundary.
+   * Run one wallet-backed Offer action.
+   *
+   * The timeout starts only after Offer preflight has completed and Ready X
+   * is about to receive the transaction. A real wallet/RPC failure removes
+   * the temporary card so Accept/Counter/Reject can be tried again.
    */
   async function runOfferAction(
     scope: string,
     fallbackMessage: string,
-    action: () => Promise<void>,
+    action: (
+      markPrepared: () => void,
+    ) => Promise<void>,
   ): Promise<boolean> {
     setBusy(true);
     setError(null);
 
+    const recoveryGeneration =
+      ++offerRecoveryGenerationRef.current;
+
+    activePreparedOfferLocatorsRef.current =
+      new Set();
+
     let callbackTimer:
       number | null = null;
 
+    let startCallbackTimeout:
+      (() => void) | null = null;
+
+    const callbackTimeoutPromise =
+      new Promise<never>(
+        (_, reject) => {
+          startCallbackTimeout =
+            () => {
+              if (
+                callbackTimer !== null
+              ) {
+                return;
+              }
+
+              callbackTimer =
+                window.setTimeout(
+                  () =>
+                    reject(
+                      new Error(
+                        `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
+                      ),
+                    ),
+                  25_000,
+                );
+            };
+        },
+      );
+
+    startOfferCallbackTimeoutRef.current =
+      startCallbackTimeout;
+
     try {
       await Promise.race([
-        action(),
-        new Promise<never>(
-          (_, reject) => {
-            callbackTimer =
-              window.setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
-                    ),
-                  ),
-                25_000,
-              );
-          },
-        ),
+        action(() => {
+          startCallbackTimeout?.();
+        }),
+        callbackTimeoutPromise,
       ]);
 
-      // Local confirmed state is already inserted. Reconcile ciphertext
-      // discovery in the background so backend/indexer latency does not keep
-      // the user-facing wallet action stuck in a loading state.
       void handleOfferRefresh(true);
-
       return true;
     } catch (err) {
       const raw =
@@ -820,9 +1001,12 @@ export function useRoomOffers({
           ? err.message
           : String(err);
 
-      // Ready X may submit successfully and still return late after a mobile
-      // background/remount. A timeout is therefore a pending result until
-      // encrypted discovery reconciles the exact prepared Offer locator.
+      const prepared =
+        new Set(
+          activePreparedOfferLocatorsRef
+            .current,
+        );
+
       const callbackDelayed =
         raw.includes(
           `VINSS_OFFER_${scope}_CALLBACK_TIMEOUT`,
@@ -834,21 +1018,32 @@ export function useRoomOffers({
           err,
         );
 
+        /*
+         * Callback timeout is ambiguous: Ready X may already have submitted
+         * the transaction. Do not show a false failure or delete the prepared
+         * action until encrypted discovery has had time to reconcile it.
+         */
         setError(null);
 
-        // Return to Chat. The prepared card remains visible and normal Offer
-        // polling fills its transaction hash when discovery sees the event.
-        void handleOfferRefresh(true);
+        void recoverDelayedOffer(
+          prepared,
+          recoveryGeneration,
+        );
+
         return true;
       }
 
-      // Raw wallet/RPC detail is intentionally console-only.
+      // Explicit wallet rejection/RPC failure means there is no reason to
+      // leave a fake Accepted/Counter card blocking the original Offer.
+      discardPreparedOffers(
+        prepared,
+      );
+
       console.error(
         `[VINSS OFFER ${scope} ERROR]`,
         err,
       );
 
-      // The visible message stays short and safe.
       setError(
         humanizeError(
           err,
@@ -865,6 +1060,12 @@ export function useRoomOffers({
           callbackTimer,
         );
       }
+
+      startOfferCallbackTimeoutRef.current =
+        null;
+
+      activePreparedOfferLocatorsRef.current =
+        new Set();
 
       setBusy(false);
     }
@@ -885,7 +1086,7 @@ export function useRoomOffers({
     return runOfferAction(
       "CREATE",
       "We couldn't create the offer. Please try again.",
-      async () => {
+      async (markPrepared) => {
         // Outgoing routing tags must represent the selected peer.
         const { peer, route } =
           await resolveDirectContext(
@@ -921,6 +1122,8 @@ export function useRoomOffers({
           action,
           route,
           (prepared) => {
+            markPrepared();
+
             appendPreparedOffer(
               prepared.actionLocator,
               {
@@ -975,7 +1178,7 @@ export function useRoomOffers({
     return runOfferAction(
       "COUNTER",
       "We couldn't send the counter offer. Please try again.",
-      async () => {
+      async (markPrepared) => {
         // Counter goes back to the sender of the parent action.
         const { peer, route } =
           await resolveReplyContext(
@@ -1013,6 +1216,8 @@ export function useRoomOffers({
           action,
           route,
           (prepared) => {
+            markPrepared();
+
             appendPreparedOffer(
               prepared.actionLocator,
               {
@@ -1064,7 +1269,7 @@ export function useRoomOffers({
     return runOfferAction(
       "ACCEPT",
       "We couldn't accept the offer. Please try again.",
-      async () => {
+      async (markPrepared) => {
         // The acceptance action returns to the sender of the current terms.
         const { peer, route } =
           await resolveReplyContext(
@@ -1105,6 +1310,8 @@ export function useRoomOffers({
           action,
           route,
           (prepared) => {
+            markPrepared();
+
             appendPreparedOffer(
               prepared.actionLocator,
               {
@@ -1156,7 +1363,7 @@ export function useRoomOffers({
     return runOfferAction(
       "REJECT",
       "We couldn't reject the offer. Please try again.",
-      async () => {
+      async (markPrepared) => {
         // The rejection action returns to the sender of the current terms.
         const { peer, route } =
           await resolveReplyContext(
@@ -1187,6 +1394,8 @@ export function useRoomOffers({
           action,
           route,
           (prepared) => {
+            markPrepared();
+
             appendPreparedOffer(
               prepared.actionLocator,
               {
@@ -1368,7 +1577,7 @@ export function useRoomOffers({
 
     const timer = window.setInterval(() => {
       void sync();
-    }, 5000);
+    }, 2000);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {

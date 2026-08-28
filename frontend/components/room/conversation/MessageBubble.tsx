@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  useRef,
+  useState,
+} from "react";
 import type { ConversationEntry } from "@/components/room/conversation/types";
 import { EncryptedAttachmentPreview } from "@/components/room/conversation/EncryptedAttachmentPreview";
 import type { AttachmentRef } from "@/types/deal-room";
@@ -8,6 +12,34 @@ import {
 } from "@/components/room/conversation/chatFormat";
 import { sameStarknetAddress } from "@/lib/privacy/participantKeys";
 import { useStarkIdentity } from "@/hooks/useStarkIdentity";
+
+const MESSAGE_LONG_PRESS_MS = 550;
+
+function hiddenMessageStorageKey(
+  walletAddress: string | undefined,
+  actionLocator: string,
+): string | null {
+  if (!walletAddress || !actionLocator) {
+    return null;
+  }
+
+  let wallet = walletAddress.toLowerCase();
+
+  try {
+    wallet = `0x${BigInt(walletAddress).toString(16)}`;
+  } catch {
+    // Keep the original normalized string if an address is malformed.
+  }
+
+  const locator = actionLocator
+    .replace(/^0x/, "")
+    .toLowerCase();
+
+  return (
+    `vinss:hidden-message:v1:${wallet}:` +
+    locator
+  );
+}
 
 interface MessageBubbleProps {
   entry: ConversationEntry;
@@ -83,6 +115,108 @@ export function MessageBubble({
     walletAddress,
   );
 
+  const hiddenStorageKey =
+    hiddenMessageStorageKey(
+      walletAddress,
+      entry.actionLocator,
+    );
+
+  const [hidden, setHidden] =
+    useState(() => {
+      if (
+        typeof window === "undefined" ||
+        !hiddenStorageKey
+      ) {
+        return false;
+      }
+
+      return (
+        window.localStorage.getItem(
+          hiddenStorageKey,
+        ) === "1"
+      );
+    });
+
+  const [
+    deleteMenuOpen,
+    setDeleteMenuOpen,
+  ] = useState(false);
+
+  const longPressTimerRef =
+    useRef<number | null>(null);
+
+  const pressStartRef =
+    useRef<{
+      x: number;
+      y: number;
+    } | null>(null);
+
+  const longPressTriggeredRef =
+    useRef(false);
+
+  function cancelLongPress() {
+    if (
+      longPressTimerRef.current !== null
+    ) {
+      window.clearTimeout(
+        longPressTimerRef.current,
+      );
+      longPressTimerRef.current = null;
+    }
+
+    pressStartRef.current = null;
+  }
+
+  function startLongPress(
+    event: React.PointerEvent,
+  ) {
+    cancelLongPress();
+
+    longPressTriggeredRef.current = false;
+    pressStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    longPressTimerRef.current =
+      window.setTimeout(() => {
+        longPressTriggeredRef.current =
+          true;
+        setDeleteMenuOpen(true);
+        longPressTimerRef.current = null;
+      }, MESSAGE_LONG_PRESS_MS);
+  }
+
+  function moveLongPress(
+    event: React.PointerEvent,
+  ) {
+    const start = pressStartRef.current;
+
+    if (!start) return;
+
+    const moved =
+      Math.abs(event.clientX - start.x) >
+        10 ||
+      Math.abs(event.clientY - start.y) >
+        10;
+
+    if (moved) {
+      cancelLongPress();
+    }
+  }
+
+  function deleteLocally() {
+    if (hiddenStorageKey) {
+      window.localStorage.setItem(
+        hiddenStorageKey,
+        "1",
+      );
+    }
+
+    setDeleteMenuOpen(false);
+    setHidden(true);
+  }
+
   const {
     label: resolvedSenderLabel,
   } = useStarkIdentity(
@@ -95,8 +229,37 @@ export function MessageBubble({
 
   const showSender = mode === "group";
 
+  /*
+   * A message is visible only after the wallet returned a confirmed
+   * transaction hash. This prevents abandoned Ready X attempts from
+   * becoming permanent ghost messages in the conversation.
+   */
+  if (!entry.transactionHash || hidden) {
+    return null;
+  }
+
   return (
     <li
+      onPointerDown={startLongPress}
+      onPointerMove={moveLongPress}
+      onPointerUp={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onPointerLeave={cancelLongPress}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        cancelLongPress();
+        setDeleteMenuOpen(true);
+      }}
+      onClickCapture={(event) => {
+        if (
+          longPressTriggeredRef.current
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          longPressTriggeredRef.current =
+            false;
+        }
+      }}
       className={
         own
           ? "flex justify-end"
@@ -198,6 +361,40 @@ export function MessageBubble({
             )}
           </div>
         </div>
+
+        {deleteMenuOpen && (
+          <div
+            className={
+              own
+                ? "mt-2 flex justify-end"
+                : "mt-2 flex justify-start"
+            }
+          >
+            <div className="overflow-hidden rounded-xl border border-wire/70 bg-ink/95 shadow-xl">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  deleteLocally();
+                }}
+                className="block w-full px-4 py-3 text-left text-[11px] font-medium text-danger transition hover:bg-danger/[0.08]"
+              >
+                Delete from this device
+              </button>
+
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleteMenuOpen(false);
+                }}
+                className="block w-full border-t border-wire/50 px-4 py-3 text-left text-[10px] text-paper/45 transition hover:bg-paper/[0.04]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </li>
   );

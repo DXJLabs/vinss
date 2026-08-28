@@ -42,15 +42,15 @@ function cardTitle(
   >["kind"],
 ): string {
   if (kind === "counter") {
-    return "Counter";
+    return "Counter offer";
   }
 
   if (kind === "accept") {
-    return "Agreement";
+    return "Accepted offer";
   }
 
   if (kind === "reject") {
-    return "Response";
+    return "Rejected";
   }
 
   return "Offer";
@@ -701,6 +701,10 @@ export function OfferCard({
     onSeen,
   ]);
 
+  /*
+   * Accept confirms the negotiated Offer only.
+   * Rekber agreement preparation is a separate step before escrow funding.
+   */
   const accepted =
     action.kind === "accept";
 
@@ -712,8 +716,8 @@ export function OfferCard({
   const confirmed =
     Boolean(entry.transactionHash);
 
-  const agreementPending =
-    accepted && !confirmed;
+  const actionPending =
+    !confirmed;
 
   const detailRows =
     offerDetailRows(action);
@@ -761,9 +765,11 @@ export function OfferCard({
               action.kind,
             )}
             {" · "}
-            {ownAction
-              ? "Sent"
-              : "Received"}
+            {actionPending
+              ? "Preparing"
+              : ownAction
+                ? "Sent"
+                : "Received"}
           </span>
 
           <div className="flex items-center gap-2">
@@ -776,7 +782,7 @@ export function OfferCard({
                     : "text-[9px] text-paper/30"
               }
             >
-              {agreementPending
+              {actionPending
                 ? "Confirming…"
                 : stateLabel(
                     action.kind,
@@ -875,6 +881,19 @@ export function OfferCard({
           </div>
         )}
 
+        {action.kind === "counter" &&
+          action.reason?.trim() && (
+            <div className="mt-3 border border-amber-300/15 bg-amber-300/[0.025] px-3 py-2.5">
+              <p className="font-display text-[8px] uppercase tracking-[0.13em] text-amber-300/60">
+                Counter reason
+              </p>
+
+              <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed text-paper/55">
+                {action.reason}
+              </p>
+            </div>
+          )}
+
         {entry.transactionHash && onViewProof && (
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-2.5">
             <div className="flex items-center gap-2">
@@ -949,16 +968,16 @@ export function OfferCard({
           <div className="mt-3 border-t border-signal/15 pt-2.5">
             <p
               className={
-                agreementPending
+                actionPending
                   ? "text-[10px] text-paper/40"
                   : "text-[10px] text-signal/65"
               }
             >
-              {agreementPending
-                ? "Agreement confirming on Starknet…"
+              {actionPending
+                ? "Accept is confirming on Starknet…"
                 : rekberStarted
-                  ? "✓ Rekber is active for this agreement"
-                  : "Agreement confirmed · ready for Rekber"}
+                  ? "✓ Rekber agreement prepared"
+                  : "Offer accepted · prepare the Rekber agreement before funding"}
             </p>
 
             {onOpenEscrow &&
@@ -973,7 +992,7 @@ export function OfferCard({
                 >
                   {rekberStarted
                     ? "Open Rekber →"
-                    : "Prepare Rekber →"}
+                    : "Prepare Rekber agreement →"}
                 </button>
               )}
           </div>

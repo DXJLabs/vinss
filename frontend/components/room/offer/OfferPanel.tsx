@@ -11,6 +11,9 @@ import type { RoomParticipant } from "@/lib/privacy/participantKeys";
 import type { ConversationEntry } from "@/components/room/conversation/ConversationPanel";
 import type { OfferTermsInput } from "@/hooks/room/useRoomOffers";
 import {
+  CounterOfferForm,
+} from "@/components/room/offer/CounterOfferForm";
+import {
   INITIAL_TEMPLATE_VALUES,
   OFFER_TEMPLATES,
   isPositiveNumber,
@@ -1490,6 +1493,32 @@ export function OfferPanel({
             </p>
           )}
       </div>
+    );
+  }
+
+  if (
+    counterSource &&
+    counterAction
+  ) {
+    return (
+      <CounterOfferForm
+        source={counterSource}
+        busy={busy}
+        onCancel={onCancelCounter}
+        onSubmit={async (terms) => {
+          const ok =
+            await onCounter(
+              counterSource,
+              terms,
+            );
+
+          if (ok) {
+            onSubmitted();
+          }
+
+          return ok;
+        }}
+      />
     );
   }
 
