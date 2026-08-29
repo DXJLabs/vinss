@@ -3,10 +3,9 @@ use crate::settlement_certificate::interfaces::IVinssSettlementCertificate;
 #[starknet::contract]
 pub mod VinssSettlementCertificate {
     use openzeppelin::introspection::src5::SRC5Component;
-    use openzeppelin::token::erc721::{
-        ERC721Component,
-        ERC721HooksEmptyImpl,
-    };
+    use openzeppelin::token::erc721::ERC721Component;
+    use openzeppelin::token::erc721::ERC721Component::InternalTrait
+        as ERC721InternalTrait;
     use starknet::{
         ContractAddress,
         get_block_timestamp,
@@ -47,6 +46,11 @@ pub mod VinssSettlementCertificate {
     const ALREADY_CLAIMED: felt252 = 'CERT_ALREADY_CLAIMED';
     const CERT_NOT_FOUND: felt252 = 'CERT_NOT_FOUND';
 
+    // Settlement certificates are reputation credentials, not tradable NFTs.
+    // Minting is allowed, but any later ownership update (transfer or burn)
+    // must fail so settlement reputation cannot be sold or reassigned.
+    const NON_TRANSFERABLE: felt252 = 'CERT_NON_TRANSFERABLE';
+
     component!(
         path: ERC721Component,
         storage: erc721,
@@ -63,8 +67,32 @@ pub mod VinssSettlementCertificate {
         ERC721Component::ERC721MixinImpl<ContractState>;
     impl ERC721InternalImpl =
         ERC721Component::InternalImpl<ContractState>;
-    impl ERC721HooksImpl =
-        ERC721HooksEmptyImpl<ContractState>;
+
+    // OpenZeppelin ERC721 routes mint, transfer and burn ownership updates
+    // through this hook. Only the initial zero-owner -> recipient transition
+    // is allowed. Once a token has an owner it can never move again.
+    impl ERC721HooksImpl
+        of ERC721Component::ERC721HooksTrait<ContractState>
+    {
+        fn before_update(
+            ref self: ERC721Component::ComponentState<ContractState>,
+            to: ContractAddress,
+            token_id: u256,
+            _auth: ContractAddress,
+        ) {
+            let zero_address: ContractAddress =
+                0.try_into().unwrap();
+
+            let current_owner =
+                self._owner_of(token_id);
+
+            assert(
+                current_owner == zero_address &&
+                    to != zero_address,
+                NON_TRANSFERABLE,
+            );
+        }
+    }
 
     #[storage]
     struct Storage {

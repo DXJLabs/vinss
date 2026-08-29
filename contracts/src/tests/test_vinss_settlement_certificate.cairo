@@ -15,6 +15,10 @@ use snforge_std::{
     stop_cheat_caller_address,
 };
 use starknet::ContractAddress;
+use openzeppelin_interfaces::erc721::{
+    IERC721Dispatcher,
+    IERC721DispatcherTrait,
+};
 
 use crate::escrow_rekber::commitments::{
     compute_fulfillment_chain_step,
@@ -708,5 +712,113 @@ fn certificate_claim_cannot_be_replayed_mainnet() {
         CUSTODY,
         1,
         PAYER_CERT_SECRET,
+    );
+}
+
+
+// -----------------------------------------------------------------------------
+// Soulbound / non-transferable invariant
+// -----------------------------------------------------------------------------
+
+fn mint_clean_payer_certificate()
+    -> (ContractAddress, felt252)
+{
+    let (
+        rekber_address,
+        certificate_address,
+        token_address,
+    ) = deploy_contracts();
+
+    fund(
+        rekber_address,
+        token_address,
+    );
+    consume_fee(
+        rekber_address,
+        token_address,
+    );
+    submit_fulfillment(
+        rekber_address,
+    );
+    release_clean(
+        rekber_address,
+    );
+
+    let certificate =
+        IVinssSettlementCertificateDispatcher {
+            contract_address:
+                certificate_address,
+        };
+
+    start_cheat_caller_address(
+        certificate_address,
+        payer(),
+    );
+
+    let token_id =
+        certificate.claim(
+            CUSTODY,
+            1,
+            PAYER_CERT_SECRET,
+        );
+
+    stop_cheat_caller_address(
+        certificate_address,
+    );
+
+    (
+        certificate_address,
+        token_id,
+    )
+}
+
+#[test]
+#[should_panic(expected: 'CERT_NON_TRANSFERABLE')]
+fn settlement_certificate_transfer_is_blocked() {
+    let (
+        certificate_address,
+        token_id,
+    ) = mint_clean_payer_certificate();
+
+    let erc721 = IERC721Dispatcher {
+        contract_address:
+            certificate_address,
+    };
+
+    start_cheat_caller_address(
+        certificate_address,
+        payer(),
+    );
+
+    erc721.transfer_from(
+        payer(),
+        payee(),
+        token_id.into(),
+    );
+}
+
+#[test]
+#[should_panic(expected: 'CERT_NON_TRANSFERABLE')]
+fn settlement_certificate_safe_transfer_is_blocked() {
+    let (
+        certificate_address,
+        token_id,
+    ) = mint_clean_payer_certificate();
+
+    let erc721 = IERC721Dispatcher {
+        contract_address:
+            certificate_address,
+    };
+
+    start_cheat_caller_address(
+        certificate_address,
+        payer(),
+    );
+
+    erc721.safe_transfer_from(
+        payer(),
+        payee(),
+        token_id.into(),
+        array![].span(),
     );
 }
