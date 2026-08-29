@@ -564,4 +564,6 @@ The product succeeds only if that workflow becomes useful enough that real peopl
 
 # License
 
-MIT — see [`LICENSE`](LICENSE).
+Apache License 2.0 — see [`LICENSE`](LICENSE).
+
+VINSS is a product of DXJ Labs. See [`NOTICE`](NOTICE).
