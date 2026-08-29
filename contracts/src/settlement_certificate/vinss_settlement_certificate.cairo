@@ -78,7 +78,7 @@ pub mod VinssSettlementCertificate {
             ref self: ERC721Component::ComponentState<ContractState>,
             to: ContractAddress,
             token_id: u256,
-            _auth: ContractAddress,
+            auth: ContractAddress,
         ) {
             let zero_address: ContractAddress =
                 0.try_into().unwrap();
