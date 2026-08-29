@@ -431,7 +431,7 @@ jobs:
       # Fee estimation uses the deployment artifacts built above.
       - name: Estimate Mainnet declaration fee
         id: declare_fee
-        if: inputs.mode != 'verify-only'
+        if: inputs.mode != 'verify-only' && inputs.class_hash == ''
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
         run: |
@@ -456,7 +456,7 @@ jobs:
 
       - name: Export ABI from build artifacts
         id: abi
-        if: inputs.mode != 'verify-only' && steps.declare_fee.outcome == 'success'
+        if: inputs.mode != 'verify-only' && (steps.declare_fee.outcome == 'success' || inputs.class_hash != '')
         run: |
           set -euo pipefail
 
@@ -484,7 +484,7 @@ jobs:
 
       - name: Declare class on Mainnet
         id: declare
-        if: inputs.mode == 'deploy'
+        if: inputs.mode == 'deploy' && inputs.class_hash == ''
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
         run: |
@@ -526,10 +526,11 @@ jobs:
 
       - name: Estimate Mainnet deployment fee
         id: deploy_fee
-        if: inputs.mode == 'deploy' && steps.declare.outcome == 'success'
+        if: inputs.mode == 'deploy' && (steps.declare.outcome == 'success' || inputs.class_hash != '')
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
+          DEPLOY_CLASS_HASH: ${{ inputs.class_hash || steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
@@ -541,7 +542,7 @@ jobs:
             --account vinss-mainnet-deployer \
             deploy \
             --url "$STARKNET_RPC_URL" \
-            --contract-name "$CONTRACT_NAME" \
+            --class-hash "$DEPLOY_CLASS_HASH" \
             --arguments "$DEPLOY_ARGS" \
             --dry-run \
             --detailed \
@@ -549,10 +550,11 @@ jobs:
 
       - name: Deploy contract instance to Mainnet
         id: deploy
-        if: inputs.mode == 'deploy' && steps.declare.outcome == 'success' && steps.deploy_fee.outcome == 'success'
+        if: inputs.mode == 'deploy' && (steps.declare.outcome == 'success' || inputs.class_hash != '') && steps.deploy_fee.outcome == 'success'
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_ARGS: ${{ steps.constructor.outputs.args }}
+          DEPLOY_CLASS_HASH: ${{ inputs.class_hash || steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
@@ -566,7 +568,7 @@ jobs:
             --wait-timeout 300 \
             deploy \
             --url "$STARKNET_RPC_URL" \
-            --contract-name "$CONTRACT_NAME" \
+            --class-hash "$DEPLOY_CLASS_HASH" \
             --arguments "$DEPLOY_ARGS" \
             2>&1 | tee "$ARTIFACT_DIR/deploy-output.txt"
 
@@ -596,7 +598,7 @@ jobs:
         if: inputs.mode == 'verify-only' || (inputs.mode == 'deploy' && steps.deploy.outcome == 'success')
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
-          DEPLOY_CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
+          DEPLOY_CLASS_HASH: ${{ inputs.class_hash || steps.declare.outputs.class_hash }}
         run: |
           set -euo pipefail
           set -o pipefail
