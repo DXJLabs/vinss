@@ -33,9 +33,8 @@ pub mod VinssMessageHelper {
         privacy_pool: ContractAddress,
 
         /// Revenue token used by the helper OpenNoteDeposit.
-        /// Current private messaging revenue is 7 STRK per submitted action;
-        /// the paired frontend `transfer: "OPEN"` action routes the resulting
-        /// private treasury note.
+        /// The executable message fee is FeePolicy-driven; the paired frontend
+        /// `transfer: "OPEN"` action routes the resulting private treasury note.
         open_note_token: ContractAddress,
 
         /// Shared production pricing policy.

@@ -38,7 +38,7 @@ pub mod VinssOfferHelper {
         /// Only this Privacy Pool may invoke the encrypted Offer path.
         privacy_pool: ContractAddress,
 
-        /// STRK token used for flat VINSS Offer revenue.
+        /// STRK token used for FeePolicy-driven VINSS Offer revenue.
         open_note_token: ContractAddress,
 
         /// Shared production pricing policy.
