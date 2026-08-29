@@ -1,22 +1,34 @@
 # Envelopes, Commitments & Events
 
-## Encrypted envelope family
+This document defines the public encrypted-envelope format, domain-separated commitments, capability commitments, and event surfaces used by the current VINSS contracts.
 
-Message, Offer, and Private Escrow coordination use a six-field V2 header:
+Executable Cairo source is the source of truth.
+
+## Encrypted Envelope Family
+
+`VinssMessageHelper`, `VinssOfferHelper`, and `VinssPrivateEscrowHelper` use the same six-field encrypted-envelope header:
+
+| Index | Field | Meaning |
+|---:|---|---|
+| `0` | `envelope_version` | Public envelope-format version |
+| `1` | one-time locator | Unique locator for exactly one encrypted action |
+| `2` | `sender_tag` | Opaque sender-routing tag |
+| `3` | `recipient_tag` | Opaque recipient-routing tag |
+| `4` | claimed payload commitment | Caller-supplied commitment checked against the contract-computed commitment |
+| `5` | payload chunk count | Number of ciphertext felts |
+| `6...` | ciphertext chunks | Encrypted payload |
+
+The current envelope version for Message, Offer, and Private Escrow is:
 
 ```text
-version
-one-time locator
-sender tag
-recipient tag
-claimed commitment
-chunk count
-ciphertext...
+2
 ```
 
-The tags are opaque routing values, not plaintext wallet addresses.
+This is an **envelope-format version**, not a contract-version suffix.
 
-Payload limit:
+The sender and recipient tags are opaque routing values. They are not plaintext wallet addresses and must not be interpreted as participant identities.
+
+### Payload Limits
 
 ```text
 Message        <= 64 chunks
@@ -24,84 +36,189 @@ Offer          <= 64 chunks
 Private Escrow <= 64 chunks
 ```
 
-These are implementation bounds.
+These are implementation bounds rather than permanent protocol limits.
 
-## Message commitment
+### Commitment Rule
+
+The claimed commitment at header index `4` is **not itself included in the hash input**. The contract computes the commitment from the remaining envelope fields and ciphertext, then checks:
+
+```text
+computed_payload_commitment == claimed_payload_commitment
+```
+
+This avoids a recursive commitment definition.
+
+```mermaid
+flowchart LR
+    HEADER["version + locator + routing tags + chunk count"]
+    CIPHER[ciphertext chunks]
+    HASH[Domain-separated Poseidon]
+    COMPUTED[computed payload commitment]
+    CLAIMED[claimed payload commitment]
+    STORE[store record + ciphertext]
+    EVENT[emit minimal commitment event]
+
+    HEADER --> HASH
+    CIPHER --> HASH
+    HASH --> COMPUTED
+    COMPUTED -->|must equal| CLAIMED
+    COMPUTED --> STORE
+    STORE --> EVENT
+```
+
+### Helper-Specific Tails
+
+The encrypted envelope ends after its ciphertext chunks.
+
+`VinssMessageHelper` and `VinssOfferHelper` append transaction/output fields **outside** that committed encrypted envelope:
+
+```text
+[encrypted envelope..., quoted_fee, open_note_id]
+```
+
+Those two fields are not part of the encrypted payload commitment.
+
+`VinssPrivateEscrowHelper` stores encrypted coordination only and does not append that fee/output tail.
+
+---
+
+## Message Commitment
+
+Domain:
+
+```text
+VINSS_MSG_COMMIT_V2
+```
+
+Commitment:
 
 ```text
 Poseidon(
   'VINSS_MSG_COMMIT_V2',
-  version,
+  envelope_version,
   message_locator,
   sender_tag,
   recipient_tag,
-  chunk_count,
-  ...ciphertext
+  payload_chunk_count,
+  ...ciphertext_chunks
 )
 ```
 
-Event:
+### `MessageCommitted`
+
+Key:
 
 ```text
-MessageCommitted
-  key: message_locator
-  data:
-    payload_commitment
-    sender_tag
-    recipient_tag
+message_locator
 ```
 
-## Offer commitment
+Data:
+
+```text
+payload_commitment
+sender_tag
+recipient_tag
+```
+
+The event does not duplicate ciphertext. Clients retrieve ciphertext from contract storage using the one-time locator.
+
+---
+
+## Offer Commitment
+
+Domain:
+
+```text
+VINSS_OFFER_COMMIT_V2
+```
+
+Commitment:
 
 ```text
 Poseidon(
   'VINSS_OFFER_COMMIT_V2',
-  version,
+  envelope_version,
   offer_action_locator,
   sender_tag,
   recipient_tag,
-  chunk_count,
-  ...ciphertext
+  payload_chunk_count,
+  ...ciphertext_chunks
 )
 ```
 
-Event:
+### `OfferActionCommitted`
+
+Key:
 
 ```text
-OfferActionCommitted
-  key: offer_action_locator
-  data:
-    payload_commitment
-    sender_tag
-    recipient_tag
+offer_action_locator
 ```
 
-## Private Escrow coordination commitment
+Data:
+
+```text
+payload_commitment
+sender_tag
+recipient_tag
+```
+
+Offer action type, lifecycle relationship, business terms, expiry, and other private semantics remain inside the encrypted payload rather than becoming event fields.
+
+---
+
+## Private Escrow Coordination Commitment
+
+Domain:
+
+```text
+VINSS_PRIVATE_ESCROW_COMMIT_V2
+```
+
+Commitment:
 
 ```text
 Poseidon(
   'VINSS_PRIVATE_ESCROW_COMMIT_V2',
-  version,
+  envelope_version,
   private_escrow_action_locator,
   sender_tag,
   recipient_tag,
-  chunk_count,
-  ...ciphertext
+  payload_chunk_count,
+  ...ciphertext_chunks
 )
 ```
 
-Event:
+### `PrivateEscrowActionCommitted`
+
+Key:
 
 ```text
-PrivateEscrowActionCommitted
-  key: private_escrow_action_locator
-  data:
-    payload_commitment
-    sender_tag
-    recipient_tag
+private_escrow_action_locator
 ```
 
-## Invite commitment
+Data:
+
+```text
+payload_commitment
+sender_tag
+recipient_tag
+```
+
+The event does not reveal whether the encrypted action represents setup, acceptance, rejection, cancellation, funding coordination, or another private Rekber coordination step.
+
+---
+
+## Invite Commitment
+
+Invite does not use the encrypted-envelope format.
+
+Domain:
+
+```text
+VINSS_INVITE_V1
+```
+
+Commitment:
 
 ```text
 Poseidon(
@@ -110,16 +227,55 @@ Poseidon(
 )
 ```
 
-Events:
+```mermaid
+flowchart LR
+    SECRET[One-time Invite secret]
+    HASH["Poseidon('VINSS_INVITE_V1', secret)"]
+    COMMITMENT[Invite commitment]
+    CREATE[InviteCreated]
+    CONSUME[InviteConsumed]
 
-```text
-InviteCreated(commitment, expires_at)
-InviteConsumed(commitment)
+    SECRET --> HASH
+    HASH --> COMMITMENT
+    COMMITMENT --> CREATE
+    SECRET -->|revealed on consume| CONSUME
 ```
 
-## Rekber capability commitments
+### `InviteCreated`
 
-Release authorization:
+Key:
+
+```text
+commitment
+```
+
+Data:
+
+```text
+expires_at
+```
+
+### `InviteConsumed`
+
+Key:
+
+```text
+commitment
+```
+
+No additional event data is emitted.
+
+Invite creation stores the commitment directly. Invite consumption reveals the secret in calldata, recomputes the commitment, validates it, and marks the Invite consumed.
+
+---
+
+## Rekber Capability Commitments
+
+Rekber capabilities are domain-separated and bound to one `custody_commitment`.
+
+They are **not** versioned with the encrypted-envelope `V2` suffix.
+
+### Release Authorization
 
 ```text
 Poseidon(
@@ -129,7 +285,7 @@ Poseidon(
 )
 ```
 
-Payee claim:
+### Payee Claim
 
 ```text
 Poseidon(
@@ -139,7 +295,7 @@ Poseidon(
 )
 ```
 
-Payer refund:
+### Payer Refund
 
 ```text
 Poseidon(
@@ -149,7 +305,7 @@ Poseidon(
 )
 ```
 
-Payer fulfillment confirmation:
+### Payer Fulfillment Confirmation
 
 ```text
 Poseidon(
@@ -159,7 +315,7 @@ Poseidon(
 )
 ```
 
-Payer dispute:
+### Payer Dispute
 
 ```text
 Poseidon(
@@ -169,7 +325,7 @@ Poseidon(
 )
 ```
 
-Payee dispute:
+### Payee Dispute
 
 ```text
 Poseidon(
@@ -179,7 +335,7 @@ Poseidon(
 )
 ```
 
-Payee refund consent:
+### Payee Refund Consent
 
 ```text
 Poseidon(
@@ -189,11 +345,27 @@ Poseidon(
 )
 ```
 
-Do not append `_V2` to these Rekber domains; the executable source uses the exact strings above.
+The executable domains are exactly:
 
-## Rekber one-way chains
+```text
+VINSS_RELEASE_AUTH
+VINSS_PAYEE_CLAIM
+VINSS_ESCROW_REFUND
+VINSS_PAYER_CONFIRM
+VINSS_PAYER_DISPUTE
+VINSS_PAYEE_DISPUTE
+VINSS_REFUND_CONSENT
+```
 
-Fulfillment step:
+Do not append `_V2` to these domains unless the executable Cairo commitment scheme itself is intentionally versioned in a future migration.
+
+---
+
+## Rekber One-Way Chains
+
+Fulfillment and revision use one-way secret chains so repeated actions can be bounded without publishing future preimages.
+
+### Fulfillment Step
 
 ```text
 Poseidon(
@@ -203,7 +375,7 @@ Poseidon(
 )
 ```
 
-Revision step:
+### Revision Step
 
 ```text
 Poseidon(
@@ -213,11 +385,13 @@ Poseidon(
 )
 ```
 
-Revealing one chain secret advances the stored head without exposing a future secret.
+Revealing the currently valid chain secret advances the stored chain state without exposing a future secret.
 
-## Certificate commitments
+---
 
-Claim capability:
+## Certificate Commitments
+
+### Claim Capability
 
 ```text
 Poseidon(
@@ -229,7 +403,9 @@ Poseidon(
 )
 ```
 
-Token ID:
+The recipient address is part of the commitment, so a valid certificate capability cannot be redirected to another caller.
+
+### Token ID
 
 ```text
 Poseidon(
@@ -239,7 +415,15 @@ Poseidon(
 )
 ```
 
-## Rekber lifecycle events
+The token ID is deterministic for the `(custody_commitment, role)` pair.
+
+---
+
+## Rekber Lifecycle Events
+
+Rekber events intentionally expose custody, timing, policy, evidence commitments, and accounting values required for public settlement verification and indexing.
+
+They do not expose plaintext Offer terms, fulfillment file contents, participant identities, or dispute plaintext.
 
 ### `EscrowRekberCustodyFunded`
 
@@ -259,6 +443,14 @@ timestamp
 fee_amount
 review_window
 verification_policy
+```
+
+The first three data positions are intentionally kept stable by the current source for simple indexers:
+
+```text
+amount
+fulfillment_deadline
+timestamp
 ```
 
 ### `EscrowRekberFulfillmentSubmitted`
@@ -326,6 +518,8 @@ opened_by_role
 timestamp
 ```
 
+Role values are interpreted by the Rekber lifecycle as the payer/payee role selected by the corresponding precommitted dispute capability.
+
 ### `EscrowRekberDisputeResolutionAuthorized`
 
 Keys:
@@ -342,6 +536,8 @@ payer_amount
 payee_amount
 timestamp
 ```
+
+This records resolver authorization. It does not itself transfer principal.
 
 ### `EscrowRekberResolutionClaimed`
 
@@ -360,6 +556,8 @@ amount
 timestamp
 ```
 
+A payer and payee resolution share can therefore be indexed independently.
+
 ### `EscrowRekberCustodyReleased`
 
 Keys:
@@ -376,7 +574,7 @@ timestamp
 release_mode
 ```
 
-Release modes:
+Current release modes:
 
 ```text
 1 = mutual release
@@ -399,10 +597,10 @@ timestamp
 refund_mode
 ```
 
-Refund modes:
+Current refund modes:
 
 ```text
-1 = no-fulfillment timeout
+1 = no-fulfillment timeout refund
 2 = mutual refund
 ```
 
@@ -423,16 +621,69 @@ payee_amount
 timestamp
 ```
 
-## Settlement Certificate event
+`EscrowRekberDisputeResolutionAuthorized`, `EscrowRekberResolutionClaimed`, and `EscrowRekberCustodyResolved` represent distinct stages of the disputed-settlement path and should not be collapsed into a single indexer state transition.
+
+---
+
+## Settlement Certificate Event
+
+### `SettlementCertificateIssued`
+
+Keys:
 
 ```text
-SettlementCertificateIssued
-  token_id
-  recipient
-  custody_commitment
-  role
-  settled_at
-  issued_at
+token_id
+recipient
 ```
 
-These events expose public verification/accounting commitments. They do not contain plaintext Offer terms, fulfillment files, or dispute text.
+Data:
+
+```text
+custody_commitment
+role
+settled_at
+issued_at
+```
+
+The event describes issuance of the clean-settlement credential. Certificate eligibility itself is enforced by `VinssSettlementCertificate` against canonical Rekber custody state before this event can be emitted.
+
+---
+
+## Public Metadata Boundary
+
+The public event surface intentionally reveals enough information for discovery, accounting, lifecycle verification, and indexing without publishing private business content.
+
+```mermaid
+flowchart LR
+    PRIVATE["Plaintext terms / files / dispute text"]
+    CIPHER[Encrypted payload]
+    COMMIT[Opaque commitments]
+    EVENTS[Public events]
+    INDEXER[Indexer / verification]
+
+    PRIVATE -->|encrypt client-side| CIPHER
+    CIPHER --> COMMIT
+    COMMIT --> EVENTS
+    EVENTS --> INDEXER
+```
+
+Publicly observable data may include:
+
+```text
+one-time encrypted-action locators
+opaque routing tags
+payload/evidence/reason/resolution commitments
+custody commitment
+token and principal amount
+fee amount
+deadlines and timestamps
+verification policy
+settlement modes
+resolution split amounts
+certificate recipient and role
+transaction/block metadata
+```
+
+It does **not** mean the entire Rekber lifecycle is private. Public custody state and settlement accounting are intentionally observable, while plaintext business terms and evidence content remain outside the public event payloads.
+
+Contract-level uniqueness and commitment checks complement, but do not replace, STRK20 Privacy Pool replay protection.
