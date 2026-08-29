@@ -3,34 +3,38 @@
 ## Source
 
 ```text
-contracts/src/offers/vinss_offer.cairo
+contracts/src/offers/
+├── offer_commitments.cairo
+├── offer_events.cairo
+├── offer_interfaces.cairo
+├── offer_types.cairo
+├── offer_validation.cairo
+└── vinss_offer.cairo
 ```
 
-Supporting modules:
+## Purpose
+
+Persist immutable encrypted Offer lifecycle actions while keeping deal terms and lifecycle semantics inside ciphertext.
+
+## Constructor
 
 ```text
-offer_interfaces.cairo
-offer_types.cairo
-offer_validation.cairo
-offer_events.cairo
-offer_commitments.cairo
+privacy_pool: ContractAddress
+open_note_token: ContractAddress
+fee_policy: ContractAddress
 ```
 
-## Status
+All addresses must be non-zero.
 
-**Testnet on-chain verified as part of the current Structured Offer flow.**
+## Envelope
 
-## Objective
-
-Persist immutable encrypted Offer actions while keeping Offer lifecycle semantics and deal terms inside ciphertext.
-
-## Envelope version
+Version:
 
 ```text
 2
 ```
 
-## `privacy_invoke` calldata
+Committed envelope:
 
 ```text
 [0] envelope_version
@@ -40,14 +44,23 @@ Persist immutable encrypted Offer actions while keeping Offer lifecycle semantic
 [4] claimed_payload_commitment
 [5] payload_chunk_count
 [6...] ciphertext_chunks
-[last] open_note_id
 ```
+
+Full `privacy_invoke` calldata:
+
+```text
+[...encrypted envelope,
+ quoted_fee,
+ open_note_id]
+```
+
+The two tail fields are outside the encrypted Offer commitment.
 
 ## Commitment
 
 ```text
 Poseidon(
-  VINSS_OFFER_COMMIT_V2,
+  'VINSS_OFFER_COMMIT_V2',
   envelope_version,
   offer_action_locator,
   sender_tag,
@@ -57,9 +70,9 @@ Poseidon(
 )
 ```
 
-## Contract semantics
+## Semantics intentionally not parsed
 
-The helper does not parse whether an encrypted action is:
+The contract does not decode whether an action is:
 
 ```text
 create
@@ -70,7 +83,7 @@ cancel
 expire
 ```
 
-Nor does it parse:
+It also does not decode:
 
 ```text
 deal type
@@ -79,70 +92,68 @@ amount
 payment terms
 conditions
 expiry
-root/parent Offer relationship
-participant addresses
+root/parent relationships
+participant wallet addresses
 ```
 
-Those are encrypted application semantics interpreted by the authorized client.
+Those remain encrypted application semantics.
 
 ## Validation
 
-The contract enforces:
-
-- configured Privacy Pool caller;
-- V2 envelope;
-- non-zero locator;
-- non-zero routing tags;
-- non-zero commitment;
-- 1–64 ciphertext chunks;
-- exact calldata size;
-- commitment recomputation;
-- locator uniqueness;
-- commitment uniqueness.
+```text
+caller == configured Privacy Pool
+V2 envelope
+non-zero locator
+non-zero routing tags
+non-zero commitment
+1..64 ciphertext chunks
+exact envelope size
+exact recomputed commitment
+unused locator
+unused payload commitment
+quoted_fee >= FeePolicy.quote_fee(FEE_ACTION_OFFER)
+```
 
 ## Storage
 
 ```text
-EncryptedOfferActionRecord
+EncryptedOfferActionRecord {
   envelope_version
   offer_action_locator
   sender_tag
   recipient_tag
   payload_commitment
   payload_chunk_count
+}
+
+(offer_action_locator, chunk_index) -> ciphertext felt
 ```
 
-Ciphertext remains separately addressable by locator + chunk index.
+## Revenue output
+
+The executable helper approves the Privacy Pool and returns:
+
+```text
+OpenNoteDeposit {
+  note_id: open_note_id,
+  token: open_note_token,
+  amount: quoted_fee
+}
+```
+
+The Offer fee is FeePolicy-driven. It must not be documented as a permanently hardcoded `10 STRK` contract fee.
 
 ## Event
 
 ```text
 OfferActionCommitted
+  key: offer_action_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
 ```
-
-Event:
-
-```text
-offer_action_locator     key
-payload_commitment
-sender_tag
-recipient_tag
-```
-
-## Application revenue
-
-Successful external invocation returns one:
-
-```text
-OpenNoteDeposit
-  amount = 10000000000000000000
-         = 10 STRK
-```
-
-against the configured `open_note_token`.
 
 ## Security boundary
 
-The helper proves only encrypted envelope integrity/uniqueness and Privacy-Pool invocation.
-
-It does not independently enforce semantic Offer authorization such as who is allowed to accept/cancel a particular encrypted deal.
+The helper verifies encrypted envelope integrity and uniqueness. It does not enforce plaintext semantic rules such as which participant is allowed to accept or cancel a particular Offer.

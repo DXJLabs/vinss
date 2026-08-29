@@ -1,35 +1,100 @@
 # Current Smart Contract Scope
 
-This page separates source availability, Cairo coverage, and deployed product evidence.
+This page describes the current `main` source contract capabilities. Network addresses are intentionally not duplicated here because they become stale; deployment workflow outputs and environment configuration are the authoritative source for deployed addresses.
 
-| Contract/capability | Source | Cairo tests | Current deployment status |
-|---|---:|---:|---|
-| `VinssInvite` | ✅ | ✅ | Existing deployment |
-| `VinssMessageHelper` · 7 STRK | ✅ | ✅ | Redeploy + E2E pending |
-| `VinssOfferHelper` · 10 STRK | ✅ | ✅ | Redeploy + E2E pending |
-| `VinssPrivateEscrowHelper` | ✅ | ✅ | Existing deployment |
-| `VinssEscrowRekber` · 2% | ✅ | ✅ deposit/release/refund | Canonical redeploy + E2E pending |
-| `VinssSettlementCertificate` | ✅ | ✅ | Redeploy after Rekber + E2E pending |
-| Mainnet evidence | — | — | Pending |
+## Source and CI scope
 
-## Canonical Rekber
+| Contract | Current source capability | Cairo CI |
+|---|---|---:|
+| `VinssFeePolicy` | Oracle-backed USD/sponsor fee floors | Covered |
+| `VinssInvite` | Fee-bearing create + one-time consume | Covered |
+| `VinssMessageHelper` | Encrypted V2 Message + dynamic FeePolicy revenue | Covered |
+| `VinssOfferHelper` | Encrypted V2 Offer action + dynamic FeePolicy revenue | Covered |
+| `VinssPrivateEscrowHelper` | Encrypted V2 Rekber coordination | Covered |
+| `VinssEscrowRekber` | Funding, fulfillment, review, revision, refund, dispute, resolver split, claims | Covered |
+| `VinssSettlementCertificate` | Clean-settlement claim + non-transferable ERC-721 ownership | Covered |
 
-Only the two-party authorization implementation remains in source. It provides:
+The current Settlement Certificate SBT regression build has passed the `VINSS Contracts Test` workflow.
+
+## Canonical Rekber scope
+
+Current source includes:
 
 ```text
-full-principal custody
-2% fee at funding
-payer authorization + payee claim release
-payer timeout refund
-one-time custody consumption
-private output-note settlement
-optional public certificate claims
+STRK/USDC principal custody
+2% principal fee component
+oracle-backed minimum fee floor
+FeePolicy lifecycle reserve
+exact funding quote validation
+
+fulfillment deadline
+three verification policies
+bounded fulfillment rounds
+bounded revision rounds
+review deadlines
+
+payer/payee dispute capabilities
+immutable dispute resolver
+exact payer/payee resolution split
+independent participant claims
+
+clean mutual release
+review-timeout auto-release
+no-fulfillment timeout refund
+mutual refund
+
+reserved-principal accounting
+reentrancy guard
+exact Privacy Pool allowance discipline
 ```
 
-The legacy unilateral-release contract, fallback frontend calls, and legacy indexer selectors have been removed.
+## Certificate scope
 
-## Verification boundary
+Current source enforces:
 
-Passing Cairo tests proves contract behavior in Starknet Foundry. It does not prove Ready X request construction, Privacy Pool execution, production environment addresses, or two-user testnet outcomes.
+```text
+clean successful settlement only
+payer/payee role-specific claim
+recipient-bound claim commitment
+one claim per custody/role
+deterministic token ID
+ERC-721 metadata/ownership compatibility
+post-mint transfer rejection
+post-mint safe-transfer rejection
+post-mint burn/ownership-update rejection
+```
 
-Do not describe Rekber as mainnet-ready or E2E-verified until the canonical Rekber and Settlement Certificate are redeployed and both release/refund branches are recorded on Sepolia.
+Older certificate deployments that predate the non-transferability hook do not inherit this behavior automatically. They require redeployment.
+
+## Mainnet status boundary
+
+Mainnet deployment is a separate evidence layer.
+
+A contract should not be described as successfully deployed to mainnet until:
+
+```text
+mainnet safety validation passed
+transaction succeeded
+expected constructor values were confirmed
+deployed class/address was recorded
+Voyager source verification succeeded
+runtime environment was cut over intentionally
+required E2E checks passed
+```
+
+The mainnet deployment workflow treats Voyager verification as mandatory.
+
+## Product/runtime boundary
+
+The contracts do not prove:
+
+```text
+frontend UI state correctness
+Ready X account/channel availability
+private treasury recipient channel context
+backend resolver automation
+backend indexer synchronization
+browser local-secret recovery
+```
+
+Those must be validated in their own integration/E2E layers.

@@ -3,34 +3,38 @@
 ## Source
 
 ```text
-contracts/src/messaging/vinss_message_helper.cairo
+contracts/src/messaging/
+├── messaging_events.cairo
+├── messaging_interfaces.cairo
+├── messaging_types.cairo
+├── messaging_validation.cairo
+├── timeline_payload_hash.cairo
+└── vinss_message_helper.cairo
 ```
 
-Supporting modules:
+## Purpose
+
+Store one independently discoverable encrypted Message action while keeping plaintext Message semantics and direct wallet participant addresses out of helper storage.
+
+## Constructor
 
 ```text
-messaging_interfaces.cairo
-messaging_types.cairo
-messaging_validation.cairo
-messaging_events.cairo
-timeline_payload_hash.cairo
+privacy_pool: ContractAddress
+open_note_token: ContractAddress
+fee_policy: ContractAddress
 ```
 
-## Status
+All addresses must be non-zero.
 
-**Testnet on-chain verified as part of the current Private Chat flow.**
+## Envelope
 
-## Objective
-
-Persist one encrypted VINSS Message action without accepting plaintext Message semantics or reusable participant identity fields.
-
-## Envelope version
+Version:
 
 ```text
 2
 ```
 
-## `privacy_invoke` calldata
+Committed envelope:
 
 ```text
 [0] envelope_version
@@ -40,16 +44,23 @@ Persist one encrypted VINSS Message action without accepting plaintext Message s
 [4] claimed_payload_commitment
 [5] payload_chunk_count
 [6...] ciphertext_chunks
-[last] open_note_id
 ```
 
-The final `open_note_id` belongs to the STRK20 invoke-helper output path and is not part of the Message commitment.
+Full `privacy_invoke` calldata appends two fields:
+
+```text
+[...encrypted envelope,
+ quoted_fee,
+ open_note_id]
+```
+
+`quoted_fee` and `open_note_id` are not part of the encrypted payload commitment.
 
 ## Commitment
 
 ```text
 Poseidon(
-  VINSS_MSG_COMMIT_V2,
+  'VINSS_MSG_COMMIT_V2',
   envelope_version,
   message_locator,
   sender_tag,
@@ -61,75 +72,73 @@ Poseidon(
 
 ## Validation
 
-The contract enforces:
+The executable path enforces:
 
-- configured Privacy Pool caller;
-- supported envelope version;
-- non-zero locator;
-- non-zero routing tags;
-- non-zero claimed commitment;
-- non-empty payload;
-- maximum 64 ciphertext chunks;
-- exact calldata length;
-- exact recomputed commitment match;
-- locator uniqueness;
-- payload commitment uniqueness.
+```text
+caller == configured Privacy Pool
+supported envelope version
+non-zero locator
+non-zero sender tag
+non-zero recipient tag
+non-zero claimed commitment
+1..64 ciphertext chunks
+exact envelope length
+exact recomputed commitment
+unused locator
+unused payload commitment
+quoted_fee >= FeePolicy.quote_fee(FEE_ACTION_MESSAGE)
+```
 
 ## Storage
 
-`VinssMessageRecord`:
-
 ```text
-envelope_version
-message_locator
-sender_tag
-recipient_tag
-payload_commitment
-payload_chunk_count
+VinssMessageRecord {
+  envelope_version
+  message_locator
+  sender_tag
+  recipient_tag
+  payload_commitment
+  payload_chunk_count
+}
+
+(message_locator, chunk_index) -> ciphertext felt
 ```
 
-Ciphertext chunks:
+Explicit existence and committed-payload maps prevent zero-default ambiguity and duplicate reuse.
+
+## Revenue output
+
+After storing the envelope, the helper approves the Privacy Pool for exactly `quoted_fee` and returns:
 
 ```text
-(message_locator, chunk_index)
-→ felt252
+OpenNoteDeposit {
+  note_id: open_note_id,
+  token: open_note_token,
+  amount: quoted_fee
+}
 ```
 
-Guarded getters reject unknown locator/out-of-range chunk access.
+The fee is dynamic. Do not document Message as a permanently hardcoded `7 STRK` contract fee.
 
 ## Event
 
 ```text
 MessageCommitted
+  key: message_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
 ```
 
-Event shape:
+No plaintext Message is emitted.
 
-```text
-message_locator          key
-payload_commitment
-sender_tag
-recipient_tag
-```
+## Read surface
 
-No plaintext Message or explicit wallet participant address is emitted by this helper.
-
-## Application revenue
-
-Successful `privacy_invoke` approves the configured Privacy Pool and returns:
-
-```text
-OpenNoteDeposit
-  amount = 7000000000000000000
-         = 7 STRK
-```
-
-against the configured `open_note_token`.
-
-This is paired with the current frontend STRK20 action bundle.
+The contract exposes existence, structural-record, ciphertext-chunk, and payload-commitment lookup methods. Chunk getters reject unknown locators and out-of-range indexes.
 
 ## Security boundary
 
-The helper validates encrypted structure and commitment.
+The helper proves encrypted envelope structure, integrity, uniqueness, and Privacy-Pool invocation.
 
-It does not authenticate the semantic Message sender by decrypting payloads, and it does not interpret Message type/content.
+It does not decrypt or independently prove the application-level identity of the human Message sender.

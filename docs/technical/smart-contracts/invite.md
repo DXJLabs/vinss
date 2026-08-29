@@ -6,46 +6,52 @@
 contracts/src/invite/vinss_invite.cairo
 ```
 
-Supporting modules:
+## Purpose
 
-```text
-invite_interfaces.cairo
-invite_types.cairo
-invite_events.cairo
-```
-
-## Objective
-
-`VinssInvite` gives VINSS a one-time, expiring on-chain commitment state for Deal Room invitation bootstrap without storing the full encrypted Invite payload.
-
-## Authorization
+`VinssInvite` stores an expiring, one-time Invite commitment without storing the full Invite payload or room secret.
 
 Only the configured Privacy Pool may call `privacy_invoke`.
 
+## Constructor
+
+```text
+privacy_pool: ContractAddress
+open_note_token: ContractAddress
+fee_policy: ContractAddress
+```
+
+All three addresses must be non-zero.
+
 ## Commitment
 
-```cairo
+```text
 Poseidon(
-    'VINSS_INVITE_V1',
-    secret,
+  'VINSS_INVITE_V1',
+  secret
 )
 ```
 
-## Operations
+## Operation `0` — create
 
-### Create
+Calldata:
 
 ```text
-[0, commitment, expires_at]
+[0,
+ commitment,
+ expires_at,
+ quoted_fee,
+ open_note_id]
 ```
 
 Validation:
 
-- exact calldata length;
-- non-zero commitment;
-- non-zero expiry;
-- expiry must be in the future;
-- commitment must not already exist.
+```text
+quoted_fee >= FeePolicy.quote_fee(FEE_ACTION_ROOM_ACTIVATION)
+commitment != 0
+expires_at != 0
+expires_at > block timestamp
+commitment does not already exist
+```
 
 Stored state:
 
@@ -61,78 +67,74 @@ Event:
 InviteCreated(commitment, expires_at)
 ```
 
-### Consume
+The contract approves the configured Privacy Pool for `quoted_fee` of `open_note_token` and returns:
+
+```text
+OpenNoteDeposit {
+  note_id: open_note_id,
+  token: open_note_token,
+  amount: quoted_fee
+}
+```
+
+Therefore Invite creation is fee-bearing in the current executable contract.
+
+## Operation `1` — consume
+
+Calldata:
 
 ```text
 [1, secret]
 ```
 
-The contract recomputes the commitment from the secret.
+The contract recomputes the commitment and requires:
 
-Validation:
+```text
+secret != 0
+Invite exists
+Invite is not consumed
+block timestamp <= expires_at
+```
 
-- exact calldata length;
-- non-zero secret;
-- matching Invite exists;
-- Invite has not already been consumed;
-- current timestamp is not after expiry.
-
-State becomes:
+It then writes:
 
 ```text
 consumed = true
 ```
 
-Event:
+and emits:
 
 ```text
 InviteConsumed(commitment)
 ```
 
-## No OpenNoteDeposit output
+Consume returns an empty `OpenNoteDeposit` span.
 
-Both operations return an empty `OpenNoteDeposit` span.
+## Privacy boundary
 
-The current frontend pairs Invite invocation with its own STRK20 withdrawal action for transaction-level private-note consumption/replay behavior.
-
-That accompanying withdrawal is not an Invite-contract output.
-
-## Public data
-
-Public:
+Public before consumption:
 
 ```text
 commitment
 expiry
-consumed state
-create/consume events
-consume secret after it is submitted
+exists/consumed state
+InviteCreated event
 ```
 
-Not stored here:
+Public after consumption additionally includes the one-time `secret` because transaction calldata is public.
+
+Not stored by this contract:
 
 ```text
 room secret
 room label
-group secret
-group metadata
+participant identities
 full encrypted Invite payload
-Invite AES key
+client encryption keys
 ```
 
-## Current test coverage
+The consume secret is therefore a one-time authorization preimage, not a permanently hidden on-chain secret.
 
-Cairo tests currently cover:
+## Fee boundary
 
-- constructor Privacy Pool storage;
-- create state;
-- no output deposit;
-- successful consume;
-- duplicate create rejection;
-- double-consume rejection;
-- unknown secret rejection;
-- expired create rejection;
-- expired consume rejection;
-- non-Privacy-Pool caller rejection.
-
-This proves contract-level behavior, not complete wallet/browser E2E behavior.
+The contract accepts any `quoted_fee` greater than or equal to the current FeePolicy minimum. The returned revenue amount is exactly the wallet-supplied `quoted_fee`.

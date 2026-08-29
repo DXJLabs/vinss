@@ -1,133 +1,122 @@
-# VINSS Smart Contract Technical Documentation
+# VINSS Smart Contract Technical Reference
 
-VINSS smart contracts are the **application-specific Cairo layer** invoked through the configured STRK20 Privacy Pool.
+This directory documents the Cairo contracts exported by `contracts/src/lib.cairo` and the application boundaries that must remain synchronized with the VINSS frontend, STRK20 Privacy Pool integration, indexer, and deployment workflows.
 
-They do not replace the Privacy Pool. They define how VINSS persists encrypted coordination, enforces application-level commitments, manages one-time Invite state, and performs Escrow Rekber custody/settlement.
+Executable Cairo source and tests are the source of truth. This documentation does not replace ABI inspection, deployment artifacts, or network verification.
 
-## Core contract capabilities
+## Contract inventory
 
-| Contract | Technical role | Current status |
-|---|---|---|
-| **VinssInvite** | One-time commitment-based Invite create/consume + expiry | Implemented + Cairo tested |
-| **VinssMessageHelper** | Persist encrypted Message envelopes and return 7 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
-| **VinssOfferHelper** | Persist immutable encrypted Offer actions and return 10 STRK revenue OpenNoteDeposit | New fee build; redeploy + E2E pending |
-| **VinssPrivateEscrowHelper** | Persist encrypted Escrow Rekber coordination actions | Implemented + Cairo tested |
-| **VinssEscrowRekber** | ERC-20 custody, 2% fee, two-party release, timeout refund | Canonical build; redeploy + E2E pending |
-| **VinssSettlementCertificate** | Optional public ERC-721 evidence after successful release | Implemented + Cairo tested; redeploy pending |
-| **Mainnet deployment/evidence** | Live STRK20 contract execution evidence | 🟡 Pending |
+| Contract | Role |
+|---|---|
+| `VinssFeePolicy` | Shared oracle-backed application fee floor and sponsor-cost policy |
+| `VinssInvite` | One-time expiring Invite commitment with fee-bearing creation |
+| `VinssMessageHelper` | Stores encrypted Message V2 envelopes and returns a revenue `OpenNoteDeposit` |
+| `VinssOfferHelper` | Stores encrypted Offer V2 actions and returns a revenue `OpenNoteDeposit` |
+| `VinssPrivateEscrowHelper` | Stores encrypted Rekber coordination actions; never custodies principal |
+| `VinssEscrowRekber` | STRK/USDC custody, fulfillment, review, revision, refund, dispute, resolution, and settlement |
+| `VinssSettlementCertificate` | Claimable non-transferable ERC-721 credential for clean successful settlements |
 
-## Contract architecture
+## Execution layers
 
 ```text
 VINSS frontend
-    ↓ encrypted / commitment-based action
-privacy-enabled wallet
-    ↓
+    |
+    v
+privacy-enabled wallet / Ready X
+    |
+    v
 STRK20 Privacy Pool
-    ↓ privacy_invoke
-VINSS Cairo contract
+    |
+    +--> VinssInvite
+    +--> VinssMessageHelper
+    +--> VinssOfferHelper
+    +--> VinssPrivateEscrowHelper
+    +--> VinssEscrowRekber
+
+Pragma
+    +--> VinssFeePolicy
+    +--> VinssEscrowRekber
+
+VinssFeePolicy
+    +--> Invite / Message / Offer fee floors
+    +--> Rekber lifecycle reserve floor
+
+Dedicated dispute resolver
+    +--> VinssEscrowRekber.authorize_dispute_resolution()
+
+Optional objective verifier
+    +--> VinssEscrowRekber.confirm_external_fulfillment()
+
+Wallet
+    +--> VinssSettlementCertificate.claim()
+            |
+            v
+       canonical Rekber state
 ```
 
-The configured Privacy Pool is the write-authority boundary for every current VINSS `privacy_invoke` contract.
+All current `privacy_invoke` contracts restrict that entrypoint to the configured Privacy Pool. That is an invocation boundary, not proof that the contract knows a plaintext participant identity.
 
-## Two contract families
+## Important technical boundaries
 
-### Encrypted coordination contracts
+Encrypted Message, Offer, and Private Escrow helpers store public ciphertext plus opaque routing metadata. They do not decrypt business semantics.
+
+`VinssEscrowRekber` is intentionally not ciphertext-only. Token, principal, fee, deadlines, policy, commitments, evidence commitments, dispute state, and resolution amounts are public contract state.
+
+The dispute resolver can authorize only an exact payer/payee split whose sum equals the custody principal. It cannot redirect principal to itself. Each party must later claim its own authorized share using a capability committed at funding.
+
+`VinssSettlementCertificate` is an ERC-721-compatible credential whose ownership is soulbound after mint. The ERC-721 hook permits only the initial zero-owner-to-recipient update; later transfer or burn attempts revert with `CERT_NON_TRANSFERABLE`.
+
+## Fee model
+
+`VinssFeePolicy` is the shared source for Room activation, Message, Offer, and Rekber reserve floors. Quotes are oracle-backed and compare a public USD floor against a sponsor-cost floor.
+
+Rekber funding is different from a flat helper fee:
 
 ```text
-VinssMessageHelper
-VinssOfferHelper
-VinssPrivateEscrowHelper
+Rekber fee =
+max(
+  2% of principal,
+  token-denominated value of
+    max(
+      configured Rekber minimum USD,
+      FeePolicy Rekber lifecycle reserve USD
+    )
+)
 ```
 
-These contracts:
+The funding quote must match exactly at execution.
 
-- receive public ciphertext envelopes;
-- verify envelope structure and Poseidon commitment;
-- enforce one-time locator/commitment rules;
-- persist ciphertext for discovery;
-- do not decrypt private application semantics.
-
-### Commitment/state contracts
-
-```text
-VinssInvite
-VinssEscrowRekber
-VinssSettlementCertificate
-```
-
-`VinssInvite` stores a one-time Invite commitment with expiry/consumption state.
-
-`VinssEscrowRekber` stores public custody commitments and ERC-20 settlement state. It is intentionally **not** a ciphertext-only contract because custody requires public token/amount state in the current implementation.
-
-`VinssSettlementCertificate` reads canonical Rekber custody and allows each party to claim its own optional public certificate after release.
-
-## Privacy boundary at a glance
-
-```text
-Encrypted coordination:
-  plaintext semantics        → NOT stored
-  ciphertext                 → public
-  locator/tags/commitment    → public
-
-Invite:
-  encrypted Invite payload   → off-chain/client
-  commitment/expiry/state    → public
-  consume secret             → revealed when consumed
-
-Escrow Rekber:
-  deal conversation/terms    → NOT stored
-  participant addresses      → NOT stored
-  token/amount/refund time   → public
-  commitments/state          → public
-  release/refund preimage    → client-held before use,
-                                revealed in settlement calldata
-```
-
-VINSS therefore reduces plaintext and direct participant relationship exposure; it does not claim that all metadata or all settlement data is hidden.
-
-## Rekber commitment compatibility
-
-The active frontend and Cairo contract share these immutable domains:
-
-```text
-VINSS_RELEASE_AUTH_V2
-VINSS_PAYEE_CLAIM_V2
-VINSS_ESCROW_REFUND_V2
-```
-
-The canonical source has dedicated release/refund tests. Deployed two-wallet E2E evidence is still pending.
-
-See [Frontend Compatibility](./frontend-compatibility.md).
+Current frontend workflow charges such as a 3 STRK Rekber action charge are application transaction-bundle behavior; they are not an invariant enforced by `VinssEscrowRekber` itself.
 
 ## Read in this order
 
 1. [Architecture](./architecture.md)
-2. [Privacy & Trust Boundary](./privacy-boundary.md)
-3. [Invite](./invite.md)
-4. [Message Helper](./message-helper.md)
-5. [Offer Helper](./offer-helper.md)
-6. [Private Escrow Helper](./private-escrow-helper.md)
-7. [Escrow Rekber](./escrow-rekber.md)
-8. [Envelope, Commitment & Events](./envelopes-events.md)
-9. [Frontend Compatibility](./frontend-compatibility.md)
-10. [Tests](./testing.md)
-11. [Current Scope](./current-scope.md)
+2. [Fee Policy](./fee-policy.md)
+3. [Privacy & Trust Boundary](./privacy-boundary.md)
+4. [Invite](./invite.md)
+5. [Message Helper](./message-helper.md)
+6. [Offer Helper](./offer-helper.md)
+7. [Private Escrow Helper](./private-escrow-helper.md)
+8. [Escrow Rekber](./escrow-rekber.md)
+9. [Settlement Certificate](./settlement-certificate.md)
+10. [Envelopes, Commitments & Events](./envelopes-events.md)
+11. [Frontend Compatibility](./frontend-compatibility.md)
+12. [Testing](./testing.md)
+13. [Current Scope](./current-scope.md)
 
-## Documentation rule
+## Evidence labels
 
-These pages distinguish:
+These are different claims and must not be conflated:
 
 ```text
-implemented contract code
-≠
-Cairo unit-tested behavior
-≠
-testnet E2E verification
-≠
-mainnet verification
+implemented source
+Cairo build success
+Starknet Foundry test success
+testnet deployment
+testnet wallet E2E
+mainnet deployment
+Voyager source verification
+mainnet product E2E
 ```
 
-Only small source excerpts that expose an important invariant or boundary are included.
-
-Executable contract/frontend code and tests remain the source of truth.
+A passing unit test does not prove a Ready X request shape, Privacy Pool proof, deployment configuration, or production E2E outcome.

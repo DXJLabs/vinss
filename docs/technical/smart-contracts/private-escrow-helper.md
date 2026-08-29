@@ -3,34 +3,46 @@
 ## Source
 
 ```text
-contracts/src/private_escrow/vinss_private_escrow_helper.cairo
+contracts/src/private_escrow/
+├── private_escrow_commitments.cairo
+├── private_escrow_events.cairo
+├── private_escrow_interfaces.cairo
+├── private_escrow_types.cairo
+├── private_escrow_validation.cairo
+└── vinss_private_escrow_helper.cairo
 ```
 
-Supporting modules:
+## Purpose
+
+Store encrypted Rekber coordination actions for discovery without holding ERC-20 principal.
+
+This helper and `VinssEscrowRekber` serve different roles:
 
 ```text
-private_escrow_interfaces.cairo
-private_escrow_types.cairo
-private_escrow_validation.cairo
-private_escrow_events.cairo
-private_escrow_commitments.cairo
+VinssPrivateEscrowHelper
+  = encrypted coordination
+
+VinssEscrowRekber
+  = enforceable custody and settlement
 ```
 
-## Objective
+## Constructor
 
-Persist encrypted Escrow Rekber **coordination actions** with the same opaque discovery model used by Message and Offer.
+```text
+privacy_pool: ContractAddress
+```
 
-This contract does not custody ERC-20 funds.
+Only the configured Privacy Pool may call `privacy_invoke`.
 
-## Envelope version
+## Envelope
+
+Version:
 
 ```text
 2
 ```
 
-## Executed V2 calldata layout
-
-The executable contract and current Cairo tests use:
+Calldata:
 
 ```text
 [0] envelope_version
@@ -42,11 +54,13 @@ The executable contract and current Cairo tests use:
 [6...] ciphertext_chunks
 ```
 
+There is no fee/output tail in this helper.
+
 ## Commitment
 
 ```text
 Poseidon(
-  VINSS_PRIVATE_ESCROW_COMMIT_V2,
+  'VINSS_PRIVATE_ESCROW_COMMIT_V2',
   envelope_version,
   private_escrow_action_locator,
   sender_tag,
@@ -56,32 +70,24 @@ Poseidon(
 )
 ```
 
-## Contract semantics
+## Validation and storage
 
-The helper does not parse the private coordination action kind.
+The contract enforces:
 
-Application-level coordination semantics remain encrypted.
+```text
+configured Privacy Pool caller
+supported envelope version
+non-zero locator
+non-zero routing tags
+non-zero commitment
+bounded non-empty ciphertext
+exact calldata length
+exact recomputed commitment
+locator uniqueness
+payload commitment uniqueness
+```
 
-The helper therefore does not publicly expose a stable escrow ID, lifecycle relationship, participant address, asset, or settlement terms.
-
-## Validation
-
-The helper enforces:
-
-- configured Privacy Pool caller;
-- envelope version;
-- non-zero locator;
-- non-zero sender/recipient tags;
-- non-zero commitment;
-- bounded/non-empty ciphertext;
-- exact calldata size;
-- recomputed commitment;
-- locator uniqueness;
-- commitment uniqueness.
-
-## Storage / discovery
-
-Structural record:
+Stored public structure:
 
 ```text
 envelope_version
@@ -90,40 +96,24 @@ sender_tag
 recipient_tag
 payload_commitment
 payload_chunk_count
+ciphertext chunks
 ```
 
-Event:
+## Event
 
 ```text
 PrivateEscrowActionCommitted
+  key: private_escrow_action_locator
+  data:
+    payload_commitment
+    sender_tag
+    recipient_tag
 ```
 
-Ciphertext chunks are available through guarded getters used by backend discovery.
+## Token behavior
 
-## No token movement
+`privacy_invoke` returns an empty `OpenNoteDeposit` span. This contract never reserves or releases custody principal.
 
-`privacy_invoke` returns an empty `OpenNoteDeposit` span.
+## Privacy boundary
 
-Actual custody and release/refund belong to `VinssEscrowRekber`.
-
-## Current test coverage
-
-Current Cairo tests verify:
-
-- successful V2 record storage;
-- routing tags;
-- ciphertext retrieval;
-- no output deposit;
-- non-Pool caller rejection;
-- zero sender/recipient rejection;
-- invalid commitment rejection;
-- locator replay rejection;
-- event routing tags.
-
-## Source-comment note
-
-Some comments in the current Private Escrow Cairo source/constants and the leading frontend Escrow source comment still show an older shorter header that omits sender/recipient tags.
-
-The **executable implementation and tests use the six-field V2 header documented above**.
-
-Those comments should be corrected separately to avoid source-level confusion.
+The helper does not parse or expose plaintext coordination kind, deal terms, stable participant addresses, or a stable public Rekber relationship identifier. Ciphertext and opaque routing metadata are public.

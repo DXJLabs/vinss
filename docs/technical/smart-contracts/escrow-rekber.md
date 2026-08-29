@@ -12,118 +12,451 @@ contracts/src/escrow_rekber/
 └── vinss_escrow_rekber.cairo
 ```
 
-`VinssEscrowRekber` is the supported ERC-20 custody contract and requires independent payer authorization and payee claim secrets.
+## Purpose
 
-## Status
+`VinssEscrowRekber` is the public custody state machine behind VINSS Rekber.
 
-Implemented and Cairo-tested. A fresh Sepolia deployment and two-wallet release/refund E2E evidence are still required.
+It holds supported ERC-20 principal, charges the funding service fee, enforces fulfillment/review/revision/refund/dispute rules, and returns settlement outputs through the configured Privacy Pool.
 
-## Write authority
+## Constructor
 
-Only the configured STRK20 Privacy Pool may call `privacy_invoke`. The contract uses a reentrancy guard and tracks reserved principal per token.
-
-## Actions
+Exact constructor order:
 
 ```text
-1 = DEPOSIT
-2 = RELEASE
-3 = REFUND
+privacy_pool: ContractAddress
+pragma_oracle: ContractAddress
+revenue_fee_policy: ContractAddress
+dispute_resolver: ContractAddress
+external_verifier: ContractAddress
+strk_token: ContractAddress
+usdc_token: ContractAddress
+strk_usd_pair: felt252
+usdc_usd_pair: felt252
+minimum_fee_usd_micros: u128
+max_oracle_age: u64
+min_oracle_sources: u32
 ```
 
-## Deposit
+All fields except `external_verifier` must be non-zero. STRK and USDC addresses must differ.
+
+The configuration is intentionally immutable after deployment.
+
+## Supported assets
+
+The current contract supports only:
 
 ```text
-[
-  1,
+STRK -> 18 decimals
+USDC -> 6 decimals
+```
+
+Any other token passed to `quote_rekber_fee` or funding is rejected.
+
+## Verification policies
+
+| Value | Policy | Review starts |
+|---:|---|---|
+| `1` | `POLICY_SUBMISSION_REVIEW` | Immediately when payee submits fulfillment |
+| `2` | `POLICY_COUNTERPARTY_CONFIRM` | When payer confirms the exact submitted evidence commitment |
+| `3` | `POLICY_EXTERNAL_VERIFY` | When configured external verifier confirms the exact submitted evidence commitment |
+
+Policy `3` requires a non-zero external verifier.
+
+## Funding fee
+
+The contract first computes:
+
+```text
+percentage_fee = principal / 50
+               = 2% of principal
+```
+
+Then:
+
+```text
+dynamic_floor_usd =
+    FeePolicy.quote_fee_usd_micros(FEE_ACTION_REKBER)
+
+effective_floor_usd =
+    max(
+      dynamic_floor_usd,
+      minimum_fee_usd_micros
+    )
+
+minimum_fee_in_token =
+    ceil(effective_floor_usd / current token USD price)
+
+required_fee =
+    max(
+      percentage_fee,
+      minimum_fee_in_token
+    )
+```
+
+Pragma validation requires a non-zero price, supported decimals, non-future timestamp, freshness within `max_oracle_age`, enough sources, and a non-expired response.
+
+Funding requires the wallet-provided `quoted_fee` to equal `required_fee` exactly. A changed oracle quote therefore fails atomically instead of silently charging a different amount.
+
+The service fee is paid once at funding and is non-refundable.
+
+## Action selectors
+
+```text
+1  DEPOSIT_ACTION
+2  RELEASE_ACTION
+3  REFUND_ACTION
+4  SUBMIT_FULFILLMENT_ACTION
+5  CONFIRM_FULFILLMENT_ACTION
+6  OPEN_DISPUTE_ACTION
+7  REQUEST_REVISION_ACTION
+8  AUTO_RELEASE_ACTION
+9  MUTUAL_REFUND_ACTION
+10 CLAIM_RESOLUTION_ACTION
+```
+
+All ten participant actions enter through `privacy_invoke` and therefore require the configured Privacy Pool caller.
+
+## Action `1` — fund custody
+
+Exact calldata:
+
+```text
+[1,
+ custody_commitment,
+ release_authorization_commitment,
+ payee_claim_commitment,
+ refund_commitment,
+ payer_confirmation_commitment,
+ payer_dispute_commitment,
+ payee_dispute_commitment,
+ payee_refund_consent_commitment,
+ fulfillment_chain_head,
+ revision_chain_head,
+ payer_certificate_commitment,
+ payee_certificate_commitment,
+ fulfillment_deadline,
+ review_window,
+ verification_policy,
+ fulfillment_rounds,
+ revision_rounds,
+ token,
+ principal,
+ quoted_fee,
+ revenue_open_note_id]
+```
+
+Key constraints:
+
+```text
+custody is unique
+principal > 0
+fulfillment_deadline is future and <= 180 days away
+review_window is 60 seconds .. 30 days
+fulfillment_rounds is 1..8
+revision_rounds is 0..7
+revision_rounds < fulfillment_rounds
+revision_chain_head may be zero only when revision_rounds == 0
+quoted_fee == live required fee
+```
+
+The contract requires enough token balance for:
+
+```text
+existing reserved principal
++ new principal
++ required fee
+```
+
+Only principal is added to `reserved_by_token`.
+
+Funding emits `EscrowRekberCustodyFunded` and returns one fee `OpenNoteDeposit`.
+
+## Action `4` — submit fulfillment
+
+```text
+[4,
+ custody_commitment,
+ fulfillment_chain_secret,
+ evidence_commitment]
+```
+
+The secret must advance the one-way fulfillment chain.
+
+On success:
+
+```text
+fulfillment_evidence_commitment = evidence_commitment
+fulfillment_submitted = true
+fulfillment rounds decrease
+```
+
+For policy `1`, review starts immediately. Policies `2` and `3` wait for confirmation.
+
+## Action `5` — payer confirms fulfillment
+
+```text
+[5,
+ custody_commitment,
+ payer_confirmation_secret,
+ evidence_commitment]
+```
+
+Valid only for policy `2`.
+
+The supplied evidence commitment must equal the current fulfillment evidence commitment. Successful confirmation sets `fulfillment_confirmed = true` and starts the review deadline.
+
+## External verification
+
+Public entrypoint:
+
+```text
+confirm_external_fulfillment(
   custody_commitment,
-  release_authorization_commitment,
-  payee_claim_commitment,
-  refund_commitment,
-  payer_certificate_commitment,
-  payee_certificate_commitment,
-  refund_after,
-  token,
-  principal,
-  revenue_open_note_id
-]
+  evidence_commitment
+)
 ```
 
-The contract requires unique non-zero commitments, a future refund boundary, sufficient token balance, and zero stale Pool allowance.
+Only the immutable `external_verifier` may call it.
 
-VINSS charges 2% at funding:
+It is valid only for policy `3`, and the evidence commitment must exactly match the submitted fulfillment commitment.
+
+This function changes fulfillment state only. It cannot move principal.
+
+## Action `7` — request revision
 
 ```text
-fee = principal / 50
-wallet input = principal + fee
-reserved custody = full principal
+[7,
+ custody_commitment,
+ revision_chain_secret,
+ reason_commitment]
 ```
 
-The returned `OpenNoteDeposit` routes only the fee. Principal remains reserved for release or refund.
+Revision is valid only for policy `1`, before the current review deadline, with remaining revision and fulfillment rounds.
 
-## Release
+The revision secret advances a separate one-way chain. A revision clears the current confirmation and creates `revision_deadline = now + review_window`.
 
-Release is valid only before `refund_after` and requires both parties' independent preimages:
+The payee must resubmit fulfillment before the revision deadline.
+
+## Action `6` — open dispute
 
 ```text
-[
-  2,
+[6,
+ custody_commitment,
+ role,
+ dispute_secret,
+ evidence_commitment]
+```
+
+Roles:
+
+```text
+1 = payer
+2 = payee
+```
+
+Either side uses its own precommitted dispute capability.
+
+A dispute requires prior fulfillment submission. If review has started, dispute must be opened strictly before the review deadline.
+
+The contract stores only `dispute_evidence_commitment`, not plaintext dispute evidence.
+
+## Resolver authorization
+
+Public entrypoint:
+
+```text
+authorize_dispute_resolution(
   custody_commitment,
-  release_authorization_secret,
-  payee_claim_secret,
-  output_note_id
-]
+  resolution_commitment,
+  payer_amount,
+  payee_amount
+)
 ```
 
-Commitments use the domains:
+Only the immutable `dispute_resolver` may call it.
+
+Required invariant:
 
 ```text
-VINSS_RELEASE_AUTH
-VINSS_PAYEE_CLAIM
+payer_amount + payee_amount == custody principal
 ```
 
-The full principal is returned to the wallet-created private output note.
+The resolver cannot provide arbitrary recipients and does not receive funds.
 
-## Refund
+Zero allocations are marked already claimed. Non-zero shares remain in custody until the corresponding participant claims.
 
-Refund is valid at or after `refund_after` and requires the payer's refund preimage:
+## Action `10` — claim dispute resolution
 
 ```text
-[
-  3,
-  custody_commitment,
-  refund_secret,
-  output_note_id
-]
+[10,
+ custody_commitment,
+ role,
+ party_secret,
+ output_note_id]
 ```
 
-The commitment domain is `VINSS_ESCROW_REFUND`. A released or refunded custody cannot be consumed again.
+Payer uses the original refund capability.
 
-## Public state
+Payee uses the original payee-claim capability.
 
-`EscrowRekberCustody` exposes commitments, token, amount, refund boundary, creation/settlement timestamps, and consumed/refunded flags. Participant addresses and plaintext deal terms are not stored by this contract.
+Each side can receive only its authorized amount. When all non-zero allocations have been claimed, the custody is marked consumed and `EscrowRekberCustodyResolved` is emitted.
+
+## Action `2` — mutual clean release
+
+```text
+[2,
+ custody_commitment,
+ payer_release_secret,
+ payee_claim_secret,
+ output_note_id]
+```
+
+Requires confirmed fulfillment with no pending revision.
+
+Both precommitted capabilities must match. Full principal is returned to the payee output note.
+
+This path can still be used after a disagreement only before resolver authorization/partial resolution claims, because both parties explicitly consent.
+
+## Action `8` — auto-release
+
+```text
+[8,
+ custody_commitment,
+ payee_claim_secret,
+ output_note_id]
+```
+
+Payee protection against payer silence.
+
+Requires:
+
+```text
+no dispute
+confirmed fulfillment
+no pending revision
+review deadline exists
+now >= review deadline
+valid payee claim capability
+```
+
+Full principal is returned to the payee output note.
+
+## Action `3` — no-fulfillment timeout refund
+
+```text
+[3,
+ custody_commitment,
+ payer_refund_secret,
+ output_note_id]
+```
+
+Valid only when no fulfillment was submitted and the fulfillment deadline has been reached.
+
+Full principal is returned to the payer output note.
+
+## Action `9` — mutual refund
+
+```text
+[9,
+ custody_commitment,
+ payer_refund_secret,
+ payee_refund_consent_secret,
+ output_note_id]
+```
+
+This is the safe full-refund path after fulfillment because both sides explicitly consent.
+
+It is blocked once resolver authorization or a partial dispute payout has begun.
+
+## Custody state
+
+The public `EscrowRekberCustody` record includes:
+
+```text
+custody commitment
+
+release/payee/refund capabilities
+payer confirmation capability
+payer/payee dispute capabilities
+payee refund-consent capability
+fulfillment/revision chain heads
+payer/payee certificate commitments
+
+token
+principal amount
+fee amount
+
+fulfillment deadline
+review window/deadline
+revision deadline
+
+verification policy
+fulfillment rounds remaining
+revision rounds remaining
+
+fulfillment evidence commitment
+dispute evidence commitment
+
+resolution commitment
+resolution payer amount
+resolution payee amount
+
+fulfillment submitted/confirmed
+revision pending
+disputed
+resolution authorized
+resolution payer/payee claimed
+
+consumed
+refunded
+
+created_at
+fulfilled_at
+settled_at
+```
+
+## Accounting and ERC-20 safety
+
+The contract uses `ReentrancyGuardComponent`.
+
+`reserved_by_token` tracks principal owed to users.
+
+Before exposing any settlement allowance, the contract:
+
+```text
+checks reserve >= output
+checks contract balance >= reserved
+decrements reserve
+requires existing Privacy Pool allowance == 0
+approves exactly the output amount
+checks resulting allowance == output amount
+```
+
+This prevents stale allowance from silently surviving an earlier action.
 
 ## Events
 
+The current lifecycle emits:
+
 ```text
 EscrowRekberCustodyFunded
+EscrowRekberFulfillmentSubmitted
+EscrowRekberFulfillmentConfirmed
+EscrowRekberRevisionRequested
+EscrowRekberDisputeOpened
+EscrowRekberDisputeResolutionAuthorized
+EscrowRekberResolutionClaimed
 EscrowRekberCustodyReleased
 EscrowRekberCustodyRefunded
+EscrowRekberCustodyResolved
 ```
 
-## Settlement Certificate
+See [Envelopes, Commitments & Events](./envelopes-events.md) for field-level summaries.
 
-Each custody includes payer and payee certificate commitments. After a successful release, each wallet may independently claim one public `VinssSettlementCertificate`. Refunded custody cannot mint a success certificate.
+## Application workflow fee boundary
 
-## Cairo coverage
+Some frontend Rekber actions are bundled with an additional VINSS STRK charge before the contract invoke.
 
-Dedicated tests cover:
+That charge is not checked by `VinssEscrowRekber`. The contract-level economic invariant is the funding service fee described above.
 
-- full-principal reservation and 2% fee output;
-- two-secret release and full-principal output;
-- payer/payee secret separation;
-- successful timeout refund;
-- early-refund rejection;
-- replay rejection after release;
-- certificate claim timing, ownership binding, refund rejection, and replay rejection.
-
-Cairo tests do not replace wallet, Privacy Pool, browser, or two-user testnet E2E verification.
+Do not confuse a frontend product price with an immutable Cairo settlement rule.

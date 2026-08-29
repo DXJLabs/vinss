@@ -1,13 +1,11 @@
 # Smart Contract Architecture
 
-## Objective
-
-VINSS contracts provide application-specific state transitions around the STRK20 Privacy Pool while keeping private deal semantics out of plaintext helper state wherever the current flow does not require public settlement data.
-
 ## Module map
 
 ```text
 contracts/src/
+├── fee_policy/
+│   └── VinssFeePolicy
 ├── invite/
 │   └── VinssInvite
 ├── messaging/
@@ -22,151 +20,149 @@ contracts/src/
     └── VinssSettlementCertificate
 ```
 
-All are exported by `contracts/src/lib.cairo`.
+All modules are exported by `contracts/src/lib.cairo`.
 
-## Execution path
+## Trust and authority graph
 
-```mermaid
-flowchart LR
-    F["VINSS Frontend"]
-    W["Privacy-enabled Wallet"]
-    P["STRK20 Privacy Pool"]
+| Component | Authority |
+|---|---|
+| Privacy Pool | Sole caller accepted by current `privacy_invoke` entrypoints |
+| Pricing admin | May update only `sponsor_cost_strk_wei` in `VinssFeePolicy` |
+| Pragma | Supplies price data consumed by FeePolicy and Rekber |
+| Dispute resolver | May authorize an exact split only after a Rekber dispute |
+| External verifier | Optional; may confirm a matching fulfillment evidence commitment for policy `3` |
+| Settlement participant | Claims its own certificate and/or authorized settlement output using precommitted capabilities |
 
-    I["VinssInvite"]
-    M["VinssMessageHelper"]
-    O["VinssOfferHelper"]
-    C["VinssPrivateEscrowHelper"]
-    R["VinssEscrowRekber"]
-    S["VinssSettlementCertificate"]
+The Rekber constructor fixes Privacy Pool, Pragma, FeePolicy, resolver, optional verifier, supported token addresses, pair IDs, minimum fee, oracle age, and minimum oracle sources. There is no administrative setter for those Rekber trust/configuration fields.
 
-    F --> W --> P
-    P --> I
-    P --> M
-    P --> O
-    P --> C
-    P --> R
-    W --> S
-```
+## Encrypted coordination family
 
-Each `privacy_invoke` implementation checks that:
-
-```cairo
-get_caller_address() == configured_privacy_pool
-```
-
-Arbitrary wallets/contracts cannot write through the intended private action entrypoint directly.
-
-## Encrypted coordination architecture
-
-Message, Offer, and Private Escrow coordination use the same public structural pattern:
+`VinssMessageHelper`, `VinssOfferHelper`, and `VinssPrivateEscrowHelper` use the same six-field public envelope header:
 
 ```text
-one-time action locator
-opaque sender tag
-opaque recipient tag
-payload commitment
-ciphertext chunk count
-ciphertext chunks
+[0] envelope_version
+[1] one-time action locator
+[2] opaque sender tag
+[3] opaque recipient tag
+[4] claimed payload commitment
+[5] ciphertext chunk count
+[6...] ciphertext chunks
 ```
 
-The contracts validate and persist encrypted envelopes but do not interpret the encrypted application action.
+Message and Offer append fee/output fields outside the committed encrypted envelope. Private Escrow coordination does not.
 
-### Storage pattern
+Storage follows the same general structure:
 
 ```text
-locator
-  → structural record
-
-(locator, chunk_index)
-  → ciphertext chunk
-
-commitment
-  → reuse marker
-
-locator
-  → existence marker
+locator -> structural record
+(locator, chunk_index) -> ciphertext felt
+locator -> existence marker
+payload commitment -> reuse marker
 ```
 
-The locator identifies one action only.
-
-It is not a stable Deal Room, conversation, participant, or escrow identifier.
+The locator is one-action-only metadata. It is not a room ID, wallet ID, participant ID, deal ID, or custody ID.
 
 ## Invite architecture
 
-Invite uses a different pattern:
+Invite uses a one-time preimage commitment rather than a ciphertext envelope:
 
 ```text
 secret
-  ↓ Poseidon(domain, secret)
-commitment
-  ↓
-on-chain InviteEntry
-  ├── expires_at
-  ├── consumed
-  └── exists
+  |
+  v
+Poseidon('VINSS_INVITE_V1', secret)
+  |
+  v
+commitment -> { expires_at, consumed, exists }
 ```
 
-The encrypted Invite payload itself remains a frontend/off-chain concern.
+Create is fee-bearing. Consume reveals the one-time secret in public calldata and atomically marks the commitment consumed.
 
-## Escrow Rekber architecture
+## Rekber architecture
 
-Escrow Rekber is the custody layer:
-
-```text
-DEPOSIT
-  → custody commitment
-  → payer release authorization commitment
-  → payee claim commitment
-  → refund commitment
-  → payer/payee certificate commitments
-  → token + principal + refund boundary
-  → reserve principal
-  → return fee OpenNoteDeposit
-
-RELEASE before refund boundary
-  → verify payer authorization preimage
-  → verify payee claim preimage
-  → consume custody
-  → return principal OpenNoteDeposit
-
-REFUND at/after boundary
-  → verify refund preimage
-  → consume custody
-  → return principal OpenNoteDeposit
-```
-
-This contract uses an OpenZeppelin reentrancy guard and tracks reserved principal by token.
-
-## Separation of responsibilities
+Rekber separates encrypted coordination from public custody.
 
 ```text
 Private Escrow Helper
-  = encrypted coordination / discovery
+    = encrypted coordination/discovery
 
-Escrow Rekber
-  = actual ERC-20 custody / settlement
-
-Settlement Certificate
-  = optional, non-transferable proof issued after a successful release
+VinssEscrowRekber
+    = principal custody and enforceable settlement state
 ```
 
-They are technical layers of one Escrow Rekber product flow, not separate product features.
+The custody lifecycle contains:
 
-## Replay / duplicate boundaries
+```text
+fund
+  |
+  +--> no fulfillment before deadline --> payer timeout refund
+  |
+  v
+submit fulfillment
+  |
+  +--> policy 1: review starts immediately
+  +--> policy 2: payer confirms receipt, then review starts
+  +--> policy 3: external verifier confirms matching evidence, then review starts
+  |
+  +--> request revision (policy 1 only, bounded rounds)
+  |       |
+  |       +--> resubmit fulfillment
+  |
+  +--> mutual release
+  +--> auto-release after review deadline
+  +--> mutual refund
+  +--> dispute
+          |
+          v
+   resolver authorizes exact split
+          |
+          +--> payer claims payer share
+          +--> payee claims payee share
+```
 
-Encrypted helpers reject:
+The resolver authorization does not transfer funds. Principal leaves only through a Privacy Pool output path.
 
-- reused action locator;
-- reused encrypted payload commitment.
+## Accounting boundary
 
-Invite rejects:
+Rekber tracks `reserved_by_token`. Principal is reserved independently from the service fee.
 
-- duplicate commitment creation;
-- repeated consumption.
+At funding:
 
-Escrow Rekber rejects:
+```text
+contract token balance
+    >= existing reserved principal
+     + new principal
+     + required fee
+```
 
-- duplicate custody commitment;
-- settlement after custody has already been consumed.
+Only principal increases `reserved_by_token`. The fee is approved for the Privacy Pool revenue output.
 
-These application-level rules do not replace STRK20/Privacy Pool protocol replay protection.
+Settlement decrements reserve before exposing the exact output allowance. OpenZeppelin `ReentrancyGuardComponent` covers every external state-changing Rekber path that touches custody accounting or ERC-20 allowance.
+
+## Settlement Certificate architecture
+
+The certificate reads canonical Rekber custody state directly.
+
+A claim is allowed only when:
+
+```text
+custody.consumed == true
+custody.refunded == false
+custody.disputed == false
+claim for (custody, role) not already used
+claim commitment matches caller + role + secret
+```
+
+After mint, the ERC-721 `before_update` hook rejects every ownership update. This makes the credential non-transferable while retaining standard ERC-721 ownership/metadata interfaces.
+
+## Replay and uniqueness boundaries
+
+Encrypted helpers reject reused locators and reused encrypted payload commitments.
+
+Invite rejects duplicate creation and repeated consumption.
+
+Rekber rejects duplicate custody commitments, bounded secret-chain misuse, repeated terminal settlement, and repeated resolution claims.
+
+Certificate rejects a second claim for the same `(custody_commitment, role)`.
+
+These application rules do not replace Privacy Pool protocol replay protection.
