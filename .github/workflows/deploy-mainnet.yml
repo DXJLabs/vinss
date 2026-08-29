@@ -21,6 +21,7 @@ on:
         required: true
         type: choice
         options:
+          - VinssFeePolicy
           - VinssMessageHelper
           - VinssInvite
           - VinssOfferHelper
@@ -37,6 +38,49 @@ on:
         required: false
         default: ""
         type: string
+
+      fee_policy_address:
+        description: "Required for Message / Invite / Offer / Rekber"
+        required: false
+        default: ""
+        type: string
+
+      sponsor_cost_strk_wei:
+        description: "FeePolicy sponsor cost per sponsored action, in STRK wei"
+        required: false
+        default: ""
+        type: string
+
+      dispute_resolver_address:
+        description: "Required for Rekber; use dedicated Mainnet resolver"
+        required: false
+        default: ""
+        type: string
+
+      external_verifier_address:
+        description: "Optional Rekber verifier; 0x0 disables it"
+        required: false
+        default: "0x0"
+        type: string
+
+      minimum_fee_usd_micros:
+        description: "Rekber minimum service fee in USD micros"
+        required: false
+        default: ""
+        type: string
+
+      max_oracle_age:
+        description: "Maximum accepted Pragma price age, seconds"
+        required: false
+        default: ""
+        type: string
+
+      min_oracle_sources:
+        description: "Minimum Pragma sources required"
+        required: false
+        default: ""
+        type: string
+
       escrow_rekber_address:
         description: "Required only for VinssSettlementCertificate deploy"
         required: false
@@ -75,7 +119,20 @@ jobs:
       ACCOUNT_ADDRESS: ${{ vars.VINSS_MAINNET_DEPLOYER_ADDRESS }}
       PRIVACY_POOL_ADDRESS: ${{ vars.MAINNET_PRIVACY_POOL_ADDRESS }}
       OPEN_NOTE_TOKEN_ADDRESS: ${{ vars.MAINNET_OPEN_NOTE_TOKEN_ADDRESS }}
-      TREASURY_ADDRESS: ${{ vars.VINSS_MAINNET_TREASURY_ADDRESS }}
+
+      PRAGMA_ORACLE_ADDRESS: ${{ vars.MAINNET_PRAGMA_ORACLE_ADDRESS }}
+      STRK_TOKEN_ADDRESS: ${{ vars.MAINNET_STRK_TOKEN_ADDRESS }}
+      USDC_TOKEN_ADDRESS: ${{ vars.MAINNET_USDC_TOKEN_ADDRESS }}
+      STRK_USD_PAIR: ${{ vars.MAINNET_STRK_USD_PAIR }}
+      USDC_USD_PAIR: ${{ vars.MAINNET_USDC_USD_PAIR }}
+
+      FEE_POLICY_ADDRESS: ${{ inputs.fee_policy_address }}
+      SPONSOR_COST_STRK_WEI: ${{ inputs.sponsor_cost_strk_wei }}
+      DISPUTE_RESOLVER_ADDRESS: ${{ inputs.dispute_resolver_address }}
+      EXTERNAL_VERIFIER_ADDRESS: ${{ inputs.external_verifier_address }}
+      MINIMUM_FEE_USD_MICROS: ${{ inputs.minimum_fee_usd_micros }}
+      MAX_ORACLE_AGE: ${{ inputs.max_oracle_age }}
+      MIN_ORACLE_SOURCES: ${{ inputs.min_oracle_sources }}
 
     steps:
       - name: Checkout
@@ -101,6 +158,10 @@ jobs:
             [[ "$1" =~ ^0x[0-9a-fA-F]{1,64}$ ]]
           }
 
+          valid_uint() {
+            [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" != "0" ]
+          }
+
           case "$DEPLOY_MODE" in
             validate-only)
               echo "VALIDATE-ONLY: no transaction will be submitted."
@@ -124,50 +185,99 @@ jobs:
               ;;
           esac
 
-          if ! valid_address "$TREASURY_ADDRESS"; then
-            echo "VINSS_MAINNET_TREASURY_ADDRESS is missing or invalid."
+          if [ "$DEPLOY_MODE" = "verify-only" ]; then
+            exit 0
+          fi
+
+          valid_address "$ACCOUNT_ADDRESS" || {
+            echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
             exit 1
-          fi
+          }
 
-          if [ "$DEPLOY_MODE" != "verify-only" ]; then
-            if ! valid_address "$ACCOUNT_ADDRESS"; then
-              echo "VINSS_MAINNET_DEPLOYER_ADDRESS is missing or invalid."
-              exit 1
-            fi
-
-            case "$CONTRACT_NAME" in
-              VinssMessageHelper|VinssOfferHelper|VinssInvite)
-                valid_address "$PRIVACY_POOL_ADDRESS" || {
-                  echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
-                  exit 1
-                }
-                valid_address "$OPEN_NOTE_TOKEN_ADDRESS" || {
-                  echo "MAINNET_OPEN_NOTE_TOKEN_ADDRESS is missing or invalid."
-                  exit 1
-                }
-                ;;
-              VinssPrivateEscrowHelper|VinssEscrowRekber)
-                valid_address "$PRIVACY_POOL_ADDRESS" || {
-                  echo "MAINNET_PRIVACY_POOL_ADDRESS is missing or invalid."
-                  exit 1
-                }
-                ;;
-              VinssSettlementCertificate)
-                valid_address "$ESCROW_REKBER_ADDRESS" || {
-                  echo "A valid escrow_rekber_address is required."
-                  exit 1
-                }
-                if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
-                  echo "certificate_base_uri must be HTTPS and end with /."
-                  exit 1
-                fi
-                ;;
-              *)
-                echo "Unsupported contract: $CONTRACT_NAME"
+          case "$CONTRACT_NAME" in
+            VinssFeePolicy)
+              valid_address "$PRAGMA_ORACLE_ADDRESS" || {
+                echo "MAINNET_PRAGMA_ORACLE_ADDRESS is missing or invalid."
                 exit 1
-                ;;
-            esac
-          fi
+              }
+              valid_uint "$STRK_USD_PAIR" || {
+                echo "MAINNET_STRK_USD_PAIR must be a positive decimal felt."
+                exit 1
+              }
+              valid_uint "$SPONSOR_COST_STRK_WEI" || {
+                echo "sponsor_cost_strk_wei must be a positive integer."
+                exit 1
+              }
+              valid_uint "$MAX_ORACLE_AGE" || {
+                echo "max_oracle_age must be a positive integer."
+                exit 1
+              }
+              valid_uint "$MIN_ORACLE_SOURCES" || {
+                echo "min_oracle_sources must be a positive integer."
+                exit 1
+              }
+              ;;
+
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              valid_address "$PRIVACY_POOL_ADDRESS" || exit 1
+              valid_address "$OPEN_NOTE_TOKEN_ADDRESS" || exit 1
+              valid_address "$FEE_POLICY_ADDRESS" || {
+                echo "A valid Mainnet FeePolicy address is required."
+                exit 1
+              }
+              ;;
+
+            VinssPrivateEscrowHelper)
+              valid_address "$PRIVACY_POOL_ADDRESS" || exit 1
+              ;;
+
+            VinssEscrowRekber)
+              valid_address "$PRIVACY_POOL_ADDRESS" || exit 1
+              valid_address "$PRAGMA_ORACLE_ADDRESS" || exit 1
+
+              valid_address "$FEE_POLICY_ADDRESS" || {
+                echo "A valid Mainnet FeePolicy address is required."
+                exit 1
+              }
+
+              valid_address "$DISPUTE_RESOLVER_ADDRESS" || {
+                echo "A dedicated Mainnet dispute resolver is required."
+                exit 1
+              }
+
+              valid_address "$EXTERNAL_VERIFIER_ADDRESS" || exit 1
+              valid_address "$STRK_TOKEN_ADDRESS" || exit 1
+              valid_address "$USDC_TOKEN_ADDRESS" || exit 1
+
+              if [ "${STRK_TOKEN_ADDRESS,,}" = "${USDC_TOKEN_ADDRESS,,}" ]; then
+                echo "STRK and USDC addresses must differ."
+                exit 1
+              fi
+
+              valid_uint "$STRK_USD_PAIR" || exit 1
+              valid_uint "$USDC_USD_PAIR" || exit 1
+              valid_uint "$MINIMUM_FEE_USD_MICROS" || exit 1
+              valid_uint "$MAX_ORACLE_AGE" || exit 1
+              valid_uint "$MIN_ORACLE_SOURCES" || exit 1
+              ;;
+
+            VinssSettlementCertificate)
+              valid_address "$ESCROW_REKBER_ADDRESS" || {
+                echo "A valid Mainnet Rekber address is required."
+                exit 1
+              }
+
+              if ! [[ "$CERTIFICATE_BASE_URI" =~ ^https://[^\",[:space:]]+/$ ]]; then
+                echo "certificate_base_uri must be HTTPS and end with /."
+                exit 1
+              fi
+              ;;
+
+            *)
+              echo "Unsupported contract: $CONTRACT_NAME"
+              exit 1
+              ;;
+          esac
 
       - name: Verify Starknet Mainnet RPC
         env:
@@ -235,7 +345,8 @@ jobs:
       - name: Setup Scarb
         uses: software-mansion/setup-scarb@2a96b748888e3329ee44ac9ac073d930e692b3cd
         with:
-          scarb-version: 2.17.0
+          scarb-version: 2.20.1
+          cache: false
 
       - name: Setup Starknet Foundry
         uses: foundry-rs/setup-snfoundry@bd5fc266ba0ce7e352b01dd7eaacc0fbb6145d17
@@ -294,11 +405,17 @@ jobs:
           set -euo pipefail
 
           case "$CONTRACT_NAME" in
-            VinssMessageHelper|VinssOfferHelper|VinssInvite)
-              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS"
+            VinssFeePolicy)
+              DEPLOY_ARGS="$ACCOUNT_ADDRESS, $PRAGMA_ORACLE_ADDRESS, $STRK_USD_PAIR, $SPONSOR_COST_STRK_WEI, $MAX_ORACLE_AGE, $MIN_ORACLE_SOURCES"
               ;;
-            VinssPrivateEscrowHelper|VinssEscrowRekber)
+            VinssMessageHelper|VinssOfferHelper|VinssInvite)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $OPEN_NOTE_TOKEN_ADDRESS, $FEE_POLICY_ADDRESS"
+              ;;
+            VinssPrivateEscrowHelper)
               DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS"
+              ;;
+            VinssEscrowRekber)
+              DEPLOY_ARGS="$PRIVACY_POOL_ADDRESS, $PRAGMA_ORACLE_ADDRESS, $FEE_POLICY_ADDRESS, $DISPUTE_RESOLVER_ADDRESS, $EXTERNAL_VERIFIER_ADDRESS, $STRK_TOKEN_ADDRESS, $USDC_TOKEN_ADDRESS, $STRK_USD_PAIR, $USDC_USD_PAIR, $MINIMUM_FEE_USD_MICROS, $MAX_ORACLE_AGE, $MIN_ORACLE_SOURCES"
               ;;
             VinssSettlementCertificate)
               DEPLOY_ARGS="$ESCROW_REKBER_ADDRESS, \"$CERTIFICATE_BASE_URI\""
@@ -477,7 +594,6 @@ jobs:
       - name: Submit source verification to Voyager
         id: verify
         if: inputs.mode == 'verify-only' || (inputs.mode == 'deploy' && steps.deploy.outcome == 'success')
-        continue-on-error: true
         env:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_MAINNET_RPC_URL }}
           DEPLOY_CLASS_HASH: ${{ steps.declare.outputs.class_hash }}
@@ -533,7 +649,6 @@ jobs:
             echo "| Deployment | \`${{ steps.deploy.outcome }}\` |"
             echo "| Voyager verification | \`${{ steps.verify.outcome }}\` |"
             echo "| Deployer | \`$ACCOUNT_ADDRESS\` |"
-            echo "| Treasury | \`$TREASURY_ADDRESS\` |"
             echo "| Class hash | \`${{ steps.declare.outputs.class_hash || inputs.class_hash }}\` |"
             echo "| Declare tx | \`${{ steps.declare.outputs.transaction_hash }}\` |"
             echo "| Contract address | \`${{ steps.deploy.outputs.contract_address }}\` |"
