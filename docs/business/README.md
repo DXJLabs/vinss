@@ -1,507 +1,575 @@
-# VEIL Smart Contracts
+# VINSS Business Documentation
 
-This folder contains the Cairo contracts used by the VEIL testnet proof.
+> **Private deals. Clear agreements. Protected settlement. Sustainable economics.**
 
-VEIL is not a DEX, not a wallet, and not a Privacy Pool replacement. VEIL is a channel-based private negotiation and escrow workflow layer.
+This directory defines the business strategy around VINSS.
 
-The smart contract proof should show the full product story:
+The purpose is to keep product economics, market assumptions, positioning, competition, go-to-market, and execution priorities separate from technical implementation details.
 
-```text
-Alice and Bob open a channel
--> chat
--> negotiate offer / counter offer
--> accept
--> create escrow
--> buyer deposit confirmed
--> seller deposit confirmed
--> activate escrow
--> settle
-```
-
-For the current Sepolia demo, chat and negotiation events are written to `VeilChannelHelper`. Escrow workflow is written to `VeilEscrow`.
-
-## Contracts
-
-| Contract | File | Purpose |
-| --- | --- | --- |
-| `VeilChannelHelper` | `src/veil_channel_helper.cairo` | Stores encrypted channel timeline events: chat, payment memo, offer, counter offer, escrow status, proof references. |
-| `VeilEscrow` | `src/veil_escrow.cairo` | Protocol-agnostic escrow state machine for settlement workflow. It stores references and emits reconstructable timeline events. |
-
-Supporting modules:
-
-| File | Purpose |
-| --- | --- |
-| `src/escrow_types.cairo` | Escrow data types and status enum. |
-| `src/escrow_events.cairo` | Escrow events used by the frontend timeline. |
-| `src/escrow_interfaces.cairo` | Escrow and future settlement adapter interfaces. |
-| `src/escrow_validation.cairo` | Escrow authorization and state transition validation. |
-| `src/lib.cairo` | Cairo module exports. |
-
-## What Is Proven On Testnet
-
-The current testnet proof demonstrates:
-
-- channel timeline events are written onchain
-- chat is treated as a first-class onchain timeline event
-- offers and counter offers are part of the same channel feed
-- escrow is created after negotiation
-- both parties confirm deposits
-- escrow activates only after both confirmations
-- escrow settles only after activation
-- events can reconstruct the product flow in a frontend or explorer
-
-This is intentionally not claiming full Privacy Pool anonymity yet. The official STRK20 Privacy Pool SDK is still private. VEIL already matches the helper interface pattern by exposing `privacy_invoke`, so the future Privacy Pool path can call the helper through `InvokeExternal`.
-
-## Channel Timeline Event Types
-
-`VeilChannelHelper` stores every item as a channel event.
-
-| Type | Constant | Meaning |
-| --- | --- | --- |
-| `1` | `EVENT_CHAT` | Encrypted chat message. |
-| `2` | `EVENT_PAYMENT_MEMO` | Encrypted payment memo. |
-| `3` | `EVENT_OFFER` | Offer created. |
-| `4` | `EVENT_COUNTER_OFFER` | Counter offer created. |
-| `5` | `EVENT_ACCEPT_OFFER` | Offer accepted. |
-| `6` | `EVENT_REJECT_OFFER` | Offer rejected. |
-| `7` | `EVENT_ESCROW_CREATED` | Escrow created marker. |
-| `8` | `EVENT_ESCROW_DEPOSITED` | Deposit confirmation marker. |
-| `9` | `EVENT_ESCROW_SETTLED` | Escrow settled marker. |
-| `10` | `EVENT_ESCROW_CANCELLED` | Escrow cancelled marker. |
-| `11` | `EVENT_PROOF_ATTACHED` | Proof reference attached. |
-
-The helper stores only felt references:
+VINSS should not treat:
 
 ```text
-channel_id
-event_type
-encrypted_payload
-payload_hash
+working code
+=
+validated business
 ```
 
-For the demo, `encrypted_payload` and `payload_hash` can be dummy non-zero felts. In production, these point to encrypted payload storage or an indexer.
-
-## Privacy Pool Compatibility
-
-Privacy Pool-compatible helpers such as Vesu and Ekubo expose:
+and should not treat:
 
 ```text
-privacy_invoke(...) -> Span<OpenNoteDeposit>
+large adjacent market
+=
+VINSS market
 ```
 
-VEIL follows the same pattern:
+The business strategy is built around a simpler question:
+
+> **Can VINSS repeatedly help real users complete real direct deals, charge enough to operate sustainably, and become the workflow they choose again for the next deal?**
+
+---
+
+## Business Documentation
+
+Read the business documentation in this order.
+
+### 1. [`business-model.md`](business-model.md)
+
+Defines:
 
 ```text
-privacy_invoke(calldata: Span<felt252>) -> Span<OpenNoteDeposit>
+who pays;
+what users pay for;
+pricing;
+dynamic fee floors;
+Rekber economics;
+variable transaction costs;
+contribution margin;
+infrastructure costs;
+refund economics;
+dispute economics;
+loyalty boundaries;
+future token economics.
 ```
 
-For chat and negotiation metadata, VEIL returns an empty deposit array:
+Core principle:
+
+> **VINSS should be able to sustain its product economics without depending permanently on grants, subsidies, or token appreciation.**
+
+---
+
+### 2. [`positioning.md`](positioning.md)
+
+Defines the category VINSS wants to occupy.
+
+VINSS is positioned as:
 
 ```text
-[]
+PRIVATE DEAL ROOM
 ```
 
-That is correct because chat, offer, memo, and proof metadata do not move funds. Future settlement helpers may return real `OpenNoteDeposit` values.
-
-`invoke(...)` remains available as a legacy/direct-call alias, but `privacy_invoke(...)` is the entrypoint to use for the Privacy Pool helper pattern.
-
-## Build And Test
-
-Run from WSL:
-
-```bash
-cd /mnt/c/Users/frend/Veilc
-scarb build
-scarb test
-```
-
-Expected test coverage:
-
-- `VeilChannelHelper`: stores chat, memo, offer events, rejects invalid input, preserves order and channel isolation.
-- `VeilEscrow`: create, deposit confirmations, activate, settle, cancel, unauthorized calls, invalid state transitions.
-
-## Sepolia Proof Demo
-
-Use two funded Sepolia accounts:
-
-- `ALICE_ACCOUNT`: buyer
-- `BOB_ACCOUNT`: seller
-- `BOB_ADDRESS`: seller address
-
-Use one channel id for the whole story:
-
-```bash
-export CHANNEL_ID=12345
-```
-
-### 1. Build
-
-```bash
-cd /mnt/c/Users/frend/Veilc
-scarb --profile release build
-```
-
-### 2. Declare And Deploy `VeilChannelHelper`
-
-```bash
-sncast --account ALICE_ACCOUNT declare \
-  --contract-name VeilChannelHelper \
-  --network sepolia \
-  --wait
-```
-
-Use the printed class hash:
-
-```bash
-sncast --account ALICE_ACCOUNT deploy \
-  --class-hash <CHANNEL_HELPER_CLASS_HASH> \
-  --network sepolia \
-  --wait
-```
-
-Save the deployed address:
-
-```bash
-export HELPER=<VEIL_CHANNEL_HELPER_ADDRESS>
-```
-
-### 3. Declare And Deploy `VeilEscrow`
-
-```bash
-sncast --account ALICE_ACCOUNT declare \
-  --contract-name VeilEscrow \
-  --network sepolia \
-  --wait
-```
-
-Use the printed class hash:
-
-```bash
-sncast --account ALICE_ACCOUNT deploy \
-  --class-hash <VEIL_ESCROW_CLASS_HASH> \
-  --network sepolia \
-  --wait
-```
-
-Save the deployed address:
-
-```bash
-export ESCROW=<VEIL_ESCROW_ADDRESS>
-```
-
-## A/B Channel Proof Flow
-
-Every `privacy_invoke` call below uses a `Span<felt252>`, so raw calldata is:
+not merely:
 
 ```text
-4 <channel_id> <event_type> <encrypted_payload> <payload_hash>
+private messenger;
+escrow app;
+wallet;
+marketplace.
 ```
 
-### 1. Alice Sends Chat
+The strategic distinction is:
 
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 1 100001 900001 \
-  --network sepolia \
-  --wait
-```
+> **Messaging is the substrate. The product is the deal lifecycle.**
 
-Meaning:
+The intended lifecycle is:
 
 ```text
-Alice: "Can you do 500 STRK?"
-EVENT_CHAT
+Private Conversation
+        ↓
+Structured Offer
+        ↓
+Accepted Agreement
+        ↓
+Rekber
+        ↓
+Fulfillment
+        ↓
+Verification
+        ↓
+Settlement
+        ↓
+Evidence
 ```
 
-### 2. Bob Creates Offer
+---
 
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 3 100002 900002 \
-  --network sepolia \
-  --wait
-```
+### 3. [`market.md`](market.md)
 
-Meaning:
+Defines the market VINSS is actually attempting to serve.
+
+The market is not:
 
 ```text
-OFFER_CREATED: 500 STRK
+all crypto users;
+all stablecoin volume;
+all freelancers;
+all P2P commerce.
 ```
 
-### 3. Alice Sends Counter Offer
-
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 4 100003 900003 \
-  --network sepolia \
-  --wait
-```
-
-Meaning:
+The relevant transaction pattern is narrower:
 
 ```text
-COUNTER_OFFER: 450 STRK
+bilateral deal
++
+negotiation
++
+meaningful value at risk
++
+incomplete trust
++
+settlement conditions
++
+verification need
++
+privacy relevance
 ```
 
-### 4. Bob Accepts
-
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 5 100004 900004 \
-  --network sepolia \
-  --wait
-```
-
-Meaning:
+The document separates:
 
 ```text
-ACCEPT_OFFER
+market context;
+serviceable market;
+beachhead hypothesis;
+bottom-up revenue scenarios.
 ```
 
-### 5. Alice Creates Escrow
+VINSS should use real user behavior to build a formal TAM / SAM / SOM later.
 
-`asset_type`, `asset_reference`, and `payment_reference` are protocol-agnostic felt references in V1.
+---
 
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $ESCROW \
-  --function create_escrow \
-  --calldata $CHANNEL_ID $BOB_ADDRESS 1 700001 450000000000000000000 \
-  --network sepolia \
-  --wait
-```
+### 4. [`competitive-landscape.md`](competitive-landscape.md)
 
-If this is a fresh escrow deployment, the first escrow id is `1`:
+Defines the alternatives VINSS competes against.
 
-```bash
-export ESCROW_ID=1
-```
-
-For an existing deployment, check:
-
-```bash
-sncast call \
-  --contract-address $ESCROW \
-  --function get_escrow_count \
-  --network sepolia
-```
-
-Append an escrow marker into the channel timeline:
-
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 7 100005 900005 \
-  --network sepolia \
-  --wait
-```
-
-### 6. Alice Confirms Buyer Deposit
-
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $ESCROW \
-  --function confirm_buyer_deposit \
-  --calldata $ESCROW_ID \
-  --network sepolia \
-  --wait
-```
-
-Append a channel event:
-
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 8 100006 900006 \
-  --network sepolia \
-  --wait
-```
-
-### 7. Bob Confirms Seller Deposit
-
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $ESCROW \
-  --function confirm_seller_deposit \
-  --calldata $ESCROW_ID \
-  --network sepolia \
-  --wait
-```
-
-Append a channel event:
-
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 8 100007 900007 \
-  --network sepolia \
-  --wait
-```
-
-### 8. Activate Escrow
-
-```bash
-sncast --account ALICE_ACCOUNT invoke \
-  --contract-address $ESCROW \
-  --function activate \
-  --calldata $ESCROW_ID \
-  --network sepolia \
-  --wait
-```
-
-### 9. Settle Escrow
-
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $ESCROW \
-  --function settle \
-  --calldata $ESCROW_ID \
-  --network sepolia \
-  --wait
-```
-
-Append final channel event:
-
-```bash
-sncast --account BOB_ACCOUNT invoke \
-  --contract-address $HELPER \
-  --function privacy_invoke \
-  --calldata 4 $CHANNEL_ID 9 100008 900008 \
-  --network sepolia \
-  --wait
-```
-
-## Executed Sepolia Proof Ledger
-
-This is the executed onchain proof for the current VEIL demo. Use [Voyager Sepolia](https://sepolia.voyager.online/) and paste the transaction hashes into search if direct links are unavailable.
-
-| Item | Value |
-| --- | --- |
-| Network | Starknet Sepolia |
-| Channel id | `20260625` |
-| Escrow id | `1` |
-| Buyer / Alice | `0x289f797b9c2dc6c661fd058968d9ba39d01c7547f8259f01b7bce55696d0ff0` |
-| Seller / Bob | `0x494f2bc712960a2d5cd651c8264ae6dc165482444efa091da34b6417e661060` |
-| `VeilChannelHelper` | `0x0333e805547d0e91cec741045bf7305e8ff58e8b7d1e9f70ecb3ca559712ef6c` |
-| `VeilEscrow` | `0x01354470e87067cf6e4956de43e89554c8b51267f359b3fc1b6be86104014abb` |
-| Final escrow status | `Completed` |
-| Expected helper timeline count | `11` events |
-
-Deployment evidence:
-
-| Contract | Class hash | Declare tx | Deploy tx |
-| --- | --- | --- | --- |
-| `VeilChannelHelper` | `0x07c77d18d96431836bf031dfa6fd1c1715acb6ee3b5195cd7c422d34c7412812` | `0x488fb0c6a41141d9af8ce110ac50f975d3a2a10ad7bdec37ceb3c74a422edad` | `0x5dfe5cab14fccc82cd1febe3433be969a23ca9ec722410699bbc358d9428d13` |
-| `VeilEscrow` | `0x023ce3291ff5d40b0f01cd65a9eef43fa9e3a2402416acf72e9d6c45abc24b06` | `0x3a164ed3732262c07a60e79990730027f3244ff5aa6a72a8f582449e7c80a0d` | `0x7ac23ec9403b87b4d5cadae6e000aaf82ea72cd648a9c942621c81486fbcc95` |
-
-Timeline evidence:
-
-| Order | Meaning | Event type | Contract | Tx hash |
-| --- | --- | --- | --- | --- |
-| 1 | Alice chat message | `EVENT_CHAT` | `VeilChannelHelper` | `0x4c31bfdde4fa4dba833427f812801e2fa0df23aa559e267199597cf69272669` |
-| 2 | Bob chat message | `EVENT_CHAT` | `VeilChannelHelper` | `0x747d59b38537da66d05d39617105c3e1c2345e0110847b6ba75fba6081e7316` |
-| 3 | Offer created | `EVENT_OFFER` | `VeilChannelHelper` | `0x1b3b436e576d2223ee88729c18d010344dcb32861b3f9d584b1aa1ff65a067` |
-| 4 | Counter offer | `EVENT_COUNTER_OFFER` | `VeilChannelHelper` | `0xb40e5739ee80e2d201b73da5d882209750c6e00a3527163d0588f05138e4c0` |
-| 5 | Offer accepted | `EVENT_ACCEPT_OFFER` | `VeilChannelHelper` | `0x5622cb82551de474117caee80c0257472522e7efcd60378a018688483feeabd` |
-| 6 | Escrow created marker | `EVENT_ESCROW_CREATED` | `VeilChannelHelper` | `0x75d553c177800265627f6054dfaa58b4947691582c74169d37841db76cf17c5` |
-| 7 | Buyer deposit marker | `EVENT_ESCROW_DEPOSITED` | `VeilChannelHelper` | `0x189dd71da24ecd2ddc66d460ee1f0ade503342df38aba98efa12194d242f17` |
-| 8 | Seller deposit marker | `EVENT_ESCROW_DEPOSITED` | `VeilChannelHelper` | `0x539aad2156ff0a961148552b39bea03e9981d66d264b1c538cc0c0b299b1b7b` |
-| 9 | Payment memo attached | `EVENT_PAYMENT_MEMO` | `VeilChannelHelper` | `0x55ec134fb8fc756c1a188ed36f7c533a80068cf3952bb3fb3746231ad3d1bad` |
-| 10 | Escrow settled marker | `EVENT_ESCROW_SETTLED` | `VeilChannelHelper` | `0x27e37912a88ff0075132071b4daf603a3a835e91339628a40d43244e81179e5` |
-| 11 | Proof attached | `EVENT_PROOF_ATTACHED` | `VeilChannelHelper` | `0x6cdd37d63627e233af9251cc3350f423f2337b0661894683ca95b1e9524e207` |
-
-Escrow state evidence:
-
-| Order | Escrow action | Contract | Tx hash |
-| --- | --- | --- | --- |
-| 1 | Create escrow | `VeilEscrow` | `0x6d77da4b28221888fa89f10d35c9ca83cbfbc7213d5e38ad04c20a0931b01f9` |
-| 2 | Buyer deposit confirmed | `VeilEscrow` | `0x7cf3987c0160e838dd8107fbc8c049d9810c90122fab6a6b49df2cb3925d84e` |
-| 3 | Seller deposit confirmed | `VeilEscrow` | `0x5ce49f04deaea912204075a2b49c7a7d9b02182e9107b60233ee994225f6ac3` |
-| 4 | Escrow activated | `VeilEscrow` | `0x729a1091d044fe009b5e82188aeb02f3d5091b4986f035d3e8d3fe003ad4b3c` |
-| 5 | Escrow settled | `VeilEscrow` | `0x285784074b762414afdfe04f24aae296f6c0722b9360995a47d894bc25421f8` |
-
-## Verify The Proof
-
-Read the channel event count:
-
-```bash
-sncast call \
-  --contract-address $HELPER \
-  --function get_event_count \
-  --calldata $CHANNEL_ID \
-  --network sepolia
-```
-
-Read individual channel events:
-
-```bash
-sncast call \
-  --contract-address $HELPER \
-  --function get_event \
-  --calldata $CHANNEL_ID 0 \
-  --network sepolia
-```
-
-Read escrow state:
-
-```bash
-sncast call \
-  --contract-address $ESCROW \
-  --function get_escrow \
-  --calldata $ESCROW_ID \
-  --network sepolia
-
-sncast call \
-  --contract-address $ESCROW \
-  --function get_status \
-  --calldata $ESCROW_ID \
-  --network sepolia
-```
-
-Open the contracts and transactions in Voyager Sepolia:
+Competition includes:
 
 ```text
-https://sepolia.voyager.online/contract/<VEIL_CHANNEL_HELPER_ADDRESS>
-https://sepolia.voyager.online/contract/<VEIL_ESCROW_ADDRESS>
-https://sepolia.voyager.online/tx/<TX_HASH>
+private escrow applications;
+OTC protocols;
+general on-chain escrow;
+invoice / payment products;
+marketplaces;
+human middlemen;
+direct wallet transfers;
+messaging + wallet DIY workflows.
 ```
 
-The proof should show:
+The most important strategic rule is:
 
-- Alice chat event
-- Bob offer event
-- Alice counter offer event
-- Bob accept event
-- escrow created
-- buyer deposit confirmed
-- seller deposit confirmed
-- escrow activated
-- escrow settled
+> **VINSS must differentiate above shared privacy and escrow primitives.**
 
-## Interview Explanation
-
-Use this wording:
+The intended differentiation is continuity across:
 
 ```text
-VEIL proves the full channel workflow on Sepolia. Alice and Bob chat, negotiate an offer, accept terms, create escrow, confirm both sides, activate, and settle. Chat and negotiation events are stored in VeilChannelHelper through privacy_invoke. Escrow state is enforced by VeilEscrow. This is the direct testnet proof path; the future Privacy Pool path will call the same helper through InvokeExternal, so the app workflow does not need to be redesigned.
+negotiation
+→ agreement
+→ Rekber
+→ Fulfillment
+→ verification
+→ evidence
 ```
 
-## What This Does Not Claim Yet
+---
 
-- It does not claim production Privacy Pool anonymity.
-- It does not submit through official STRK20 Privacy Pool SDK.
-- It does not custody STRK20 assets in escrow V1.
-- It does not decrypt payloads onchain.
+### 5. [`go-to-market.md`](go-to-market.md)
 
-Those are intentionally separated. Privacy Pool handles privacy; VEIL handles channel workflow.
+Defines how VINSS should acquire early users and discover a beachhead.
+
+The initial GTM unit is:
+
+```text
+successful real deal
+```
+
+not:
+
+```text
+wallet connection;
+page view;
+Points issued;
+community follower.
+```
+
+The recommended early motion is:
+
+```text
+find real direct deal
+        ↓
+bring both parties into VINSS
+        ↓
+complete protected settlement
+        ↓
+measure willingness to pay
+        ↓
+observe repeat usage
+        ↓
+observe referral
+        ↓
+identify beachhead
+```
+
+Founder-led customer discovery comes before scaled acquisition.
+
+---
+
+### 6. [`roadmap.md`](roadmap.md)
+
+Defines execution order.
+
+The roadmap is evidence-driven rather than feature-driven.
+
+Recommended sequence:
+
+```text
+1. Establish current production truth
+        ↓
+2. Harden the mainnet lifecycle
+        ↓
+3. Measure real transaction economics
+        ↓
+4. Finalize universal settlement semantics
+        ↓
+5. Run real customer deals
+        ↓
+6. Validate pricing and business economics
+        ↓
+7. Identify beachhead
+        ↓
+8. Build repeatable GTM
+        ↓
+9. Productionize loyalty / reputation
+        ↓
+10. Expand through partners
+        ↓
+11. Decide whether VINSS token is justified
+        ↓
+12. Expand Deal Types and markets based on evidence
+```
+
+---
+
+# Business Model Summary
+
+VINSS uses a transaction-oriented business model.
+
+Current public planning baseline:
+
+| Action | Public pricing baseline |
+| --- | ---: |
+| Private Room activation | $0.25 / room |
+| Message | $0.15 |
+| Fulfillment | $0.15 |
+| Review / Approve | $0.15 |
+| Offer / Counter / Accept | $0.25 |
+| Rekber | max($0.75, 2% of deal value) |
+| Release | Included |
+| Claim payment | Included |
+| Settlement Soulbound Certificate | Free from VINSS; claimant pays gas |
+
+The production pricing model must also account for changing:
+
+```text
+STRK price;
+privacy cost;
+paymaster / sponsor cost;
+Starknet execution cost.
+```
+
+Therefore the intended pricing rule is conceptually:
+
+```text
+effective charge
+=
+max(
+    public baseline,
+    dynamic cost floor
+)
+```
+
+Static USD pricing alone is not sufficient.
+
+---
+
+# Revenue Model
+
+Core transaction revenue can come from:
+
+```text
+Private Room activation;
+Messages;
+Offer lifecycle actions;
+Fulfillment;
+Review;
+Rekber.
+```
+
+The simplified economic model is:
+
+```text
+Product usage
+        ↓
+Gross revenue
+        ↓
+Variable transaction cost
+        ↓
+Contribution margin
+        ↓
+Infrastructure / operations
+        ↓
+Business overhead
+        ↓
+Business result
+```
+
+Contribution margin must not be confused with net profit.
+
+---
+
+# Rekber Economics
+
+Rekber uses:
+
+```text
+max(
+    minimum fee,
+    percentage of protected deal value
+)
+```
+
+Planning baseline:
+
+```text
+minimum = $0.75
+percentage = 2%
+```
+
+Rekber economics must cover the supported settlement lifecycle, including actions that can be presented to the user as:
+
+```text
+Release → included
+Claim   → included
+```
+
+Included does not mean zero cost to VINSS.
+
+---
+
+# Market Thesis
+
+VINSS does not need to win:
+
+```text
+all messaging;
+all escrow;
+all freelancing;
+all crypto;
+all payments.
+```
+
+The market thesis is narrower:
+
+> **VINSS is relevant when two parties need to negotiate a direct deal, do not fully trust each other, have meaningful value at risk, care about privacy, and need clear rules for fulfillment and settlement.**
+
+Candidate segments include:
+
+```text
+crypto-native freelancers;
+digital-goods sellers;
+selected bounty relationships;
+crypto-native teams / vendors;
+private NFT / asset deals;
+OTC participants;
+wallet / marketplace partners.
+```
+
+These remain candidate segments until real usage establishes a beachhead.
+
+---
+
+# Current vs Target Design
+
+Business documentation must remain consistent with product and technical documentation.
+
+Some capabilities exist in current source.
+
+Some are stronger Target Design rules.
+
+Do not collapse these into one claim.
+
+### Current source direction includes
+
+```text
+Private Deal Room;
+Messages;
+Offers;
+Accepted Agreement;
+Rekber;
+Fulfillment;
+Review / Revision;
+Refund;
+Dispute / Resolution;
+Settlement;
+Settlement Certificate;
+FeePolicy.
+```
+
+### Target settlement design continues to refine
+
+```text
+agreement-derived Funder / Fulfiller / Beneficiary;
+universal role semantics across Deal Types;
+Verification Policy behavior;
+two-sided post-Fulfillment protection;
+objective deterministic settlement;
+final dispute UX / evidence architecture.
+```
+
+External claims must reflect the actual evidence level.
+
+---
+
+# Loyalty
+
+VINSS loyalty is separate from business revenue.
+
+Three layers:
+
+```text
+Points
+Referral
+Settlement SBT Multiplier
+```
+
+Core rule:
+
+```text
+Points
+≠ revenue
+≠ cash
+≠ VINSS token
+```
+
+---
+
+# Future VINSS Token
+
+VINSS token is a future economic layer.
+
+It is not required for the current business model.
+
+Future token work should follow real product usage, stable loyalty accounting, anti-farming, utility, legal review, and sustainable product economics.
+
+Points should not convert in real time.
+
+Never promise:
+
+```text
+1 Point = fixed VINSS
+```
+
+before a real conversion mechanism exists.
+
+---
+
+# Relationship to Product Documentation
+
+Product strategy lives in:
+
+```text
+docs/product/
+```
+
+Product documentation explains:
+
+```text
+what VINSS is;
+why it exists;
+how the product should behave;
+who may use it;
+what remains hypothetical.
+```
+
+---
+
+# Relationship to Technical Documentation
+
+Technical truth lives in:
+
+```text
+docs/technical/
+```
+
+Technical documentation explains:
+
+```text
+contracts;
+frontend;
+backend;
+privacy boundaries;
+FeePolicy;
+Rekber;
+testing;
+deployment evidence.
+```
+
+Business documentation must never override source or technical evidence.
+
+The hierarchy is:
+
+```text
+source / chain evidence
+        ↓
+technical documentation
+        ↓
+product / business claims
+```
+
+If business strategy and implementation diverge, document the difference explicitly.
+
+---
+
+# Business Documentation Principles
+
+1. **Product revenue must be separated from token financing.**
+2. **Points must be separated from revenue.**
+3. **Market context must be separated from TAM.**
+4. **Current capability must be separated from Target Design.**
+5. **Technical evidence must be separated from customer evidence.**
+6. **Customer evidence must be separated from business validation.**
+7. **Contribution margin must not be called net profit.**
+8. **Grants and subsidies must not be treated as permanent unit economics.**
+9. **The beachhead must be discovered through behavior.**
+10. **Token incentives must not hide weak product retention.**
+11. **Privacy primitives are infrastructure, not a durable moat by themselves.**
+12. **Rekber pricing must account for the whole settlement lifecycle.**
+13. **Real production cost should replace assumptions over time.**
+14. **Real paid behavior should replace hypothetical willingness to pay.**
+15. **Roadmap priority should follow risk and evidence, not feature count.**
+
+---
+
+# Business Thesis
+
+The strongest business version of VINSS is not:
+
+```text
+a token project;
+an escrow primitive;
+an encrypted messenger;
+a collection of Web3 features.
+```
+
+It is:
+
+> **A private Deal Room that real users repeatedly choose for direct transactions because it gives them clearer agreement, better settlement protection, appropriate privacy, and useful evidence — while generating enough transaction revenue to operate sustainably.**
+
+Everything in this directory should help prove or disprove that thesis.
