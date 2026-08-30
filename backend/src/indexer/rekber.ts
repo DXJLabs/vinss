@@ -10,6 +10,12 @@ import { RekberStore } from "./rekberStore.js";
 
 const EVENT_NAMES: Record<RekberEventKind, readonly string[]> = {
   funded: ["EscrowRekberCustodyFunded"],
+  fulfillment_submitted: ["EscrowRekberFulfillmentSubmitted"],
+  fulfillment_confirmed: ["EscrowRekberFulfillmentConfirmed"],
+  revision_requested: ["EscrowRekberRevisionRequested"],
+  dispute_opened: ["EscrowRekberDisputeOpened"],
+  resolution_authorized: ["EscrowRekberDisputeResolutionAuthorized"],
+  resolution_claimed: ["EscrowRekberResolutionClaimed"],
   released: ["EscrowRekberCustodyReleased"],
   refunded: ["EscrowRekberCustodyRefunded"],
   resolved: ["EscrowRekberCustodyResolved"],
@@ -45,6 +51,18 @@ export class RekberEventSource {
 
     this.selectors = {
       funded: EVENT_NAMES.funded.map(hash.getSelectorFromName),
+      fulfillment_submitted:
+        EVENT_NAMES.fulfillment_submitted.map(hash.getSelectorFromName),
+      fulfillment_confirmed:
+        EVENT_NAMES.fulfillment_confirmed.map(hash.getSelectorFromName),
+      revision_requested:
+        EVENT_NAMES.revision_requested.map(hash.getSelectorFromName),
+      dispute_opened:
+        EVENT_NAMES.dispute_opened.map(hash.getSelectorFromName),
+      resolution_authorized:
+        EVENT_NAMES.resolution_authorized.map(hash.getSelectorFromName),
+      resolution_claimed:
+        EVENT_NAMES.resolution_claimed.map(hash.getSelectorFromName),
       released: EVENT_NAMES.released.map(hash.getSelectorFromName),
       refunded: EVENT_NAMES.refunded.map(hash.getSelectorFromName),
       resolved: EVENT_NAMES.resolved.map(hash.getSelectorFromName),
@@ -80,14 +98,7 @@ export class RekberEventSource {
         address: config.contracts.escrowRekber,
         from_block: { block_number: fromBlock },
         to_block: { block_number: toBlock },
-        keys: [
-          [
-            ...this.selectors.funded,
-            ...this.selectors.released,
-            ...this.selectors.refunded,
-            ...this.selectors.resolved,
-          ],
-        ],
+        keys: [Object.values(this.selectors).flat()],
         chunk_size: this.eventPageSize,
         continuation_token: continuationToken,
       });
@@ -145,31 +156,95 @@ export class RekberEventSource {
           continue;
         }
 
-        if (eventKind === "resolved") {
+        if (eventKind === "fulfillment_submitted") {
+          if (event.data.length < 2) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            timestamp: Number(BigInt(event.data[0] ?? "0")),
+          });
+
+          continue;
+        }
+
+        if (eventKind === "fulfillment_confirmed") {
+          if (event.data.length < 2) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            timestamp: Number(BigInt(event.data[1] ?? "0")),
+          });
+
+          continue;
+        }
+
+        if (eventKind === "revision_requested") {
           if (event.data.length < 3) {
             continue;
           }
 
           events.push({
             ...base,
-            resolutionCommitment:
-              canonicalFelt(thirdKey),
-            resolutionPayerAmount:
-              BigInt(
-                event.data[0] ?? "0",
-              ).toString(),
-            resolutionPayeeAmount:
-              BigInt(
-                event.data[1] ?? "0",
-              ).toString(),
-            timestamp:
-              Number(
-                BigInt(
-                  event.data[2] ?? "0",
-                ),
-              ),
+            timestamp: Number(BigInt(event.data[1] ?? "0")),
           });
 
+          continue;
+        }
+
+        if (eventKind === "dispute_opened") {
+          if (event.data.length < 2) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            timestamp: Number(BigInt(event.data[1] ?? "0")),
+          });
+
+          continue;
+        }
+
+        if (
+          eventKind === "resolution_authorized" ||
+          eventKind === "resolved"
+        ) {
+          if (event.data.length < 3) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            resolutionCommitment: canonicalFelt(thirdKey),
+            resolutionPayerAmount:
+              BigInt(event.data[0] ?? "0").toString(),
+            resolutionPayeeAmount:
+              BigInt(event.data[1] ?? "0").toString(),
+            timestamp: Number(BigInt(event.data[2] ?? "0")),
+          });
+
+          continue;
+        }
+
+        if (eventKind === "resolution_claimed") {
+          if (event.data.length < 3) {
+            continue;
+          }
+
+          events.push({
+            ...base,
+            outputNoteId: canonicalFelt(thirdKey),
+            amount: BigInt(event.data[1] ?? "0").toString(),
+            timestamp: Number(BigInt(event.data[2] ?? "0")),
+          });
+
+          continue;
+        }
+
+        if (event.data.length < 1) {
           continue;
         }
 

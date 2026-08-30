@@ -6,6 +6,12 @@ import { RekberStore } from "../indexer/rekberStore.js";
 
 const VALID_EVENTS: readonly RekberEventKind[] = [
   "funded",
+  "fulfillment_submitted",
+  "fulfillment_confirmed",
+  "revision_requested",
+  "dispute_opened",
+  "resolution_authorized",
+  "resolution_claimed",
   "released",
   "refunded",
   "resolved",

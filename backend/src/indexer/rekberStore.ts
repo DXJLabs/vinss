@@ -90,7 +90,18 @@ export class RekberStore {
       CREATE TABLE IF NOT EXISTS rekber_events (
         network TEXT NOT NULL,
         event_kind TEXT NOT NULL CHECK (
-          event_kind IN ('funded', 'released', 'refunded', 'resolved')
+          event_kind IN (
+            'funded',
+            'fulfillment_submitted',
+            'fulfillment_confirmed',
+            'revision_requested',
+            'dispute_opened',
+            'resolution_authorized',
+            'resolution_claimed',
+            'released',
+            'refunded',
+            'resolved'
+          )
         ),
         contract_address TEXT NOT NULL,
         custody_commitment TEXT NOT NULL,

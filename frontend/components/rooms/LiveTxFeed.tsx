@@ -13,8 +13,15 @@ type ActivityKind =
   | "offer"
   | "escrow"
   | "rekber_funded"
+  | "rekber_fulfillment_submitted"
+  | "rekber_fulfillment_confirmed"
+  | "rekber_revision_requested"
+  | "rekber_dispute_opened"
+  | "rekber_resolution_authorized"
+  | "rekber_resolution_claimed"
   | "rekber_released"
   | "rekber_refunded"
+  | "rekber_resolved"
   | "certificate_issued";
 
 interface ActivityItem {
@@ -56,8 +63,15 @@ const ACTIVITY_LABELS: Record<ActivityKind, { label: string; accent: string; tar
   offer: { label: "OFFER · ACTION", accent: "text-paper/78", target: "VINSS OFFER" },
   escrow: { label: "REKBER · START", accent: "text-paper/78", target: "VINSS REKBER" },
   rekber_funded: { label: "REKBER · FUND", accent: "text-signal/82", target: "VINSS REKBER" },
+  rekber_fulfillment_submitted: { label: "REKBER · SUBMIT WORK", accent: "text-signal/82", target: "VINSS REKBER" },
+  rekber_fulfillment_confirmed: { label: "REKBER · CONFIRM", accent: "text-signal/82", target: "VINSS REKBER" },
+  rekber_revision_requested: { label: "REKBER · REVISION", accent: "text-amber/82", target: "VINSS REKBER" },
+  rekber_dispute_opened: { label: "REKBER · DISPUTE", accent: "text-amber/82", target: "VINSS REKBER" },
+  rekber_resolution_authorized: { label: "REKBER · RESOLUTION", accent: "text-amber/82", target: "VINSS REKBER" },
+  rekber_resolution_claimed: { label: "REKBER · CLAIM", accent: "text-signal/82", target: "VINSS REKBER" },
   rekber_released: { label: "REKBER · RELEASE", accent: "text-signal/82", target: "VINSS REKBER" },
   rekber_refunded: { label: "REKBER · REFUND", accent: "text-amber/82", target: "VINSS REKBER" },
+  rekber_resolved: { label: "REKBER · RESOLVED", accent: "text-signal/82", target: "VINSS REKBER" },
   certificate_issued: { label: "CERTIFICATE", accent: "text-amber/82", target: "VINSS CERTIFICATE" },
 };
 
@@ -154,7 +168,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
           ? payload.items
               .filter(isActivityItem)
               .filter((item) => {
-                const key = `${item.transactionHash}:${item.actionLocator}`;
+                const key = `${item.transactionHash}:${item.actionLocator}:${item.kind}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
@@ -296,7 +310,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
           return (
             <article
               className="vinss-feed-entry group relative border-b border-[#233744]/60 px-4 py-3.5 transition hover:bg-signal/[0.018] sm:px-5"
-              key={`${item.transactionHash}:${item.actionLocator}`}
+              key={`${item.transactionHash}:${item.actionLocator}:${item.kind}`}
               style={{ animationDelay: `${Math.min(index, 7) * 45}ms` }}
             >
               <div className="flex items-center justify-between gap-3">

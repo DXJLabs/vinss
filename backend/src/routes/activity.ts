@@ -16,8 +16,15 @@ const VALID_KINDS: readonly ActivityKind[] = [
   "offer",
   "escrow",
   "rekber_funded",
+  "rekber_fulfillment_submitted",
+  "rekber_fulfillment_confirmed",
+  "rekber_revision_requested",
+  "rekber_dispute_opened",
+  "rekber_resolution_authorized",
+  "rekber_resolution_claimed",
   "rekber_released",
   "rekber_refunded",
+  "rekber_resolved",
   "certificate_issued",
 ];
 
