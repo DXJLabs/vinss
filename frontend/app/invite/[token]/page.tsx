@@ -177,7 +177,6 @@ export default function InvitePage() {
     }
 
     attempted.current = true;
-    let cancelled = false;
 
     void (async () => {
       try {
@@ -185,8 +184,6 @@ export default function InvitePage() {
           session.account,
           invite.onchainSecret,
         );
-
-        if (cancelled) return;
 
         const room: LocalRoom = {
           id: invite.roomId,
@@ -352,17 +349,17 @@ export default function InvitePage() {
         attempted.current =
           false;
 
-        if (!cancelled) {
+        if (
+          window.location.pathname.startsWith(
+            "/invite/",
+          )
+        ) {
           setError(
             "This invite could not be validated on-chain. It may already be used or expired.",
           );
         }
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     invite,
     session,

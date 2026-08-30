@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { hash } from "starknet";
 
 import {
   BACKEND_URL,
+  CONTRACTS,
   NETWORK,
   RPC_URL,
 } from "@/lib/starknet/constants";
@@ -12,6 +14,8 @@ type ActivityKind =
   | "message"
   | "offer"
   | "escrow"
+  | "invite_created"
+  | "invite_consumed"
   | "rekber_funded"
   | "rekber_fulfillment_submitted"
   | "rekber_fulfillment_confirmed"
@@ -62,6 +66,8 @@ const ACTIVITY_LABELS: Record<ActivityKind, { label: string; accent: string; tar
   message: { label: "MESSAGE", accent: "text-paper/78", target: "VINSS MESSAGE" },
   offer: { label: "OFFER · ACTION", accent: "text-paper/78", target: "VINSS OFFER" },
   escrow: { label: "REKBER · START", accent: "text-paper/78", target: "VINSS REKBER" },
+  invite_created: { label: "INVITE · CREATE", accent: "text-paper/78", target: "VINSS INVITE" },
+  invite_consumed: { label: "INVITE · JOIN", accent: "text-signal/82", target: "VINSS INVITE" },
   rekber_funded: { label: "REKBER · FUND", accent: "text-signal/82", target: "VINSS REKBER" },
   rekber_fulfillment_submitted: { label: "REKBER · SUBMIT WORK", accent: "text-signal/82", target: "VINSS REKBER" },
   rekber_fulfillment_confirmed: { label: "REKBER · CONFIRM", accent: "text-signal/82", target: "VINSS REKBER" },
@@ -118,6 +124,192 @@ function explorerUrl(transactionHash: string) {
     : `https://sepolia.voyager.online/tx/${transactionHash}`;
 }
 
+const INVITE_ACTIVITY_BLOCK_WINDOW = 5_000;
+const inviteCreatedSelector =
+  hash.getSelectorFromName("InviteCreated");
+const inviteConsumedSelector =
+  hash.getSelectorFromName("InviteConsumed");
+
+const inviteBlockTimeCache =
+  new Map<number, string>();
+
+async function rpcCall<T>(
+  method: string,
+  params: unknown[],
+  signal: AbortSignal,
+): Promise<T> {
+  const response = await fetch(RPC_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `${method}:${Date.now()}`,
+      method,
+      params,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `RPC ${method} failed: ${response.status}`,
+    );
+  }
+
+  const payload =
+    (await response.json()) as {
+      result?: T;
+      error?: unknown;
+    };
+
+  if (
+    payload.error ||
+    payload.result === undefined
+  ) {
+    throw new Error(
+      `RPC ${method} returned an error`,
+    );
+  }
+
+  return payload.result;
+}
+
+async function inviteBlockTime(
+  blockNumber: number,
+  signal: AbortSignal,
+): Promise<string> {
+  const cached =
+    inviteBlockTimeCache.get(blockNumber);
+
+  if (cached) {
+    return cached;
+  }
+
+  const block =
+    await rpcCall<{
+      timestamp?: number;
+    }>(
+      "starknet_getBlockWithTxHashes",
+      [
+        {
+          block_number: blockNumber,
+        },
+      ],
+      signal,
+    );
+
+  const timestamp =
+    Number(block.timestamp ?? 0);
+
+  const value =
+    timestamp > 0
+      ? new Date(timestamp * 1_000).toISOString()
+      : new Date().toISOString();
+
+  inviteBlockTimeCache.set(
+    blockNumber,
+    value,
+  );
+
+  return value;
+}
+
+async function loadInviteActivity(
+  signal: AbortSignal,
+): Promise<ActivityItem[]> {
+  if (!CONTRACTS.invite) {
+    return [];
+  }
+
+  const latest =
+    await rpcCall<number>(
+      "starknet_blockNumber",
+      [],
+      signal,
+    );
+
+  const fromBlock =
+    Math.max(
+      0,
+      latest -
+        INVITE_ACTIVITY_BLOCK_WINDOW,
+    );
+
+  const page =
+    await rpcCall<{
+      events?: Array<{
+        keys?: string[];
+        block_number?: number;
+        transaction_hash?: string;
+      }>;
+    }>(
+      "starknet_getEvents",
+      [
+        {
+          from_block: {
+            block_number: fromBlock,
+          },
+          to_block: {
+            block_number: latest,
+          },
+          address: CONTRACTS.invite,
+          keys: [
+            [
+              inviteCreatedSelector,
+              inviteConsumedSelector,
+            ],
+          ],
+          chunk_size: 50,
+        },
+      ],
+      signal,
+    );
+
+  const events =
+    page.events ?? [];
+
+  return Promise.all(
+    events.map(async (event) => {
+      const selector =
+        event.keys?.[0];
+
+      const kind: ActivityKind =
+        selector &&
+        BigInt(selector) ===
+          BigInt(
+            inviteConsumedSelector,
+          )
+          ? "invite_consumed"
+          : "invite_created";
+
+      const blockNumber =
+        event.block_number ?? latest;
+
+      const transactionHash =
+        event.transaction_hash ?? "0x0";
+
+      return {
+        network: NETWORK,
+        kind,
+        contractAddress:
+          CONTRACTS.invite,
+        actionLocator:
+          event.keys?.[1] ??
+          transactionHash,
+        blockNumber,
+        transactionHash,
+        indexedAt:
+          await inviteBlockTime(
+            blockNumber,
+            signal,
+          ),
+      } satisfies ActivityItem;
+    }),
+  );
+}
+
 function TransactionIcon() {
   return (
     <svg
@@ -157,23 +349,72 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
     async function loadActivity() {
       try {
-        const response = await fetch(`${BACKEND_URL.replace(/\/$/, "")}/activity?limit=50`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`Activity request failed: ${response.status}`);
-        const payload = (await response.json()) as ActivityResponse;
-        const seen = new Set<string>();
-        const nextItems = Array.isArray(payload.items)
-          ? payload.items
-              .filter(isActivityItem)
-              .filter((item) => {
-                const key = `${item.transactionHash}:${item.actionLocator}:${item.kind}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-              })
-          : [];
+        const [response, inviteItems] =
+          await Promise.all([
+            fetch(
+              `${BACKEND_URL.replace(/\/$/, "")}/activity?limit=50`,
+              {
+                cache: "no-store",
+                signal:
+                  controller.signal,
+              },
+            ),
+            loadInviteActivity(
+              controller.signal,
+            ).catch(() => []),
+          ]);
+
+        if (!response.ok) {
+          throw new Error(
+            `Activity request failed: ${response.status}`,
+          );
+        }
+
+        const payload =
+          (await response.json()) as ActivityResponse;
+
+        const backendItems =
+          Array.isArray(payload.items)
+            ? payload.items.filter(
+                isActivityItem,
+              )
+            : [];
+
+        const seen =
+          new Set<string>();
+
+        const nextItems = [
+          ...backendItems,
+          ...inviteItems,
+        ]
+          .sort((left, right) => {
+            if (
+              left.blockNumber !==
+              right.blockNumber
+            ) {
+              return (
+                right.blockNumber -
+                left.blockNumber
+              );
+            }
+
+            return left.transactionHash <
+              right.transactionHash
+              ? 1
+              : -1;
+          })
+          .filter((item) => {
+            const key =
+              `${item.transactionHash}:${item.actionLocator}:${item.kind}`;
+
+            if (seen.has(key)) {
+              return false;
+            }
+
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 50);
         if (disposed) return;
         knownCount = nextItems.length;
         setItems(nextItems);
