@@ -29,6 +29,34 @@ Each room exists around a deal.
 
 ---
 
+## Deployed Contracts
+
+### Starknet Mainnet
+
+| Contract | Address |
+|---|---|
+| `VinssFeePolicy` | `0x0319dc70e75d8bfe0f86f09bb32847791cf1630eb6c2fa6575b8e98f1c28f505` |
+| `VinssMessageHelper` | `0x00b7fcc80a6d07f2c73dea1006fc36f893a3a4d9805a26f99e22fc7e6fa0b584` |
+| `VinssInvite` | `0x0098539b85ad2c8300538bca5ada276caf57527e7e1b709c82fb9a81a01fcc41` |
+| `VinssOfferHelper` | `0x0793d2b7844f104653f43690c23c2e11d87b854da5e86cb2930ede1fac05c21f` |
+| `VinssPrivateEscrowHelper` | `0x040fbf221167da09ffb325a990a0347a8f178a5a7fb214680e3ee97af9156054` |
+| `VinssEscrowRekber` | `0x047cf4ffb45ca246f13400fa3bd4c3b73e51b8b4e1f2c5b9d4d9be55ee565cea` |
+| `VinssSettlementCertificate` | `0x0378f6cb263afdc0f0fd81101065baca49237afb2fcc581b1793390c50133a77` |
+
+### Starknet Sepolia
+
+| Contract | Address |
+|---|---|
+| `VinssFeePolicy` | `0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8` |
+| `VinssMessageHelper` | `0x07255cfbf34f0b0b6233dc2337fc6e77db03405e98186783af81ae5185d936af` |
+| `VinssInvite` | `0x01dddf088b93f67a63f6e5fbefae43fbb4de63ce38d389a0bfd5714b6bf93627` |
+| `VinssOfferHelper` | `0x0007eb5b9518a6dd4c8d10e989b92444507dc704e765d8d5eab976734e5d3585` |
+| `VinssPrivateEscrowHelper` | `0x0697abbd998a74ca9d2f13be16a705b96f72adb949dfd8320f84acd30c973dd9` |
+| `VinssEscrowRekber` | `0x016a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c` |
+| `VinssSettlementCertificate` | `0x02c9bb5e3cdb939ed2193361c741d1bacf607faa858a2d75aaba3d8d6b6ca333` |
+
+---
+
 ## Why this matters
 
 A real transaction is more than moving money.
