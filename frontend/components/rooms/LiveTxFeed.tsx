@@ -25,10 +25,7 @@ interface ActivityItem {
   blockNumber: number;
   transactionHash: string;
   indexedAt: string;
-  rekber?: {
-    amount?: string;
-    token?: string;
-  };
+  rekber?: { amount?: string; token?: string };
   certificate?: {
     tokenId: string;
     recipient: string;
@@ -39,13 +36,8 @@ interface ActivityItem {
   };
 }
 
-interface ActivityResponse {
-  items?: unknown;
-}
-
-interface PublicTxMeta {
-  senderAddress: string | null;
-}
+interface ActivityResponse { items?: unknown; }
+interface PublicTxMeta { senderAddress: string | null; }
 
 export interface ActivitySnapshot {
   count: number;
@@ -59,52 +51,19 @@ interface LiveTxFeedProps {
 
 const COMPACT_COUNT = 5;
 
-const ACTIVITY_LABELS: Record<
-  ActivityKind,
-  { label: string; accent: string; target: string }
-> = {
-  message: {
-    label: "MESSAGE",
-    accent: "text-paper/72",
-    target: "VINSS MESSAGE",
-  },
-  offer: {
-    label: "OFFER · ACTION",
-    accent: "text-paper/72",
-    target: "VINSS OFFER",
-  },
-  escrow: {
-    label: "REKBER · START",
-    accent: "text-paper/72",
-    target: "VINSS REKBER",
-  },
-  rekber_funded: {
-    label: "REKBER · FUND",
-    accent: "text-paper/72",
-    target: "VINSS REKBER",
-  },
-  rekber_released: {
-    label: "REKBER · RELEASE",
-    accent: "text-paper/72",
-    target: "VINSS REKBER",
-  },
-  rekber_refunded: {
-    label: "REKBER · REFUND",
-    accent: "text-paper/72",
-    target: "VINSS REKBER",
-  },
-  certificate_issued: {
-    label: "CERTIFICATE",
-    accent: "text-paper/72",
-    target: "VINSS CERTIFICATE",
-  },
+const ACTIVITY_LABELS: Record<ActivityKind, { label: string; accent: string; target: string }> = {
+  message: { label: "MESSAGE", accent: "text-paper/78", target: "VINSS MESSAGE" },
+  offer: { label: "OFFER · ACTION", accent: "text-paper/78", target: "VINSS OFFER" },
+  escrow: { label: "REKBER · START", accent: "text-paper/78", target: "VINSS REKBER" },
+  rekber_funded: { label: "REKBER · FUND", accent: "text-signal/82", target: "VINSS REKBER" },
+  rekber_released: { label: "REKBER · RELEASE", accent: "text-signal/82", target: "VINSS REKBER" },
+  rekber_refunded: { label: "REKBER · REFUND", accent: "text-amber/82", target: "VINSS REKBER" },
+  certificate_issued: { label: "CERTIFICATE", accent: "text-amber/82", target: "VINSS CERTIFICATE" },
 };
 
 function isActivityItem(value: unknown): value is ActivityItem {
   if (!value || typeof value !== "object") return false;
-
   const item = value as Partial<ActivityItem>;
-
   return (
     (item.network === "sepolia" || item.network === "mainnet") &&
     typeof item.kind === "string" &&
@@ -129,20 +88,14 @@ function shortAddress(value: string) {
 
 function formatRelativeTime(value: string, now: number) {
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime()) || now <= 0) return "NOW";
-
   const seconds = Math.max(0, Math.floor((now - date.getTime()) / 1_000));
-
-  if (seconds < 60) return `${seconds}s ago`;
-
+  if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 function explorerUrl(transactionHash: string) {
@@ -151,23 +104,35 @@ function explorerUrl(transactionHash: string) {
     : `https://sepolia.voyager.online/tx/${transactionHash}`;
 }
 
+function TransactionIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M7 7h9.5M14 4.5 16.5 7 14 9.5M17 17H7.5M10 14.5 7.5 17 10 19.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
 export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
   const [items, setItems] = useState<ActivityItem[]>([]);
-  const [status, setStatus] = useState<"loading" | "live" | "offline">(
-    "loading",
-  );
+  const [status, setStatus] = useState<"loading" | "live" | "offline">("loading");
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(0);
-  const [txMeta, setTxMeta] = useState<
-    Record<string, PublicTxMeta>
-  >({});
+  const [txMeta, setTxMeta] = useState<Record<string, PublicTxMeta>>({});
 
   useEffect(() => {
     const updateClock = () => setNow(Date.now());
-
     updateClock();
     const timer = window.setInterval(updateClock, 10_000);
-
     return () => window.clearInterval(timer);
   }, []);
 
@@ -178,18 +143,11 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
     async function loadActivity() {
       try {
-        const response = await fetch(
-          `${BACKEND_URL.replace(/\/$/, "")}/activity?limit=50`,
-          {
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(`Activity request failed: ${response.status}`);
-        }
-
+        const response = await fetch(`${BACKEND_URL.replace(/\/$/, "")}/activity?limit=50`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Activity request failed: ${response.status}`);
         const payload = (await response.json()) as ActivityResponse;
         const seen = new Set<string>();
         const nextItems = Array.isArray(payload.items)
@@ -202,32 +160,20 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
                 return true;
               })
           : [];
-
         if (disposed) return;
-
         knownCount = nextItems.length;
         setItems(nextItems);
         setStatus("live");
-        onSnapshot?.({
-          count: nextItems.length,
-          online: true,
-          lastUpdated: new Date().toISOString(),
-        });
+        onSnapshot?.({ count: nextItems.length, online: true, lastUpdated: new Date().toISOString() });
       } catch {
         if (disposed || controller.signal.aborted) return;
-
         setStatus("offline");
-        onSnapshot?.({
-          count: knownCount,
-          online: false,
-          lastUpdated: null,
-        });
+        onSnapshot?.({ count: knownCount, online: false, lastUpdated: null });
       }
     }
 
     void loadActivity();
     const timer = window.setInterval(loadActivity, 20_000);
-
     return () => {
       disposed = true;
       controller.abort();
@@ -242,11 +188,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
   useEffect(() => {
     let disposed = false;
-
-    const missing = visibleItems.filter(
-      (item) => !txMeta[item.transactionHash],
-    );
-
+    const missing = visibleItems.filter((item) => !txMeta[item.transactionHash]);
     if (missing.length === 0) return;
 
     async function loadTxMeta() {
@@ -255,9 +197,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
           try {
             const response = await fetch(RPC_URL, {
               method: "POST",
-              headers: {
-                "content-type": "application/json",
-              },
+              headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 jsonrpc: "2.0",
                 id: item.transactionHash,
@@ -265,208 +205,132 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
                 params: [item.transactionHash],
               }),
             });
-
-            if (!response.ok) {
-              throw new Error(
-                `RPC ${response.status}`,
-              );
-            }
-
-            const payload = (await response.json()) as {
-              result?: {
-                sender_address?: string;
-              };
-            };
-
+            if (!response.ok) throw new Error(`RPC ${response.status}`);
+            const payload = (await response.json()) as { result?: { sender_address?: string } };
             return {
               hash: item.transactionHash,
-              meta: {
-                senderAddress:
-                  payload.result?.sender_address ??
-                  null,
-              } satisfies PublicTxMeta,
+              meta: { senderAddress: payload.result?.sender_address ?? null } satisfies PublicTxMeta,
             };
           } catch {
             return {
               hash: item.transactionHash,
-              meta: {
-                senderAddress: null,
-              } satisfies PublicTxMeta,
+              meta: { senderAddress: null } satisfies PublicTxMeta,
             };
           }
         }),
       );
-
       if (disposed) return;
-
       setTxMeta((previous) => {
         const next = { ...previous };
-
-        for (const result of results) {
-          next[result.hash] = result.meta;
-        }
-
+        for (const result of results) next[result.hash] = result.meta;
         return next;
       });
     }
 
     void loadTxMeta();
-
-    return () => {
-      disposed = true;
-    };
+    return () => { disposed = true; };
   }, [visibleItems, txMeta]);
 
   return (
-    <section className="overflow-hidden border border-wire/90 bg-[#090c0f]/95 lg:sticky lg:top-5">
-      <header className="relative border-b border-wire/70 px-4 py-4 sm:px-5">
-        <div className="vinss-network-scan pointer-events-none absolute inset-x-0 top-0 h-px" />
+    <section className="relative overflow-hidden rounded-xl border border-[#315069]/70 bg-[linear-gradient(180deg,rgba(6,14,20,.97),rgba(4,9,13,.96))] shadow-[inset_0_1px_0_rgba(255,255,255,.025),0_28px_80px_rgba(0,0,0,.18)] lg:sticky lg:top-5">
+      <div className="vinss-network-scan pointer-events-none absolute inset-x-0 top-0 h-px" />
 
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-display text-base uppercase tracking-[0.18em] text-paper/88">
-              LOG TX
-            </h2>
-            <p className="mt-1.5 font-display text-[7px] uppercase tracking-[0.15em] text-paper/25 sm:text-[8px]">
-              Public transaction activity
-            </p>
+      <header className="relative border-b border-[#294255]/70 px-4 py-3.5 sm:px-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-full border border-signal/15 bg-signal/[0.035] text-signal/70 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+              <TransactionIcon />
+            </div>
+            <div>
+              <h2 className="font-display text-sm uppercase tracking-[0.2em] text-paper/88 sm:text-base">LOG TX</h2>
+              <p className="mt-1 font-display text-[7px] uppercase tracking-[0.15em] text-paper/24">Public activity</p>
+            </div>
           </div>
 
-          <span
-            className={`flex items-center gap-2 font-display text-[9px] uppercase tracking-[0.18em] ${
-              status === "offline" ? "text-amber" : "text-signal"
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                status === "live"
-                  ? "vinss-live-dot bg-signal"
-                  : status === "offline"
-                    ? "bg-amber"
-                    : "vinss-live-dot bg-paper/30"
-              }`}
-            />
-            {status === "live"
-              ? "Live"
-              : status === "offline"
-                ? "Retrying"
-                : "Syncing"}
+          <span className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 font-display text-[8px] uppercase tracking-[0.16em] ${
+            status === "offline"
+              ? "border-amber/25 bg-amber/[0.035] text-amber"
+              : "border-signal/20 bg-signal/[0.025] text-signal"
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              status === "live" ? "vinss-live-dot bg-signal" : status === "offline" ? "bg-amber" : "vinss-live-dot bg-paper/30"
+            }`} />
+            {status === "live" ? "Live" : status === "offline" ? "Retrying" : "Syncing"}
           </span>
         </div>
       </header>
 
-      <div aria-live="polite" className="max-h-[610px] overflow-y-auto lg:max-h-[760px]">
+      <div aria-live="polite" className="max-h-[500px] overflow-y-auto lg:max-h-[720px]">
         {status === "loading" && items.length === 0 && (
-          <div className="divide-y divide-wire/55 px-4 sm:px-5">
-            {[0, 1, 2, 3].map((item) => (
-              <div className="py-3" key={item}>
-                <div className="h-2 w-28 animate-pulse bg-paper/10" />
-                <div className="mt-3 h-2 w-40 animate-pulse bg-paper/[0.055]" />
+          <div className="divide-y divide-wire/45 px-4 sm:px-5">
+            {[0, 1, 2].map((item) => (
+              <div className="py-4" key={item}>
+                <div className="h-2 w-28 animate-pulse rounded bg-paper/10" />
+                <div className="mt-2.5 h-2 w-40 animate-pulse rounded bg-paper/[0.055]" />
               </div>
             ))}
           </div>
         )}
 
         {status === "offline" && items.length === 0 && (
-          <div className="px-5 py-12 text-center">
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-amber">
-              Stream reconnecting
-            </p>
-            <p className="mt-2 text-xs leading-5 text-paper/30">
-              Rooms remain available locally while the public index reconnects.
-            </p>
+          <div className="px-5 py-10 text-center">
+            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-amber">Stream reconnecting</p>
+            <p className="mt-2 text-xs leading-5 text-paper/30">Rooms remain available locally while the public index reconnects.</p>
           </div>
         )}
 
         {status === "live" && items.length === 0 && (
-          <div className="px-5 py-12 text-center">
-            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-paper/45">
-              Listening for activity
-            </p>
-            <p className="mt-2 text-xs text-paper/25">
-              New public proofs will appear here.
-            </p>
+          <div className="px-5 py-10 text-center">
+            <p className="font-display text-[10px] uppercase tracking-[0.2em] text-paper/45">Listening for activity</p>
+            <p className="mt-2 text-xs text-paper/25">New public proofs will appear here.</p>
           </div>
         )}
 
         {visibleItems.map((item, index) => {
           const meta = ACTIVITY_LABELS[item.kind];
-
-          const displayLabel =
-            item.kind === "certificate_issued" &&
-            item.certificate
-              ? `CERTIFICATE · ${
-                  item.certificate.role === 1
-                    ? "PAYER"
-                    : "PAYEE"
-                }`
-              : meta.label;
-
-          const publicTx =
-            txMeta[item.transactionHash];
+          const displayLabel = item.kind === "certificate_issued" && item.certificate
+            ? `CERTIFICATE · ${item.certificate.role === 1 ? "PAYER" : "PAYEE"}`
+            : meta.label;
+          const publicTx = txMeta[item.transactionHash];
 
           return (
             <article
-              className="vinss-feed-entry group relative border-b border-wire/55 px-4 py-4 transition hover:bg-paper/[0.022] sm:px-5"
+              className="vinss-feed-entry group relative border-b border-[#233744]/60 px-4 py-3.5 transition hover:bg-signal/[0.018] sm:px-5"
               key={`${item.transactionHash}:${item.actionLocator}`}
               style={{ animationDelay: `${Math.min(index, 7) * 45}ms` }}
             >
               <div className="flex items-center justify-between gap-3">
-                <p
-                  className={`min-w-0 truncate font-display text-[9px] uppercase tracking-[0.13em] sm:text-[10px] ${meta.accent}`}
-                >
-                  <span className="mr-2 text-paper/55">&gt;</span>
-                  {displayLabel}
-                </p>
-                <time className="shrink-0 font-display text-[8px] tracking-[0.08em] text-paper/25">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal/70 shadow-[0_0_10px_rgba(94,234,212,.5)]" />
+                  <p className={`min-w-0 truncate font-display text-[9px] uppercase tracking-[0.13em] sm:text-[10px] ${meta.accent}`}>
+                    {displayLabel}
+                  </p>
+                </div>
+                <time className="shrink-0 rounded-full bg-paper/[0.025] px-2 py-1 font-display text-[7px] tracking-[0.08em] text-paper/28">
                   {formatRelativeTime(item.indexedAt, now)}
                 </time>
               </div>
 
-
-              <dl className="mt-3 space-y-1.5 font-display text-[7px] uppercase tracking-[0.12em] sm:text-[8px]">
-                <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-2">
-                  <dt className="text-paper/20">
-                    FROM
-                  </dt>
-                  <dd
-                    className="truncate text-paper/55"
-                    title={
-                      publicTx?.senderAddress ??
-                      undefined
-                    }
-                  >
-                    {publicTx?.senderAddress
-                      ? shortAddress(
-                          publicTx.senderAddress,
-                        )
-                      : "LOADING…"}
-                  </dd>
+              <div className="mt-2.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-display text-[7px] uppercase tracking-[0.11em] text-paper/24 sm:text-[8px]">
+                    FROM&nbsp;&nbsp;
+                    <span className="text-paper/52" title={publicTx?.senderAddress ?? undefined}>
+                      {publicTx?.senderAddress ? shortAddress(publicTx.senderAddress) : "LOADING…"}
+                    </span>
+                  </p>
+                  <p className="mt-1 truncate font-display text-[7px] uppercase tracking-[0.11em] text-paper/22 sm:text-[8px]">
+                    TX&nbsp;&nbsp;<span className="text-paper/42">{shortHash(item.transactionHash)}</span>
+                  </p>
                 </div>
-
-                <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-2">
-                  <dt className="text-paper/20">
-                    TO
-                  </dt>
-                  <dd className="text-paper/58">
-                    AVNU PAYMASTER
-                  </dd>
-                </div>
-
-              </dl>
-
-              <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/35 pt-3">
-                <p className="min-w-0 truncate font-display text-[7px] uppercase tracking-[0.12em] text-paper/30 sm:text-[8px]">
-                  TX&nbsp;&nbsp;{shortHash(item.transactionHash)}
-                </p>
 
                 <a
-                  className="shrink-0 font-display text-[7px] uppercase tracking-[0.14em] text-paper/45 transition hover:text-signal sm:text-[8px]"
+                  className="inline-flex min-h-8 items-center rounded-md border border-wire/55 bg-black/15 px-2.5 font-display text-[7px] uppercase tracking-[0.13em] text-paper/46 transition hover:border-signal/35 hover:text-signal sm:text-[8px]"
                   href={explorerUrl(item.transactionHash)}
                   rel="noreferrer"
                   target="_blank"
                 >
-                  View &gt;&gt;
+                  View ↗
                 </a>
               </div>
             </article>
@@ -476,7 +340,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
 
       {items.length > COMPACT_COUNT && (
         <button
-          className="flex w-full items-center justify-between border-t border-wire/70 px-4 py-3 font-display text-[8px] uppercase tracking-[0.18em] text-paper/30 transition hover:text-signal sm:px-5"
+          className="flex w-full items-center justify-between border-t border-[#294255]/70 px-4 py-3 font-display text-[8px] uppercase tracking-[0.18em] text-paper/32 transition hover:bg-signal/[0.02] hover:text-signal sm:px-5"
           onClick={() => setExpanded((value) => !value)}
           type="button"
         >
@@ -485,7 +349,7 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
         </button>
       )}
 
-      <footer className="border-t border-wire/70 px-4 py-3 font-display text-[7px] uppercase leading-4 tracking-[0.16em] text-paper/20 sm:px-5">
+      <footer className="border-t border-[#294255]/60 px-4 py-3 font-display text-[7px] uppercase leading-4 tracking-[0.15em] text-paper/20 sm:px-5">
         Public metadata only · No room ID · No plaintext
       </footer>
     </section>
