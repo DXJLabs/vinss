@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { shortAddress } from "@/components/room/conversation/chatFormat";
 import type { ConversationParticipant } from "@/components/room/conversation/types";
+import { ConversationAvatarIcon } from "@/components/room/conversation/ConversationAvatarIcon";
 import { StarkIdentity } from "@/components/StarkIdentity";
 
 interface DirectConversationListProps {
@@ -86,8 +86,8 @@ export function DirectConversationList({
                 onClick={() => onOpenChat(participant.address)}
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-signal/[0.035]"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-vault text-[11px] text-signal/65 ring-1 ring-wire/70">
-                  {shortAddress(participant.address).slice(2, 4).toUpperCase()}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal/[0.045] text-signal/75 ring-1 ring-signal/15">
+                  <ConversationAvatarIcon seed={`chat:${participant.address}`} />
                 </div>
 
                 <div className="min-w-0 flex-1">

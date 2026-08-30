@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ConversationAvatarIcon } from "@/components/room/conversation/ConversationAvatarIcon";
 import {
   isGroupAdmin,
   type LocalRoomGroup,
@@ -151,13 +152,6 @@ export function GroupConversationList({
                 walletAddress,
               );
 
-            const initial =
-              group.name
-                .trim()
-                .charAt(0)
-                .toUpperCase() ||
-              "G";
-
             return (
               <button
                 key={group.id}
@@ -169,8 +163,8 @@ export function GroupConversationList({
                 }
                 className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-signal/[0.035]"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-wire bg-vault/50 text-xs font-medium text-signal/65">
-                  {initial}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-signal/15 bg-signal/[0.045] text-signal/75">
+                  <ConversationAvatarIcon seed={`group:${group.id}`} />
                 </div>
 
                 <div className="min-w-0 flex-1">

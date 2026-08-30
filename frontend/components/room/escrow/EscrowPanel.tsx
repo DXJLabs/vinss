@@ -2189,26 +2189,26 @@ export function EscrowPanel({
             : 5;
 
   const steps = [
-    "Role",
+    "Agreement",
     "Approval",
-    "Funds",
-    "Settlement",
+    "Funded",
+    "Review",
     "Proof",
   ];
 
   return (
-    <section className="overflow-hidden rounded-2xl bg-vault/70 ring-1 ring-wire/60">
-      <header className="border-b border-wire/50 px-4 py-4">
+    <section className="overflow-hidden rounded-2xl border border-wire/70 bg-[#0b1015]/95 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+      <header className="border-b border-wire/60 bg-black/10 px-4 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-signal/75">
-              Secure payment via STRK20
+              Private payment protection
             </p>
             <h3 className="mt-1 text-xl font-medium text-paper">
-              VINSS Escrow
+              Rekber Escrow
             </h3>
             <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/38">
-              The Payer secures the funds. The Payee claims them after the work is approved.
+              The Payer secures the agreed funds. The Payee receives them after the settlement conditions are satisfied.
             </p>
           </div>
 
@@ -2247,7 +2247,7 @@ export function EscrowPanel({
         </div>
       </header>
 
-      <div className="space-y-4 p-4">
+      <div className="vinss-panel-step space-y-4 p-4">
         {!accepted ? (
           <div className="rounded-xl bg-paper/[0.025] p-4">
             <p className="text-sm font-medium text-paper/70">
@@ -2280,7 +2280,7 @@ export function EscrowPanel({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[9px] uppercase tracking-[0.12em] text-paper/28">
-                  This wallet's role · locked
+                  Your role · set by original Offer
                 </p>
                 <p className="mt-1 text-sm font-medium text-paper/75">
                   {role === "payer"
@@ -2336,7 +2336,7 @@ export function EscrowPanel({
           <div className="space-y-3">
             <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
               <p className="text-[9px] uppercase tracking-[0.12em] text-signal/70">
-                Role set by the original Offer
+                Roles come from the original Offer
               </p>
               <p className="mt-1 text-sm font-medium text-paper/80">
                 {role === "payer"
@@ -2384,7 +2384,7 @@ export function EscrowPanel({
               <>
                 <div className="rounded-xl border border-amber/25 bg-amber/[0.045] p-3">
                   <p className="text-xs font-medium text-amber">
-                    Step 1 · Prepare Rekber agreement
+                    Prepare Rekber agreement
                   </p>
                   <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
                     After the Payee approves this setup, the deposit button for {accepted.amount} {accepted.asset} will appear on this wallet.
@@ -2456,7 +2456,7 @@ export function EscrowPanel({
             <div className="space-y-3">
               <div className="rounded-xl bg-signal/[0.045] p-4">
                 <p className="text-sm font-medium text-paper/75">
-                  Escrow request received
+                  Rekber approval requested
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-paper/38">
                   Payer {shortAddress(createAction.senderAddress ?? "")} will secure {accepted.amount} {accepted.asset}. This wallet is the Payee.
@@ -2511,10 +2511,10 @@ export function EscrowPanel({
             <div className="space-y-3">
               <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
                 <p className="text-[9px] uppercase tracking-[0.13em] text-signal/70">
-                  Payee approved
+                  Payee approval complete
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-paper/38">
-                  Review the amount and VINSS fee before securing the payment.
+                  Review the agreed amount and fees before funds are locked.
                 </p>
               </div>
 
@@ -2523,7 +2523,7 @@ export function EscrowPanel({
                 asset={accepted.asset}
               />
               <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Funding step:</strong> this is the first action that debits the agreed amount plus the current on-chain VINSS service fee and locks it in the Escrow contract.
+                <strong className="text-amber">Payment step:</strong> this is the first action that moves the agreed amount plus the current on-chain VINSS service fee into Rekber Escrow.
               </p>
               <button
                 type="button"
@@ -2541,7 +2541,7 @@ export function EscrowPanel({
                     ? "Verifying wallet approvals…"
                     : coordinationAuthorized === false
                       ? "Wallet approvals do not match"
-                      : "Secure funds →"}
+                      : "Secure payment →"}
               </button>
             </div>
           )}
@@ -2553,10 +2553,10 @@ export function EscrowPanel({
           role === "payee" && (
             <div className="rounded-xl bg-paper/[0.025] p-4 text-center">
               <p className="text-sm text-paper/65">
-                Escrow approved
+                Ready for funding
               </p>
               <p className="mt-1 text-[10px] text-paper/30">
-                Waiting for the Payer to deposit the agreed amount into the Escrow contract.
+                Waiting for the Payer to secure the agreed amount in Rekber Escrow.
               </p>
             </div>
           )}

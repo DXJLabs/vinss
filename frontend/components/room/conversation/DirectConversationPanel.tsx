@@ -1003,7 +1003,7 @@ export function DirectConversationPanel({
 
   return (
     <>
-      <div className="relative z-30 flex items-center gap-3 border-x border-b border-wire bg-vault/20 px-3 py-3">
+      <div className="relative z-30 flex items-center gap-3 rounded-t-2xl border border-b-0 border-wire/70 bg-[#080d12]/95 px-3.5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
         <button
           type="button"
           onClick={onBack}
@@ -1022,9 +1022,9 @@ export function DirectConversationPanel({
             {peerLabel}
           </p>
 
-          <p className="mt-0.5 flex items-center gap-1.5 text-[9px] text-paper/30">
-            <span className="text-signal/65">🛡</span>
-            <span>Encrypted</span>
+          <p className="mt-1 flex items-center gap-1.5 font-display text-[8px] uppercase tracking-[0.11em] text-paper/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-signal/80 shadow-[0_0_9px_rgba(94,234,212,0.55)]" />
+            <span>Private · E2E encrypted</span>
           </p>
         </button>
       </div>
@@ -1033,7 +1033,7 @@ export function DirectConversationPanel({
         <div
           ref={scrollBoxRef}
           onScroll={updateScrollIntent}
-          className="flex min-h-[360px] max-h-[58vh] flex-col overflow-y-auto overscroll-contain border-x border-wire/60 bg-black/10"
+          className="flex h-[68dvh] min-h-[520px] max-h-[780px] flex-col overflow-y-auto overscroll-contain border-x border-wire/70 bg-[#060a0e] lg:h-[calc(100dvh-285px)] lg:min-h-[650px] lg:max-h-[900px]"
         >
         {currentRekberState &&
           fundedDealEntry && (
@@ -1909,7 +1909,7 @@ export function DirectConversationPanel({
         }
       />
 
-      <div className="border-x border-b border-wire/60 bg-vault/12 p-2">
+      <div className="rounded-b-2xl border border-t-0 border-wire/70 bg-[#080d12]/95 p-2.5 shadow-[0_-18px_45px_rgba(0,0,0,0.16)]">
         <input
           ref={attachmentInputRef}
           type="file"
@@ -2074,17 +2074,30 @@ export function DirectConversationPanel({
           </div>
         )}
 
-        <div className="mb-1 flex items-center justify-between gap-3 px-3 font-display text-[7px] uppercase tracking-[0.1em] text-paper/25">
-          <span>
-            VINSS fee · on-chain quote
-          </span>
-          <span>
-            Pool/network fee shown in Ready X
-          </span>
+        <div className="mb-2 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-wire/55 bg-black/15 px-3 py-2">
+            <p className="flex items-center gap-1.5 font-display text-[7px] uppercase tracking-[0.14em] text-paper/32">
+              <span className="h-1.5 w-1.5 rounded-full bg-signal/75" />
+              VINSS fee
+            </p>
+            <p className="mt-1 text-[9px] text-paper/52">
+              Quoted on-chain
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-wire/55 bg-black/15 px-3 py-2">
+            <p className="flex items-center gap-1.5 font-display text-[7px] uppercase tracking-[0.14em] text-paper/32">
+              <span className="h-1.5 w-1.5 rounded-full bg-paper/25" />
+              Network fee
+            </p>
+            <p className="mt-1 text-[9px] text-paper/52">
+              Shown in Ready X
+            </p>
+          </div>
         </div>
 
         <div className="flex items-end gap-2">
-          <div className="relative min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1 rounded-xl border border-wire/65 bg-black/15 transition focus-within:border-signal/30 focus-within:bg-vault/20">
             <textarea
               ref={messageInputRef}
               value={draft}
@@ -2148,7 +2161,7 @@ export function DirectConversationPanel({
               busy ||
               !draft.trim()
             }
-            className="h-11 border border-signal/35 px-4 font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+            className="h-11 rounded-xl border border-signal/30 bg-signal/[0.07] px-4 font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:bg-transparent disabled:opacity-30"
           >
             Send
           </button>

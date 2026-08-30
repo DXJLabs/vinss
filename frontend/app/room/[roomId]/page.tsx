@@ -519,7 +519,7 @@ export default function DealRoomPage() {
       : null;
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <main className="mx-auto min-h-screen max-w-5xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
       <RoomHeader
         label={room?.label ?? "Deal Room"}
         roomId={params.roomId}
@@ -764,20 +764,20 @@ export default function DealRoomPage() {
 
       {!showAccessDetails &&
         tab === "offer" && (
-          <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]">
+          <div className="vinss-modal-backdrop fixed inset-0 z-[70] bg-black/72 backdrop-blur-[3px]">
             <section
               role="dialog"
               aria-modal="true"
               aria-label="Add Offer"
-              className="absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
+              className="vinss-modal-sheet absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire/80 bg-[#090d12] shadow-[0_28px_90px_rgba(0,0,0,0.58)] sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
             >
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/75">
-                    Add Offer
+                    Offer
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/28">
-                    Add deal terms to this private conversation.
+                    Define a private agreement before sending.
                   </p>
                 </div>
 
@@ -845,20 +845,20 @@ export default function DealRoomPage() {
 
       {!showAccessDetails &&
         tab === "escrow" && (
-          <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-[2px]">
+          <div className="vinss-modal-backdrop fixed inset-0 z-[70] bg-black/72 backdrop-blur-[3px]">
             <section
               role="dialog"
               aria-modal="true"
               aria-label="Add Escrow"
-              className="absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire bg-ink shadow-2xl sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
+              className="vinss-modal-sheet absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire/80 bg-[#090d12] shadow-[0_28px_90px_rgba(0,0,0,0.58)] sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
             >
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/75">
-                    Add Escrow
+                    Escrow
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/28">
-                    Secure an accepted Offer with VINSS Escrow.
+                    Protect payment for an accepted agreement.
                   </p>
                 </div>
 

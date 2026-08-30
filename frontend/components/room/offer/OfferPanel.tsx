@@ -1369,10 +1369,10 @@ export function OfferPanel({
               field.placeholder
             }
             disabled={busy}
-            className="min-h-24 w-full resize-y border border-wire bg-transparent px-3 py-3 text-sm leading-relaxed text-paper outline-none placeholder:text-paper/25 focus:border-signal disabled:opacity-40"
+            className="min-h-24 w-full resize-y rounded-xl border border-wire/80 bg-black/10 px-3 py-3 text-sm leading-relaxed text-paper outline-none transition placeholder:text-paper/25 focus:border-signal/45 focus:bg-vault/15 disabled:opacity-40"
           />
         ) : pairedAssetField ? (
-          <div className="relative flex w-full items-stretch border border-wire bg-transparent focus-within:border-signal">
+          <div className="relative flex w-full items-stretch overflow-visible rounded-xl border border-wire/80 bg-black/10 transition focus-within:border-signal/45 focus-within:bg-vault/15">
             <input
               id={field.id}
               value={value}
@@ -1478,7 +1478,7 @@ export function OfferPanel({
             }
             disabled={busy}
             autoComplete="off"
-            className="w-full border border-wire bg-transparent px-3 py-3 text-sm text-paper outline-none placeholder:text-paper/25 focus:border-signal disabled:opacity-40"
+            className="w-full rounded-xl border border-wire/80 bg-black/10 px-3 py-3 text-sm text-paper outline-none transition placeholder:text-paper/25 focus:border-signal/45 focus:bg-vault/15 disabled:opacity-40"
           />
         )}
 
@@ -1523,15 +1523,15 @@ export function OfferPanel({
   }
 
   return (
-    <section className="relative border border-wire bg-vault/40">
-      <div className="border-b border-wire px-4 py-4">
+    <section className="relative overflow-hidden rounded-2xl border border-wire/70 bg-[#0b1015]/95 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+      <div className="border-b border-wire/70 bg-black/10 px-4 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="mt-1 flex items-center gap-2">
               <h3 className="text-sm text-paper">
                 {counterSource
-                  ? "Counter this offer"
-                  : "Create an offer"}
+                  ? "Counter terms"
+                  : "Agreement terms"}
               </h3>
 
               
@@ -1539,7 +1539,7 @@ export function OfferPanel({
 
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
               {targetAddress
-                ? `Private deal with ${shortAddress(
+                ? `Private agreement with ${shortAddress(
                     targetAddress,
                   )}`
                 : "Open a private Chat and choose a participant before creating an offer."}
@@ -1550,8 +1550,8 @@ export function OfferPanel({
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-paper/30">
               {reviewing
-                ? "Step 2 · Review"
-                : "Step 1 · Terms"}
+                ? "2 of 2 · Review"
+                : "1 of 2 · Terms"}
             </span>
 
             {!reviewing && (
@@ -1566,7 +1566,7 @@ export function OfferPanel({
                   )
                 }
                 aria-label="How do I fill this Offer?"
-                className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-wire/70 text-[7px] leading-none text-paper/35 transition hover:border-signal/40 hover:text-signal"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-wire/70 bg-paper/[0.015] text-[9px] leading-none text-paper/42 transition hover:border-signal/45 hover:bg-signal/[0.05] hover:text-signal"
               >
                 ?
               </button>
@@ -1588,7 +1588,7 @@ export function OfferPanel({
           </div>
         </div>
       ) : reviewing ? (
-        <div className="space-y-4 p-4">
+        <div className="vinss-panel-step space-y-4 p-4">
           <div className="flex items-center justify-between gap-4 border border-wire bg-paper/[0.015] px-4 py-3">
             <div>
               <p className="font-display text-[8px] uppercase tracking-[0.14em] text-paper/30">
@@ -1649,17 +1649,17 @@ export function OfferPanel({
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-display text-[9px] uppercase tracking-widest text-paper/35">
-                    Private Offer action fee
+                    VINSS offer fee
                   </p>
 
                   
                 </div>
 
                 <p className="mt-1 text-[10px] text-paper/30">
-                  Wallet-backed private Offer action
+                  Quoted from FeePolicy when you confirm
                 </p>
                 <p className="mt-1 text-[9px] text-paper/22">
-                  Pool/network fee appears separately in Ready X
+                  Network and privacy-pool fees appear separately in Ready X
                 </p>
               </div>
 
@@ -1712,7 +1712,7 @@ export function OfferPanel({
           </div>
         </div>
       ) : (
-        <div className="space-y-5 p-4">
+        <div className="vinss-panel-step space-y-5 p-4">
           <div>
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1755,7 +1755,7 @@ export function OfferPanel({
             </button>
 
             {choosingTemplate && (
-              <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-wire/70 bg-black/10 p-2">
+              <div className="vinss-panel-step mt-2 grid grid-cols-2 gap-2 rounded-xl border border-wire/70 bg-black/10 p-2">
                 {OFFER_TEMPLATES.map(
                   (template) => {
                     const selected =
@@ -1830,10 +1830,10 @@ export function OfferPanel({
                     aria-expanded={
                       showMoreTerms
                     }
-                    className="flex w-full items-center justify-between border border-wire/70 bg-paper/[0.012] px-3 py-3 text-left transition hover:border-signal/25 disabled:opacity-40"
+                    className="flex w-full items-center justify-between rounded-xl border border-wire/70 bg-paper/[0.012] px-3 py-3 text-left transition hover:border-signal/25 hover:bg-signal/[0.02] disabled:opacity-40"
                   >
                     <p className="font-display text-[9px] uppercase tracking-[0.13em] text-paper/45">
-                      More terms
+                      Optional terms
                     </p>
 
                     <span className="font-display text-[9px] uppercase tracking-widest text-signal/60">
@@ -1844,7 +1844,7 @@ export function OfferPanel({
                   </button>
 
                   {showMoreTerms && (
-                    <div className="mt-4 space-y-4 border-l border-wire/70 pl-3">
+                    <div className="vinss-panel-step mt-4 space-y-4 border-l border-signal/15 pl-3">
                       {additionalTemplateFields.map(
                         renderField,
                       )}
@@ -1885,7 +1885,7 @@ export function OfferPanel({
               setReviewing(true)
             }
             disabled={!canPrepare}
-            className="flex w-full items-center justify-center gap-2 border border-signal px-4 py-3 font-display text-xs uppercase tracking-widest text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-signal/45 bg-signal/[0.045] px-4 py-3 font-display text-xs uppercase tracking-widest text-signal transition hover:border-signal hover:bg-signal hover:text-ink active:scale-[0.99] disabled:opacity-30"
           >
             {counterSource
               ? "Review Counter →"
