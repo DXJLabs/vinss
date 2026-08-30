@@ -1,6 +1,14 @@
 {
   "transactions": [],
-  "contracts": [],
+  "contracts": [
+    "0x0319dc70e75d8bfe0f86f09bb32847791cf1630eb6c2fa6575b8e98f1c28f505",
+    "0x00b7fcc80a6d07f2c73dea1006fc36f893a3a4d9805a26f99e22fc7e6fa0b584",
+    "0x0098539b85ad2c8300538bca5ada276caf57527e7e1b709c82fb9a81a01fcc41",
+    "0x0793d2b7844f104653f43690c23c2e11d87b854da5e86cb2930ede1fac05c21f",
+    "0x040fbf221167da09ffb325a990a0347a8f178a5a7fb214680e3ee97af9156054",
+    "0x047cf4ffb45ca246f13400fa3bd4c3b73e51b8b4e1f2c5b9d4d9be55ee565cea",
+    "0x0378f6cb263afdc0f0fd81101065baca49237afb2fcc581b1793390c50133a77"
+  ],
   "demo_video": "",
   "demo_url": "https://vinss-nu.vercel.app/"
 }
