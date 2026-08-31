@@ -30,9 +30,6 @@ import type {
 import {
   BACKEND_URL,
 } from "@/lib/starknet/constants";
-import {
-  pollPresence,
-} from "@/lib/privacy/presence";
 
 export interface DiscoveredEscrowAction {
   actionLocator: string;
@@ -187,167 +184,50 @@ export function useRoomEscrow({
     if (
       !roomId ||
       !session ||
-      !channelKey ||
       !messagingIdentity
     ) {
       return [];
     }
+
+    const routes:
+      MessageRoute[] = [];
 
     const self =
       canonicalStarknetAddress(
         session.account.address,
       );
 
-    /*
-     * Keep every peer messaging key observed for this room.
-     *
-     * Ready X may background/remount the page while a Rekber action is being
-     * published. Participant discovery can then temporarily select a different
-     * announcement. Rekber history must still be decryptable with the exact
-     * pairwise key that was used when the action was published.
-     */
-    const candidates: RoomParticipant[] = [];
-    const seen = new Set<string>();
-
-    const remember = (
-      address: string | undefined,
-      publicKey: string | undefined,
-    ) => {
-      if (!address || !publicKey) {
-        return;
-      }
-
-      if (
-        sameStarknetAddress(
-          address,
-          session.account.address,
-        )
-      ) {
-        return;
-      }
-
-      const canonical =
-        canonicalStarknetAddress(
-          address,
+    for (
+      const participant
+      of participants
+    ) {
+      const directKey =
+        await deriveDirectMessageKey(
+          roomId,
+          messagingIdentity.privateKey,
+          participant.publicKey,
         );
 
-      const id =
-        `${canonical}:${publicKey.toLowerCase()}`;
-
-      if (seen.has(id)) {
-        return;
-      }
-
-      seen.add(id);
-      candidates.push({
-        address: canonical,
-        publicKey,
+      // Incoming coordination targets this wallet.
+      routes.push({
+        recipientIdentity: self,
+        encryptionKey:
+          directKey,
+        routingKey:
+          directKey,
       });
-    };
 
-    for (const participant of participants) {
-      remember(
-        participant.address,
-        participant.publicKey,
-      );
-    }
-
-    const keyringStorageKey =
-      `vinss:escrow-peer-keys:${roomId}:${self}`;
-
-    /*
-     * Restore previously observed keys first. Public messaging keys are not
-     * secrets; only the non-exportable local private key remains sensitive.
-     */
-    try {
-      const cached =
-        JSON.parse(
-          window.localStorage.getItem(
-            keyringStorageKey,
-          ) ?? "[]",
-        ) as RoomParticipant[];
-
-      if (Array.isArray(cached)) {
-        for (const participant of cached) {
-          remember(
-            participant?.address,
-            participant?.publicKey,
-          );
-        }
-      }
-    } catch {
-      // Keyring cache is recovery-only.
-    }
-
-    /*
-     * Participant presence is encrypted with the room key. Keep every valid
-     * announcement instead of trusting device sentAt ordering.
-     */
-    try {
-      const roomPresence =
-        await pollPresence(
-          BACKEND_URL,
-          channelKey,
-        );
-
-      for (const event of roomPresence) {
-        if (
-          event.type !== "participant"
-        ) {
-          continue;
-        }
-
-        remember(
-          event.senderAddress,
-          event.messagingPublicKey,
-        );
-      }
-    } catch (error) {
-      console.warn(
-        "[VINSS ESCROW KEYRING RECOVERY]",
-        error,
-      );
-    }
-
-    try {
-      window.localStorage.setItem(
-        keyringStorageKey,
-        JSON.stringify(candidates),
-      );
-    } catch {
-      // Discovery still works from live participant state.
-    }
-
-    const routes: MessageRoute[] = [];
-
-    for (const participant of candidates) {
-      try {
-        const directKey =
-          await deriveDirectMessageKey(
-            roomId,
-            messagingIdentity.privateKey,
-            participant.publicKey,
-          );
-
-        // Incoming coordination targets this wallet.
-        routes.push({
-          recipientIdentity: self,
-          encryptionKey: directKey,
-          routingKey: directKey,
-        });
-
-        // Outgoing history targets this peer.
-        routes.push({
-          recipientIdentity:
-            canonicalStarknetAddress(
-              participant.address,
-            ),
-          encryptionKey: directKey,
-          routingKey: directKey,
-        });
-      } catch {
-        // One stale/invalid historical key must not block the valid routes.
-      }
+      // Outgoing history targets the peer.
+      routes.push({
+        recipientIdentity:
+          canonicalStarknetAddress(
+            participant.address,
+          ),
+        encryptionKey:
+          directKey,
+        routingKey:
+          directKey,
+      });
     }
 
     return routes;
@@ -573,74 +453,6 @@ export function useRoomEscrow({
       sentAt:
         new Date().toISOString(),
     };
-
-    /*
-     * Recovery / duplicate-fee guard.
-     *
-     * A Ready X callback can disappear after the transaction already reached
-     * Starknet. Before charging for another Rekber setup/approval, recover an
-     * identical immutable action from encrypted discovery.
-     */
-    if (
-      action.kind === "create" ||
-      action.kind === "accept"
-    ) {
-      try {
-        const recoveryRoutes =
-          await buildDiscoveryRoutes();
-
-        const existing =
-          (
-            await discoverEscrowActions(
-              BACKEND_URL,
-              channelKey,
-              recoveryRoutes.length > 0
-                ? recoveryRoutes
-                : route,
-            )
-          ).find(
-            (item) =>
-              item.action.kind ===
-                action.kind &&
-              item.action
-                .custodyCommitment ===
-                action.custodyCommitment &&
-              item.action
-                .dealTermsCommitment ===
-                action.dealTermsCommitment &&
-              sameStarknetAddress(
-                item.action.senderAddress,
-                action.senderAddress,
-              ) &&
-              sameStarknetAddress(
-                item.action.recipientAddress,
-                action.recipientAddress,
-              ),
-          );
-
-        if (existing) {
-          void refreshEscrowActions();
-
-          return {
-            transactionHash:
-              existing.transactionHash,
-            actionLocator:
-              BigInt(
-                existing.actionLocator,
-              ),
-            payloadCommitment:
-              BigInt(
-                existing.payloadCommitment,
-              ),
-          };
-        }
-      } catch (error) {
-        console.warn(
-          "[VINSS REKBER RECOVERY PREFLIGHT]",
-          error,
-        );
-      }
-    }
 
     // Ready X may execute the STRK20 invoke successfully but its in-page
     // callback can later reject with "Timeout". Capture the immutable

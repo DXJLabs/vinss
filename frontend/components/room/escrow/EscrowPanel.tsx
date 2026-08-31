@@ -338,84 +338,48 @@ export function EscrowPanel({
         ? "payee"
         : null;
 
-  /*
-   * One accepted Offer may have duplicate Rekber setup records after
-   * Ready X/browser retries.
-   *
-   * Never let a newer unapproved setup replace a setup that the Payee
-   * already approved. The create+accept pair is the canonical Rekber.
-   */
-  const discoveredCreate = useMemo(() => {
-    const offerLocator =
-      canonicalLocator(
-        dealOfferLocator,
-      );
-
-    const creates =
-      escrowActions.filter(
-        (item) =>
-          item.action.kind ===
-            "create" &&
-          item.action
-            .coordinationVersion ===
-            REKBER_COORDINATION_VERSION &&
-          canonicalLocator(
-            item.action
-              .dealOfferLocator,
-          ) === offerLocator,
-      );
-
-    if (creates.length === 0) {
-      return null;
-    }
-
-    /*
-     * Prefer a setup that already has a Payee acceptance.
-     * This recovers an existing paid approval instead of switching
-     * to a later duplicate setup.
-     */
-    const paired =
-      [...creates]
+  const discoveredCreate = useMemo(
+    () =>
+      [...escrowActions]
         .reverse()
-        .find((create) => {
-          const custody =
-            toBigInt(
-              create.action
-                .custodyCommitment,
-            );
-
-          if (!custody) {
+        .find((item) => {
+          if (item.action.kind !== "create") {
             return false;
           }
 
-          return escrowActions.some(
-            (item) =>
-              item.action.kind ===
-                "accept" &&
+          if (
+            item.action.coordinationVersion !==
+            REKBER_COORDINATION_VERSION
+          ) {
+            return false;
+          }
+
+          if (
+            custodyCommitment &&
+            hasCustody(
+              item.action,
+              custodyCommitment,
+            )
+          ) {
+            return true;
+          }
+
+          return (
+            canonicalLocator(
               item.action
-                .coordinationVersion ===
-                REKBER_COORDINATION_VERSION &&
-              hasCustody(
-                item.action,
-                custody,
-              ),
+                .dealOfferLocator,
+            ) ===
+            canonicalLocator(
+              dealOfferLocator,
+            )
           );
-        });
-
-    if (paired) {
-      return paired;
-    }
-
-    /*
-     * No Payee approval exists yet.
-     * Keep the first immutable setup as canonical so repeated Ready X
-     * attempts cannot silently move Bob onto another custody commitment.
-     */
-    return creates[0] ?? null;
-  }, [
-    escrowActions,
-    dealOfferLocator,
-  ]);
+        }) ?? null,
+    [
+      escrowActions,
+      custodyCommitment,
+      dealOfferLocator,
+    ],
+  );
 
   /*
    * Indexed Starknet discovery is authoritative.
@@ -426,18 +390,6 @@ export function EscrowPanel({
     discoveredCreate ?? localCreate;
   const createAction =
     createRecord?.action ?? null;
-
-  /*
-   * Use the custody selected by the canonical discovered setup immediately.
-   * Do not wait one React render for custodyCommitment state to catch up.
-   */
-  const activeCustodyCommitment =
-    toBigInt(
-      createAction
-        ?.custodyCommitment,
-    ) ??
-    custodyCommitment;
-
   const discoveredAccept = useMemo(
     () =>
       [...escrowActions]
@@ -446,17 +398,16 @@ export function EscrowPanel({
           (item) =>
             item.action.kind ===
               "accept" &&
-            item.action
-              .coordinationVersion ===
+            item.action.coordinationVersion ===
               REKBER_COORDINATION_VERSION &&
             hasCustody(
               item.action,
-              activeCustodyCommitment,
+              custodyCommitment,
             ),
         ) ?? null,
     [
       escrowActions,
-      activeCustodyCommitment,
+      custodyCommitment,
     ],
   );
 
@@ -477,7 +428,7 @@ export function EscrowPanel({
               REKBER_COORDINATION_VERSION &&
             hasCustody(
               item.action,
-              activeCustodyCommitment,
+              custodyCommitment,
             ) &&
             Boolean(
               item.action
@@ -486,7 +437,7 @@ export function EscrowPanel({
         ) ?? null,
     [
       escrowActions,
-      activeCustodyCommitment,
+      custodyCommitment,
     ],
   );
 
