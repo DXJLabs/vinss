@@ -89,21 +89,12 @@ interface PendingInviteConsume {
 type InviteConsumeAccount =
   Parameters<typeof consumeInviteOnchain>[0];
 
-function sameAddress(left: string, right: string) {
-  try {
-    return BigInt(left) === BigInt(right);
-  } catch {
-    return false;
-  }
-}
-
 function recoveryKey(inviteId: string) {
   return CONSUME_RECOVERY_PREFIX + inviteId;
 }
 
 function loadRecovery(
   invite: InvitePayload,
-  walletAddress: string,
 ): PendingInviteConsume | null {
   try {
     const raw =
@@ -119,17 +110,10 @@ function loadRecovery(
     const valid =
       saved.inviteId === invite.inviteId &&
       saved.roomId === invite.roomId &&
-      sameAddress(
-        saved.walletAddress,
-        walletAddress,
-      ) &&
       Date.now() - saved.startedAt <=
         60 * 60 * 1000;
 
     if (!valid) {
-      window.localStorage.removeItem(
-        recoveryKey(invite.inviteId),
-      );
       return null;
     }
 
@@ -191,17 +175,31 @@ async function ensureInviteConsumed(
   invite: InvitePayload,
 ) {
   const pending =
-    loadRecovery(
-      invite,
-      account.address,
-    );
+    loadRecovery(invite);
 
-  const state =
-    await getInviteOnchainStateForSecret(
-      invite.onchainSecret,
-    );
+  let state = null;
 
-  if (!state.exists) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const candidate =
+        await getInviteOnchainStateForSecret(
+          invite.onchainSecret,
+        );
+
+      if (candidate.exists) {
+        state = candidate;
+        break;
+      }
+    } catch {}
+
+    if (attempt < 5) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1000),
+      );
+    }
+  }
+
+  if (!state) {
     throw new Error("INVITE_NOT_FOUND");
   }
 

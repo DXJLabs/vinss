@@ -437,6 +437,20 @@ export async function createInviteToken(
     );
   }
 
+  // Mainnet RPC can lag behind the Ready X transaction response.
+  // Do not expose the invite as READY until get_invite can actually see it.
+  const confirmed =
+    await waitForInviteOnchain(
+      commitment,
+      20,
+    );
+
+  if (!confirmed) {
+    throw new Error(
+      "INVITE_CREATE_NOT_CONFIRMED",
+    );
+  }
+
   return invite;
 }
 
