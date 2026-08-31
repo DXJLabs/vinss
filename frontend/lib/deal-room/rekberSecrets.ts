@@ -10,11 +10,20 @@ import {
 import type {
   SettlementRole,
 } from "@/lib/deal-room/settlement";
+import type {
+  EscrowActionPayload,
+} from "@/types/deal-room";
 
 export interface StoredRekberSecrets {
   version: 2;
   custodyCommitment: string;
   role: SettlementRole;
+
+  // Signed Rekber coordination waiting for the second Ready X step.
+  // Stored inside the same encrypted Rekber local storage so a
+  // mobile wallet/page remount does not require another signature.
+  pendingCoordinationPayload?: EscrowActionPayload;
+
   releaseAuthorizationSecret?: string;
   payeeClaimSecret?: string;
   refundSecret?: string;

@@ -1055,8 +1055,36 @@ export function EscrowPanel({
       custodyCommitment,
       channelKey,
     ).then((stored) => {
-      if (!cancelled) {
-        setLocalSecrets(stored);
+      if (cancelled) {
+        return;
+      }
+
+      setLocalSecrets(stored);
+
+      const pendingPayload =
+        stored?.pendingCoordinationPayload;
+
+      if (
+        stored?.role === "payer" &&
+        pendingPayload?.kind === "create" &&
+        !createAction
+      ) {
+        setPendingPayerSetup({
+          custodyCommitment,
+          secrets: stored,
+          payload: pendingPayload,
+        });
+      }
+
+      if (
+        stored?.role === "payee" &&
+        pendingPayload?.kind === "accept" &&
+        !acceptAction
+      ) {
+        setPendingPayeeAcceptance({
+          secrets: stored,
+          payload: pendingPayload,
+        });
       }
     });
 
@@ -1367,9 +1395,14 @@ export function EscrowPanel({
             ),
         };
 
+        const persisted: StoredRekberSecrets = {
+          ...stored,
+          pendingCoordinationPayload: payload,
+        };
+
         pending = {
           custodyCommitment: custody,
-          secrets: stored,
+          secrets: persisted,
           payload,
         };
         setPendingPayerSetup(pending);
@@ -1419,6 +1452,20 @@ export function EscrowPanel({
         pending.custodyCommitment,
       );
       setLocalCreate(local);
+
+      const completedSecrets = {
+        ...pending.secrets,
+        pendingCoordinationPayload:
+          undefined,
+        savedAt:
+          new Date().toISOString(),
+      };
+
+      await persistSecrets(
+        pending.custodyCommitment,
+        completedSecrets,
+      );
+
       setPendingPayerSetup(null);
       onSent({
         id: crypto.randomUUID(),
@@ -1603,8 +1650,13 @@ export function EscrowPanel({
             ),
         };
 
+        const persisted: StoredRekberSecrets = {
+          ...stored,
+          pendingCoordinationPayload: payload,
+        };
+
         pending = {
-          secrets: stored,
+          secrets: persisted,
           payload,
         };
         setPendingPayeeAcceptance(
@@ -1649,6 +1701,20 @@ export function EscrowPanel({
       };
 
       setLocalAccept(local);
+
+      const completedSecrets = {
+        ...pending.secrets,
+        pendingCoordinationPayload:
+          undefined,
+        savedAt:
+          new Date().toISOString(),
+      };
+
+      await persistSecrets(
+        custodyCommitment,
+        completedSecrets,
+      );
+
       setPendingPayeeAcceptance(null);
       onSent({
         id: crypto.randomUUID(),
