@@ -23,34 +23,46 @@ VINSS is not a general-purpose messenger.
 
 ## The real problem
 
-A deal begins before money moves.
+A freelance deal begins long before payment.
 
-Today, many direct digital deals still happen across disconnected tools:
+Imagine a designer and a client agreeing on a logo project.
+
+They may discuss the brief in Telegram or Discord, negotiate price and revisions in chat, share work through another service, exchange a wallet address separately, and finally settle through a wallet or escrow.
 
 ```text
-Telegram / Discord / DM
+Client needs a logo
         ↓
-terms buried in conversation
+brief + negotiation in chat
         ↓
-wallet address exchange
+price, deadline and revisions agreed
         ↓
-direct payment / middleman / escrow
+work is delivered
         ↓
-screenshots + transaction hashes
+payment / escrow happens separately
+        ↓
+screenshots + transaction hashes become the evidence
 ```
 
-That fragmentation creates practical problems:
+The problem is not simply that payment can fail.
 
-- the final agreement can become ambiguous;
-- payment becomes separated from the context that created it;
-- either party can act opportunistically after terms are agreed;
-- private commercial context can be exposed unnecessarily;
-- evidence becomes scattered across chats, wallets, screenshots, and explorers;
-- settlement can prove that money moved without clearly preserving what the parties agreed to.
+**The entire deal is fragmented.**
 
-VINSS is built around a different idea:
+- the final scope can become ambiguous;
+- agreed price, deadline, and revision terms are buried in conversation;
+- the freelancer can deliver work and still face payment risk;
+- the client can fund a deal without a clear fulfillment trail;
+- sensitive commercial terms may be exposed unnecessarily;
+- evidence of what was agreed, delivered, verified, and paid lives across different systems.
 
-> **A deal should move from conversation → agreement → settlement → evidence without forcing its private context into public view.**
+A blockchain transaction can prove that value moved.
+
+It does not automatically preserve the private agreement that caused that transaction.
+
+VINSS connects those stages in one Deal Room:
+
+> **Conversation → agreement → protected settlement → verifiable evidence.**
+
+The goal is to keep private commercial context shielded while making the final settlement independently verifiable.
 
 ---
 
