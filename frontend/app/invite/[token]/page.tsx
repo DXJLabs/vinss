@@ -14,6 +14,7 @@ import {
 import {
   decodeInviteToken,
   consumeInviteOnchain,
+  getInviteOnchainStateForSecret,
   type InvitePayload,
   type InviteScope,
 } from "@/lib/deal-room/invitation";
@@ -72,6 +73,170 @@ function markInviteConsumed(
     CONSUMED_STORAGE_KEY,
     JSON.stringify(next),
   );
+}
+
+
+const CONSUME_RECOVERY_PREFIX =
+  "vinss:invite-consume:v1:";
+
+interface PendingInviteConsume {
+  inviteId: string;
+  roomId: string;
+  walletAddress: string;
+  startedAt: number;
+}
+
+type InviteConsumeAccount =
+  Parameters<typeof consumeInviteOnchain>[0];
+
+function sameAddress(left: string, right: string) {
+  try {
+    return BigInt(left) === BigInt(right);
+  } catch {
+    return false;
+  }
+}
+
+function recoveryKey(inviteId: string) {
+  return CONSUME_RECOVERY_PREFIX + inviteId;
+}
+
+function loadRecovery(
+  invite: InvitePayload,
+  walletAddress: string,
+): PendingInviteConsume | null {
+  try {
+    const raw =
+      window.localStorage.getItem(
+        recoveryKey(invite.inviteId),
+      );
+
+    if (!raw) return null;
+
+    const saved =
+      JSON.parse(raw) as PendingInviteConsume;
+
+    const valid =
+      saved.inviteId === invite.inviteId &&
+      saved.roomId === invite.roomId &&
+      sameAddress(
+        saved.walletAddress,
+        walletAddress,
+      ) &&
+      Date.now() - saved.startedAt <=
+        60 * 60 * 1000;
+
+    if (!valid) {
+      window.localStorage.removeItem(
+        recoveryKey(invite.inviteId),
+      );
+      return null;
+    }
+
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function saveRecovery(
+  invite: InvitePayload,
+  walletAddress: string,
+) {
+  window.localStorage.setItem(
+    recoveryKey(invite.inviteId),
+    JSON.stringify({
+      inviteId: invite.inviteId,
+      roomId: invite.roomId,
+      walletAddress,
+      startedAt: Date.now(),
+    } satisfies PendingInviteConsume),
+  );
+}
+
+function clearRecovery(inviteId: string) {
+  window.localStorage.removeItem(
+    recoveryKey(inviteId),
+  );
+}
+
+async function waitConsumed(
+  onchainSecret: string,
+  attempts = 10,
+) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const state =
+        await getInviteOnchainStateForSecret(
+          onchainSecret,
+        );
+
+      if (state.exists && state.consumed) {
+        return true;
+      }
+    } catch {}
+
+    if (i + 1 < attempts) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1500),
+      );
+    }
+  }
+
+  return false;
+}
+
+async function ensureInviteConsumed(
+  account: InviteConsumeAccount,
+  invite: InvitePayload,
+) {
+  const pending =
+    loadRecovery(
+      invite,
+      account.address,
+    );
+
+  const state =
+    await getInviteOnchainStateForSecret(
+      invite.onchainSecret,
+    );
+
+  if (!state.exists) {
+    throw new Error("INVITE_NOT_FOUND");
+  }
+
+  if (state.consumed) {
+    if (pending) return;
+
+    throw new Error(
+      "INVITE_ALREADY_CONSUMED",
+    );
+  }
+
+  if (!pending) {
+    saveRecovery(
+      invite,
+      account.address,
+    );
+  }
+
+  try {
+    await consumeInviteOnchain(
+      account,
+      invite.onchainSecret,
+    );
+  } catch (error) {
+    if (
+      await waitConsumed(
+        invite.onchainSecret,
+      )
+    ) {
+      return;
+    }
+
+    clearRecovery(invite.inviteId);
+    throw error;
+  }
 }
 
 export default function InvitePage() {
@@ -180,9 +345,9 @@ export default function InvitePage() {
 
     void (async () => {
       try {
-        await consumeInviteOnchain(
+        await ensureInviteConsumed(
           session.account,
-          invite.onchainSecret,
+          invite,
         );
 
         const room: LocalRoom = {
@@ -310,6 +475,10 @@ export default function InvitePage() {
         }
 
         markInviteConsumed(
+          invite.inviteId,
+        );
+
+        clearRecovery(
           invite.inviteId,
         );
 
