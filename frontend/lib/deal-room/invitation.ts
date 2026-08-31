@@ -697,6 +697,8 @@ async function recoverConsumedInviteForWallet(
 
   let toBlock = latest;
 
+  // Use the same raw JSON-RPC event path as LiveTxFeed.
+  // LOG TX already proves this path can see InviteConsumed in production.
   for (
     let windowIndex = 0;
     windowIndex < 8 && toBlock >= 0;
@@ -705,23 +707,56 @@ async function recoverConsumedInviteForWallet(
     const fromBlock =
       Math.max(0, toBlock - 4_999);
 
-    const page =
-      await inviteReadProvider.getEvents({
-        address: CONTRACTS.invite,
-        from_block: {
-          block_number: fromBlock,
-        },
-        to_block: {
-          block_number: toBlock,
-        },
-        keys: [
-          [selector],
-          [toFelt(commitment)],
+    const response = await fetch(RPC_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `invite-recovery:${fromBlock}:${toBlock}`,
+        method: "starknet_getEvents",
+        params: [
+          {
+            from_block: {
+              block_number: fromBlock,
+            },
+            to_block: {
+              block_number: toBlock,
+            },
+            address: CONTRACTS.invite,
+            keys: [
+              [selector],
+              [toFelt(commitment)],
+            ],
+            chunk_size: 20,
+          },
         ],
-        chunk_size: 20,
-      });
+      }),
+    });
 
-    for (const event of page.events) {
+    if (!response.ok) {
+      throw new Error(
+        `Invite recovery RPC failed: ${response.status}`,
+      );
+    }
+
+    const payload = (await response.json()) as {
+      result?: {
+        events?: Array<{
+          transaction_hash?: string;
+        }>;
+      };
+      error?: unknown;
+    };
+
+    if (payload.error) {
+      throw new Error(
+        "Invite recovery RPC returned an error.",
+      );
+    }
+
+    for (const event of payload.result?.events ?? []) {
       const transactionHash =
         event.transaction_hash;
 
