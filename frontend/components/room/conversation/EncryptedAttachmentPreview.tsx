@@ -74,11 +74,19 @@ export function EncryptedAttachmentPreview({
   return (
     <div className="mb-2 overflow-hidden rounded-xl border border-wire/55 bg-black/15">
       {isImage && url && (
-        <img
-          src={url}
-          alt={attachment.fileName}
-          className="max-h-80 w-full object-contain"
-        />
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex max-h-[420px] min-h-48 w-full items-center justify-center bg-black/30"
+          aria-label={`Open ${attachment.fileName}`}
+        >
+          <img
+            src={url}
+            alt={attachment.fileName}
+            className="h-auto max-h-[420px] w-full object-contain"
+          />
+        </a>
       )}
 
       {isVideo && url && (
@@ -120,14 +128,25 @@ export function EncryptedAttachmentPreview({
           </button>
         )}
 
-        {url && !isImage && !isVideo && !isPdf && (
-          <a
-            href={url}
-            download={attachment.fileName}
-            className="shrink-0 rounded-lg border border-signal/25 px-2.5 py-1.5 text-[9px] text-signal/70"
-          >
-            Open
-          </a>
+        {url && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-wire/70 px-2.5 py-1.5 text-[9px] text-paper/55 transition hover:border-signal/30 hover:text-signal"
+            >
+              Open
+            </a>
+
+            <a
+              href={url}
+              download={attachment.fileName}
+              className="rounded-lg border border-signal/25 bg-signal/[0.05] px-2.5 py-1.5 text-[9px] text-signal/75 transition hover:bg-signal/10"
+            >
+              Download
+            </a>
+          </div>
         )}
       </div>
 

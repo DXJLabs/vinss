@@ -806,11 +806,21 @@ export function useRoomInvitation({
               : `You're invited to the VINSS Group ${group?.name ?? ""}.`,
           url: link,
         });
-      } catch {
-        // User cancelled native sharing.
-      }
 
-      return;
+        return;
+      } catch (err) {
+        if (
+          err instanceof DOMException &&
+          err.name === "AbortError"
+        ) {
+          return;
+        }
+
+        console.warn(
+          `[VINSS ${scope.toUpperCase()} INVITE SHARE] native share failed; copying instead`,
+          err,
+        );
+      }
     }
 
     await copyInviteLink(scope);
