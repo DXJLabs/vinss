@@ -330,13 +330,16 @@ export class RekberIndexer {
         latestBlock,
       );
 
-      const errorName = error instanceof Error ? error.name : "UnknownError";
+      const errorMessage =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error);
 
       console.error(
         `[rekber-indexer] ${createRekberIndexerIdentity(
           this.config.network,
           this.config.contracts.escrowRekber,
-        )} sync failed: ${errorName}`,
+        )} sync failed: ${errorMessage}`,
       );
     }
   }
