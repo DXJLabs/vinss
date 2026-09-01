@@ -81,6 +81,19 @@ jobs:
             fi
           }
 
+          PASSED=0
+
+          for RESULT in \
+            "$TYPESCRIPT_RESULT" \
+            "$INVITE_RESULT" \
+            "$PRIVACY_RESULT" \
+            "$BUILD_RESULT"
+          do
+            if [ "$RESULT" = "success" ]; then
+              PASSED=$((PASSED + 1))
+            fi
+          done
+
           {
             echo "## VINSS Frontend Test Report"
             echo ""
@@ -90,6 +103,8 @@ jobs:
             echo "| Invite recovery | $(icon "$INVITE_RESULT") |"
             echo "| Privacy boundaries | $(icon "$PRIVACY_RESULT") |"
             echo "| Production build | $(icon "$BUILD_RESULT") |"
+            echo ""
+            echo "**Total:** ${PASSED}/4 checks passed"
             echo ""
             echo "**Branch:** \`${GITHUB_REF_NAME}\`"
             echo ""

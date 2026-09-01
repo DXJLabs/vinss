@@ -787,7 +787,7 @@ export function useRoomInvitation({
 
   function shareInviteTo(
     scope: InviteScope,
-    target: "whatsapp" | "telegram",
+    target: "whatsapp" | "telegram" | "x",
   ) {
     const link =
       invites[scope].link;
@@ -799,14 +799,21 @@ export function useRoomInvitation({
         ? `You're invited to a private VINSS chat. ${link}`
         : `You're invited to the VINSS Group ${group?.name ?? ""}. ${link}`;
 
+    const shareText =
+      scope === "direct"
+        ? "You're invited to a private VINSS chat."
+        : `You're invited to the VINSS Group ${group?.name ?? ""}.`;
+
     const url =
       target === "whatsapp"
         ? `https://wa.me/?text=${encodeURIComponent(text)}`
-        : `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
-            scope === "direct"
-              ? "You're invited to a private VINSS chat."
-              : `You're invited to the VINSS Group ${group?.name ?? ""}.`,
-          )}`;
+        : target === "telegram"
+          ? `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
+              shareText,
+            )}`
+          : `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+              shareText,
+            )}&url=${encodeURIComponent(link)}`;
 
     window.open(
       url,

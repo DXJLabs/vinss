@@ -25,7 +25,7 @@ interface InviteCardProps {
   onCopy: () => void | Promise<void>;
   onShare: () => void | Promise<void>;
   onShareTo: (
-    target: "whatsapp" | "telegram",
+    target: "whatsapp" | "telegram" | "x",
   ) => void | Promise<void>;
 }
 
@@ -200,6 +200,21 @@ function InviteCard({
             >
               Telegram
             </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void onShareTo("x")
+              }
+              disabled={
+                disabled ||
+                state.pending ||
+                state.expired
+              }
+              className="col-span-2 h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
+            >
+              Share on X
+            </button>
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-3">
@@ -252,7 +267,7 @@ interface InvitationPanelProps {
   ) => void | Promise<void>;
   onShareTo: (
     scope: InviteScope,
-    target: "whatsapp" | "telegram",
+    target: "whatsapp" | "telegram" | "x",
   ) => void | Promise<void>;
 }
 
