@@ -57,4 +57,88 @@ expectSource(
   "Direct/group invite scopes are missing",
 );
 
+expectSource(
+  invitationLib,
+  "export const DIRECT_INVITE_TTL_MS = 60 * 60 * 1000",
+  "Direct invite TTL must remain one hour",
+);
+
+expectSource(
+  invitationLib,
+  'input.scope === "direct"',
+  "Direct invite creation path is missing",
+);
+
+expectSource(
+  invitationLib,
+  '? input.roomSecret',
+  "Direct invite must carry the encrypted room secret",
+);
+
+expectSource(
+  invitationLib,
+  'payload.scope === "direct"',
+  "Direct invite decode validation is missing",
+);
+
+expectSource(
+  invitationLib,
+  'typeof payload.roomSecret !== "string"',
+  "Direct invite must reject a missing room secret",
+);
+
+expectSource(
+  invitationLib,
+  'export type GroupInviteDuration = "24h" | "7d"',
+  "Group invite durations are missing",
+);
+
+expectSource(
+  invitationLib,
+  '"24h": 24 * 60 * 60 * 1000',
+  "Group 24-hour TTL is missing",
+);
+
+expectSource(
+  invitationLib,
+  '"7d": 7 * 24 * 60 * 60 * 1000',
+  "Group 7-day TTL is missing",
+);
+
+expectSource(
+  invitationLib,
+  'input.scope === "group"',
+  "Group invite creation path is missing",
+);
+
+expectSource(
+  invitationLib,
+  '"A Group invite must be bound to an admin-created Group."',
+  "Group invite metadata validation is missing",
+);
+
+expectSource(
+  invitationLib,
+  '? input.groupSecret',
+  "Group invite must carry its encrypted group secret",
+);
+
+expectSource(
+  invitePage,
+  'invite.scope ===\n          "group"',
+  "Group invite join path is missing",
+);
+
+expectSource(
+  invitePage,
+  "!room.roomSecret &&",
+  "Group invite must preserve existing direct room access",
+);
+
+expectSource(
+  invitePage,
+  "existingRoom?.roomSecret",
+  "Existing direct room secret preservation is missing",
+);
+
 console.log("invite recovery boundary checks: PASS");

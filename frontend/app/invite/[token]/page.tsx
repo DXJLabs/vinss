@@ -111,20 +111,25 @@ function loadRecovery(
     const saved =
       JSON.parse(raw) as PendingInviteConsume;
 
-    const valid =
+    const structurallyValid =
       saved.inviteId === invite.inviteId &&
       saved.roomId === invite.roomId &&
-      sameStarknetAddress(
-        saved.walletAddress,
-        walletAddress,
-      ) &&
       Date.now() - saved.startedAt <=
         60 * 60 * 1000;
 
-    if (!valid) {
+    if (!structurallyValid) {
       window.localStorage.removeItem(
         recoveryKey(invite.inviteId),
       );
+      return null;
+    }
+
+    if (
+      !sameStarknetAddress(
+        saved.walletAddress,
+        walletAddress,
+      )
+    ) {
       return null;
     }
 
