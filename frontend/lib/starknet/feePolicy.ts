@@ -164,7 +164,7 @@ export async function quoteRekberWorkflowFee(): Promise<bigint> {
    */
   await resolveRekberRevenueFeePolicy();
 
-  return 3n * 10n ** 18n;
+  return 1n * 10n ** 18n;
 }
 
 /**
