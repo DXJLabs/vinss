@@ -314,7 +314,7 @@ export default function CertificatePage() {
             </section>
 
             <Link
-              href="/rooms"
+              href="/#rooms"
               className="mt-6 flex w-full items-center justify-center rounded-2xl bg-signal px-5 py-4 text-sm font-semibold text-ink transition hover:brightness-110"
             >
               Start new deal

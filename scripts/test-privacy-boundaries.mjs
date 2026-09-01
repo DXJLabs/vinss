@@ -5,8 +5,11 @@ const agentClient = await readFile(
   new URL("../frontend/lib/agent.ts", import.meta.url),
   "utf8",
 );
-const rooms = await readFile(
-  new URL("../frontend/app/rooms/page.tsx", import.meta.url),
+const homeWorkspace = await readFile(
+  new URL(
+    "../frontend/components/home/HomeWorkspace.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 const agent = await readFile(
@@ -23,7 +26,7 @@ assert.equal(
   "Groq secret must never be referenced by frontend code",
 );
 assert.equal(
-  rooms.includes("secret {room.roomSecret}"),
+  homeWorkspace.includes("secret {room.roomSecret}"),
   false,
   "Room secret must not be rendered in the room list",
 );

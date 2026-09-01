@@ -17,7 +17,7 @@ export function RoomHeader({
     <header className="mb-4">
       <div className="flex items-center gap-2.5">
         <Link
-          href="/rooms"
+          href="/#rooms"
           aria-label="Back to rooms"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-vault/55 text-lg text-paper/55 ring-1 ring-wire/60 transition hover:text-signal hover:ring-signal/25"
         >

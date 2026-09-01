@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('VINSS invisible-agent UX', () => {
   test('keeps room secret hidden until access details', async ({ page }) => {
-    await page.goto('/rooms');
+    await page.goto('/#rooms');
     await page.getByPlaceholder(/Label lokal/).fill('OTC Demo');
     await page.getByRole('button', { name: 'Buat Room' }).click();
     await expect(page.getByText(/secret/i)).not.toBeVisible();
@@ -11,7 +11,7 @@ test.describe('VINSS invisible-agent UX', () => {
   });
 
   test('shows transparent fee without making fee the primary UX', async ({ page }) => {
-    await page.goto('/rooms');
+    await page.goto('/#rooms');
     await page.getByPlaceholder(/Label lokal/).fill('Fee Demo');
     await page.getByRole('button', { name: 'Buat Room' }).click();
     await page.locator('a[href^="/room/"]').first().click();
@@ -21,7 +21,7 @@ test.describe('VINSS invisible-agent UX', () => {
   });
 
   test('agent requires explicit context sharing', async ({ page }) => {
-    await page.goto('/rooms');
+    await page.goto('/#rooms');
     await page.getByPlaceholder(/Label lokal/).fill('Agent Demo');
     await page.getByRole('button', { name: 'Buat Room' }).click();
     await page.locator('a[href^="/room/"]').first().click();
