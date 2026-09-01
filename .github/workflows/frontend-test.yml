@@ -19,11 +19,14 @@ on:
 
 jobs:
   frontend:
+    name: VINSS Frontend Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     defaults:
       run:
         working-directory: frontend
+        shell: bash
 
     steps:
       - name: Checkout
@@ -40,15 +43,76 @@ jobs:
         run: npm ci
 
       - name: TypeScript
+        id: typescript
+        continue-on-error: true
         run: npx tsc --noEmit --pretty false
 
       - name: Invite recovery regression
+        id: invite
+        continue-on-error: true
         working-directory: .
         run: node scripts/test-invite-recovery.mjs
 
       - name: Privacy boundaries
+        id: privacy
+        continue-on-error: true
         working-directory: .
         run: node scripts/test-privacy-boundaries.mjs
 
-      - name: Build
+      - name: Production build
+        id: build
+        continue-on-error: true
         run: npm run build
+
+      - name: Frontend test report
+        if: always()
+        working-directory: .
+        env:
+          TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
+          INVITE_RESULT: ${{ steps.invite.outcome }}
+          PRIVACY_RESULT: ${{ steps.privacy.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+        run: |
+          icon() {
+            if [ "$1" = "success" ]; then
+              printf '✅ PASS'
+            else
+              printf '❌ FAIL'
+            fi
+          }
+
+          {
+            echo "## VINSS Frontend Test Report"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| TypeScript | $(icon "$TYPESCRIPT_RESULT") |"
+            echo "| Invite recovery | $(icon "$INVITE_RESULT") |"
+            echo "| Privacy boundaries | $(icon "$PRIVACY_RESULT") |"
+            echo "| Production build | $(icon "$BUILD_RESULT") |"
+            echo ""
+            echo "**Branch:** \`${GITHUB_REF_NAME}\`"
+            echo ""
+            echo "**Commit:** \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce frontend test result
+        if: always()
+        working-directory: .
+        env:
+          TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
+          INVITE_RESULT: ${{ steps.invite.outcome }}
+          PRIVACY_RESULT: ${{ steps.privacy.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [ "$TYPESCRIPT_RESULT" != "success" ] ||
+             [ "$INVITE_RESULT" != "success" ] ||
+             [ "$PRIVACY_RESULT" != "success" ] ||
+             [ "$BUILD_RESULT" != "success" ]; then
+            echo "One or more frontend checks failed."
+            exit 1
+          fi
+
+          echo "All frontend checks passed."
