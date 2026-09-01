@@ -7,7 +7,9 @@ import {
 
 import {
   resolveStarkName,
+  resolveStarkProfile,
   shortIdentityAddress,
+  type StarkIdentityProfile,
 } from "@/lib/starknet/identity";
 
 export function useStarkIdentity(
@@ -18,10 +20,16 @@ export function useStarkIdentity(
       null,
     );
 
+  const [profile, setProfile] =
+    useState<StarkIdentityProfile | null>(
+      null,
+    );
+
   useEffect(() => {
     let cancelled = false;
 
     setStarkName(null);
+    setProfile(null);
 
     if (!address) {
       return () => {
@@ -29,13 +37,38 @@ export function useStarkIdentity(
       };
     }
 
-    void resolveStarkName(
-      address,
-    ).then((name) => {
-      if (!cancelled) {
-        setStarkName(name);
-      }
-    });
+    /*
+     * Name and profile lookups are public RPC reads. They run independently
+     * so a missing profile picture can never prevent the existing .stark name
+     * fallback from resolving.
+     */
+    void Promise.all([
+      resolveStarkName(
+        address,
+      ),
+      resolveStarkProfile(
+        address,
+      ),
+    ]).then(
+      ([
+        name,
+        nextProfile,
+      ]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setProfile(
+          nextProfile,
+        );
+
+        setStarkName(
+          name ||
+            nextProfile?.name ||
+            null,
+        );
+      },
+    );
 
     return () => {
       cancelled = true;
@@ -44,6 +77,18 @@ export function useStarkIdentity(
 
   return {
     starkName,
+    profile,
+    profilePicture:
+      profile?.profilePicture ??
+      null,
+    proofOfPersonhood:
+      profile?.proofOfPersonhood ??
+      false,
+
+    /*
+     * The display label may be human-readable, but the caller must keep using
+     * the original address for every security-sensitive VINSS operation.
+     */
     label:
       starkName ||
       shortIdentityAddress(

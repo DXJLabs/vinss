@@ -1,9 +1,21 @@
 "use client";
 
+import {
+  useEffect,
+  useState,
+} from "react";
 import Link from "next/link";
 import type { ConversationParticipant } from "@/components/room/conversation/types";
 import { ConversationAvatarIcon } from "@/components/room/conversation/ConversationAvatarIcon";
-import { StarkIdentity } from "@/components/StarkIdentity";
+import {
+  resolveStarkAddress,
+} from "@/lib/starknet/identity";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
+import {
+  useStarkIdentity,
+} from "@/hooks/useStarkIdentity";
 
 interface DirectConversationListProps {
   roomId: string;
@@ -30,12 +42,170 @@ function ChatIcon() {
   );
 }
 
+function DirectParticipantRow({
+  participant,
+  onOpen,
+}: {
+  participant: ConversationParticipant;
+  onOpen: () => void;
+}) {
+  const {
+    label,
+    profilePicture,
+  } = useStarkIdentity(
+    participant.address,
+  );
+
+  const [avatarFailed, setAvatarFailed] =
+    useState(false);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [profilePicture]);
+
+  /*
+   * Starknet ID avatars are presentation-only. The row key, click target,
+   * routing identity, and every later VINSS action continue to use the
+   * participant's canonical Starknet address.
+   */
+  const showRemoteAvatar =
+    Boolean(profilePicture) &&
+    !avatarFailed &&
+    !/\/identicons\/0(?:$|[?#])/i.test(
+      profilePicture ?? "",
+    );
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-signal/[0.035]"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-signal/[0.045] text-signal/75 ring-1 ring-signal/15">
+        {showRemoteAvatar ? (
+          <img
+            src={
+              profilePicture ??
+              undefined
+            }
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={() =>
+              setAvatarFailed(true)
+            }
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <ConversationAvatarIcon
+            seed={`chat:${participant.address}`}
+          />
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p
+          className="truncate text-sm text-paper/72"
+          title={participant.address}
+        >
+          {label}
+        </p>
+      </div>
+
+      <span
+        className="text-paper/25"
+        aria-hidden="true"
+      >
+        →
+      </span>
+    </button>
+  );
+}
+
 export function DirectConversationList({
   roomId,
   canInvite,
   participants,
   onOpenChat,
 }: DirectConversationListProps) {
+  const [
+    identityQuery,
+    setIdentityQuery,
+  ] = useState("");
+
+  const [
+    identityBusy,
+    setIdentityBusy,
+  ] = useState(false);
+
+  const [
+    identityError,
+    setIdentityError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  async function openIdentity() {
+    const query =
+      identityQuery.trim();
+
+    if (!query) {
+      return;
+    }
+
+    setIdentityBusy(true);
+    setIdentityError(null);
+
+    try {
+      let address: string | null =
+        query;
+
+      if (
+        !query
+          .toLowerCase()
+          .startsWith("0x")
+      ) {
+        address =
+          await resolveStarkAddress(
+            query,
+          );
+      }
+
+      if (!address) {
+        setIdentityError(
+          "Starknet ID not found.",
+        );
+        return;
+      }
+
+      /*
+       * Resolving a .stark name never grants access. VINSS only opens the
+       * conversation if the resolved address is already an admitted room
+       * participant, preserving the existing one-time invite boundary.
+       */
+      const participant =
+        participants.find(
+          (item) =>
+            sameStarknetAddress(
+              item.address,
+              address,
+            ),
+        );
+
+      if (!participant) {
+        setIdentityError(
+          "This identity has not joined this room.",
+        );
+        return;
+      }
+
+      onOpenChat(
+        participant.address,
+      );
+    } finally {
+      setIdentityBusy(false);
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-b-2xl border border-t-0 border-wire/70 bg-black/[0.08]">
       {participants.length === 0 ? (
@@ -78,33 +248,70 @@ export function DirectConversationList({
             )}
           </div>
 
-          <div className="divide-y divide-wire/45">
-            {participants.map((participant) => (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void openIdentity();
+            }}
+            className="border-b border-wire/45 px-4 py-3"
+          >
+            <div className="flex gap-2">
+              <input
+                value={identityQuery}
+                onChange={(event) => {
+                  setIdentityQuery(
+                    event.target.value,
+                  );
+                  setIdentityError(
+                    null,
+                  );
+                }}
+                placeholder="Open bob.stark or 0x…"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="min-w-0 flex-1 rounded-lg border border-wire/60 bg-black/10 px-3 py-2 text-[11px] text-paper/70 outline-none transition placeholder:text-paper/20 focus:border-signal/35"
+              />
+
               <button
-                key={participant.address}
-                type="button"
-                onClick={() => onOpenChat(participant.address)}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-signal/[0.035]"
+                type="submit"
+                disabled={
+                  identityBusy ||
+                  !identityQuery.trim()
+                }
+                className="rounded-lg px-3 py-2 font-display text-[8px] uppercase tracking-[0.12em] text-signal/70 ring-1 ring-signal/20 transition hover:bg-signal/[0.07] disabled:opacity-30"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal/[0.045] text-signal/75 ring-1 ring-signal/15">
-                  <ConversationAvatarIcon seed={`chat:${participant.address}`} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-paper/72">
-                    <StarkIdentity
-                      address={
-                        participant.address
-                      }
-                    />
-                  </p>
-                </div>
-
-                <span className="text-paper/25" aria-hidden="true">
-                  →
-                </span>
+                {identityBusy
+                  ? "Resolving…"
+                  : "Open"}
               </button>
-            ))}
+            </div>
+
+            {identityError && (
+              <p className="mt-2 text-[9px] text-danger">
+                {identityError}
+              </p>
+            )}
+          </form>
+
+          <div className="divide-y divide-wire/45">
+            {participants.map(
+              (participant) => (
+                <DirectParticipantRow
+                  key={
+                    participant.address
+                  }
+                  participant={
+                    participant
+                  }
+                  onOpen={() =>
+                    onOpenChat(
+                      participant.address,
+                    )
+                  }
+                />
+              ),
+            )}
           </div>
         </>
       )}
