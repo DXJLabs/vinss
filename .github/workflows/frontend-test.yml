@@ -1,0 +1,54 @@
+name: Frontend Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "scripts/test-invite-recovery.mjs"
+      - "scripts/test-privacy-boundaries.mjs"
+      - ".github/workflows/frontend-test.yml"
+
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "scripts/test-invite-recovery.mjs"
+      - "scripts/test-privacy-boundaries.mjs"
+      - ".github/workflows/frontend-test.yml"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit --pretty false
+
+      - name: Invite recovery regression
+        working-directory: .
+        run: node scripts/test-invite-recovery.mjs
+
+      - name: Privacy boundaries
+        working-directory: .
+        run: node scripts/test-privacy-boundaries.mjs
+
+      - name: Build
+        run: npm run build

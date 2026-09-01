@@ -18,6 +18,9 @@ import {
   type InvitePayload,
   type InviteScope,
 } from "@/lib/deal-room/invitation";
+import {
+  sameStarknetAddress,
+} from "@/lib/privacy/participantKeys";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 import {
@@ -95,6 +98,7 @@ function recoveryKey(inviteId: string) {
 
 function loadRecovery(
   invite: InvitePayload,
+  walletAddress: string,
 ): PendingInviteConsume | null {
   try {
     const raw =
@@ -110,10 +114,17 @@ function loadRecovery(
     const valid =
       saved.inviteId === invite.inviteId &&
       saved.roomId === invite.roomId &&
+      sameStarknetAddress(
+        saved.walletAddress,
+        walletAddress,
+      ) &&
       Date.now() - saved.startedAt <=
         60 * 60 * 1000;
 
     if (!valid) {
+      window.localStorage.removeItem(
+        recoveryKey(invite.inviteId),
+      );
       return null;
     }
 
@@ -175,7 +186,10 @@ async function ensureInviteConsumed(
   invite: InvitePayload,
 ) {
   const pending =
-    loadRecovery(invite);
+    loadRecovery(
+      invite,
+      account.address,
+    );
 
   let state = null;
 
