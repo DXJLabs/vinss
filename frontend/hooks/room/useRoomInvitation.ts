@@ -785,6 +785,36 @@ export function useRoomInvitation({
     }
   }
 
+  function shareInviteTo(
+    scope: InviteScope,
+    target: "whatsapp" | "telegram",
+  ) {
+    const link =
+      invites[scope].link;
+
+    if (!link) return;
+
+    const text =
+      scope === "direct"
+        ? `You're invited to a private VINSS chat. ${link}`
+        : `You're invited to the VINSS Group ${group?.name ?? ""}. ${link}`;
+
+    const url =
+      target === "whatsapp"
+        ? `https://wa.me/?text=${encodeURIComponent(text)}`
+        : `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
+            scope === "direct"
+              ? "You're invited to a private VINSS chat."
+              : `You're invited to the VINSS Group ${group?.name ?? ""}.`,
+          )}`;
+
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+
   async function shareInviteLink(
     scope: InviteScope,
   ) {
@@ -851,5 +881,6 @@ export function useRoomInvitation({
     createInviteLink,
     copyInviteLink,
     shareInviteLink,
+    shareInviteTo,
   };
 }

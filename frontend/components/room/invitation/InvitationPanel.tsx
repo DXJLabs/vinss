@@ -24,6 +24,9 @@ interface InviteCardProps {
   onCreate: () => void | Promise<void>;
   onCopy: () => void | Promise<void>;
   onShare: () => void | Promise<void>;
+  onShareTo: (
+    target: "whatsapp" | "telegram",
+  ) => void | Promise<void>;
 }
 
 function InviteCard({
@@ -36,6 +39,7 @@ function InviteCard({
   onCreate,
   onCopy,
   onShare,
+  onShareTo,
 }: InviteCardProps) {
   const groupMode =
     scope === "group";
@@ -166,6 +170,36 @@ function InviteCard({
             >
               Share
             </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void onShareTo("whatsapp")
+              }
+              disabled={
+                disabled ||
+                state.pending ||
+                state.expired
+              }
+              className="h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
+            >
+              WhatsApp
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void onShareTo("telegram")
+              }
+              disabled={
+                disabled ||
+                state.pending ||
+                state.expired
+              }
+              className="h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
+            >
+              Telegram
+            </button>
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-3">
@@ -216,6 +250,10 @@ interface InvitationPanelProps {
   onShare: (
     scope: InviteScope,
   ) => void | Promise<void>;
+  onShareTo: (
+    scope: InviteScope,
+    target: "whatsapp" | "telegram",
+  ) => void | Promise<void>;
 }
 
 export function InvitationPanel({
@@ -232,6 +270,7 @@ export function InvitationPanel({
   onCreate,
   onCopy,
   onShare,
+  onShareTo,
 }: InvitationPanelProps) {
   const groupMode =
     scope === "group";
@@ -315,6 +354,12 @@ export function InvitationPanel({
               onShare={() =>
                 onShare("group")
               }
+              onShareTo={(target) =>
+                onShareTo(
+                  "group",
+                  target,
+                )
+              }
             />
           ) : (
             <div className="border border-dashed border-wire p-5">
@@ -346,6 +391,12 @@ export function InvitationPanel({
             }
             onShare={() =>
               onShare("direct")
+            }
+            onShareTo={(target) =>
+              onShareTo(
+                "direct",
+                target,
+              )
             }
           />
         )}

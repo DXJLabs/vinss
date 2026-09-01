@@ -202,6 +202,7 @@ export default function DealRoomPage() {
     createInviteLink,
     copyInviteLink,
     shareInviteLink,
+    shareInviteTo,
   } = useRoomInvitation({
     room,
     group: accessGroup,
@@ -611,6 +612,9 @@ export default function DealRoomPage() {
             }
             onShare={
               shareInviteLink
+            }
+            onShareTo={
+              shareInviteTo
             }
           />
         )}
