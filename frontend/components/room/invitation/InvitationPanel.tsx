@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type {
   GroupInviteDuration,
   InviteScope,
@@ -43,6 +44,11 @@ function InviteCard({
 }: InviteCardProps) {
   const groupMode =
     scope === "group";
+
+  const [
+    shareOpen,
+    setShareOpen,
+  ] = useState(false);
 
   return (
     <article className="rounded-2xl border border-wire/55 bg-vault/15 p-3.5 sm:p-4">
@@ -138,7 +144,7 @@ function InviteCard({
             </p>
           </div>
 
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="relative mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() =>
@@ -159,62 +165,78 @@ function InviteCard({
             <button
               type="button"
               onClick={() =>
-                void onShare()
+                setShareOpen(
+                  (value) => !value,
+                )
               }
               disabled={
                 disabled ||
                 state.pending ||
                 state.expired
               }
+              aria-expanded={shareOpen}
               className="h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
             >
               Share
             </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onShareTo("whatsapp")
-              }
-              disabled={
-                disabled ||
-                state.pending ||
-                state.expired
-              }
-              className="h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
-            >
-              WhatsApp
-            </button>
+            {shareOpen && (
+              <div className="col-span-2 border border-wire bg-ink/95 p-2 shadow-xl backdrop-blur">
+                <p className="px-2 pb-2 pt-1 font-display text-[8px] uppercase tracking-[0.14em] text-paper/25">
+                  Share invite
+                </p>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onShareTo("telegram")
-              }
-              disabled={
-                disabled ||
-                state.pending ||
-                state.expired
-              }
-              className="h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
-            >
-              Telegram
-            </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareOpen(false);
+                      void onShareTo(
+                        "whatsapp",
+                      );
+                    }}
+                    className="h-10 border border-wire px-3 font-display text-[8px] uppercase tracking-[0.12em] text-paper/55 transition hover:border-signal/40 hover:text-signal"
+                  >
+                    WhatsApp
+                  </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onShareTo("x")
-              }
-              disabled={
-                disabled ||
-                state.pending ||
-                state.expired
-              }
-              className="col-span-2 h-10 border border-wire px-3 font-display text-[9px] uppercase tracking-[0.14em] text-paper/50 transition hover:border-signal/40 hover:text-signal disabled:opacity-30"
-            >
-              Share on X
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareOpen(false);
+                      void onShareTo(
+                        "telegram",
+                      );
+                    }}
+                    className="h-10 border border-wire px-3 font-display text-[8px] uppercase tracking-[0.12em] text-paper/55 transition hover:border-signal/40 hover:text-signal"
+                  >
+                    Telegram
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareOpen(false);
+                      void onShareTo("x");
+                    }}
+                    className="h-10 border border-wire px-3 font-display text-[8px] uppercase tracking-[0.12em] text-paper/55 transition hover:border-signal/40 hover:text-signal"
+                  >
+                    X
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareOpen(false);
+                      void onShare();
+                    }}
+                    className="h-10 border border-signal/30 px-3 font-display text-[8px] uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink"
+                  >
+                    More…
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-3">
