@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { QRCodeSVG } from "qrcode.react";
-import { useState } from "react";
+import { QRCodeCanvas } from "qrcode.react";
+import { useEffect, useRef, useState } from "react";
 import type {
   GroupInviteDuration,
   InviteScope,
@@ -55,6 +55,87 @@ function InviteCard({
     qrOpen,
     setQrOpen,
   ] = useState(false);
+
+  const qrCanvasRef =
+    useRef<HTMLCanvasElement | null>(null);
+
+  const [
+    qrShareFile,
+    setQrShareFile,
+  ] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (!qrOpen) {
+      setQrShareFile(null);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      qrCanvasRef.current?.toBlob(
+        (blob) => {
+          if (!blob) return;
+
+          setQrShareFile(
+            new File(
+              [blob],
+              "vinss-private-invite.png",
+              {
+                type: "image/png",
+              },
+            ),
+          );
+        },
+        "image/png",
+      );
+    }, 50);
+
+    return () =>
+      window.clearTimeout(timer);
+  }, [qrOpen, state.link]);
+
+
+
+  const shareQr = async () => {
+    if (!qrShareFile) {
+      window.alert(
+        "QR is still preparing. Try again.",
+      );
+      return;
+    }
+
+    if (
+      typeof navigator.share !== "function"
+    ) {
+      window.alert(
+        "QR image sharing is not available in this browser.",
+      );
+      return;
+    }
+
+    try {
+      // Share the QR image only.
+      // No long invite URL is attached.
+      await navigator.share({
+        files: [qrShareFile],
+      });
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+      console.error(
+        "[VINSS] QR image share failed",
+        error,
+      );
+
+      window.alert(
+        "Could not share the QR image.",
+      );
+    }
+  };
 
   return (
     <article className="rounded-2xl border border-wire/55 bg-vault/15 p-3.5 sm:p-4">
@@ -236,9 +317,20 @@ function InviteCard({
                       setShareOpen(false);
                       void onShare();
                     }}
-                    className="h-10 border border-signal/30 px-3 font-display text-[8px] uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink"
+                    className="h-10 border border-wire px-3 font-display text-[8px] uppercase tracking-[0.12em] text-paper/55 transition hover:border-signal/40 hover:text-signal"
                   >
                     More…
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareOpen(false);
+                      setQrOpen(true);
+                    }}
+                    className="col-span-2 h-10 border border-signal/30 px-3 font-display text-[8px] uppercase tracking-[0.12em] text-signal transition hover:bg-signal hover:text-ink"
+                  >
+                    Share QR
                   </button>
                 </div>
               </div>
@@ -257,9 +349,7 @@ function InviteCard({
                 <button
                   type="button"
                   onClick={() =>
-                    setQrOpen(
-                      (value) => !value,
-                    )
+                    setQrOpen(true)
                   }
                   disabled={
                     disabled ||
@@ -269,9 +359,7 @@ function InviteCard({
                   aria-expanded={qrOpen}
                   className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal disabled:opacity-30"
                 >
-                  {qrOpen
-                    ? "Hide QR"
-                    : "Show QR"}
+                  Show QR
                 </button>
 
                 <button
@@ -290,18 +378,84 @@ function InviteCard({
             {qrOpen &&
               !state.pending &&
               !state.expired && (
-                <div className="mt-3 flex flex-col items-center border border-wire bg-paper p-4">
-                  <QRCodeSVG
-                    value={state.link}
-                    size={184}
-                    level="M"
-                    marginSize={1}
-                    aria-label="VINSS invite QR code"
-                  />
+                <div
+                  className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/85 px-4 backdrop-blur-sm"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="VINSS invite QR code"
+                  onClick={() =>
+                    setQrOpen(false)
+                  }
+                >
+                  <div
+                    className="w-full max-w-sm rounded-2xl border border-wire bg-vault p-4 shadow-2xl"
+                    onClick={(event) =>
+                      event.stopPropagation()
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-display text-[9px] uppercase tracking-[0.16em] text-signal">
+                          Invite QR
+                        </p>
 
-                  <p className="mt-3 text-center font-display text-[8px] uppercase tracking-[0.12em] text-ink/45">
-                    Scan to open invite
-                  </p>
+                        <p className="mt-1 text-[10px] text-paper/30">
+                          Scan to open this one-time invite.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQrOpen(false)
+                        }
+                        aria-label="Close QR"
+                        className="flex h-9 w-9 items-center justify-center border border-wire text-lg text-paper/40 transition hover:border-signal/40 hover:text-signal"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div className="mt-4 flex justify-center bg-paper p-5">
+                      <QRCodeCanvas
+                        value={state.link}
+                        size={240}
+                        level="M"
+                        marginSize={1}
+                        aria-label="VINSS invite QR code"
+                      />
+
+                      <QRCodeCanvas
+                        ref={qrCanvasRef}
+                        value={state.link}
+                        size={768}
+                        level="M"
+                        marginSize={2}
+                        aria-hidden="true"
+                        className="fixed -left-[9999px] top-0"
+                      />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void shareQr()
+                        }
+                        disabled={!qrShareFile}
+                        className="col-span-2 h-11 border border-signal bg-signal px-3 font-display text-[9px] uppercase tracking-[0.14em] text-ink transition hover:bg-transparent hover:text-signal disabled:cursor-wait disabled:opacity-30"
+                      >
+                        {qrShareFile
+                          ? "Share QR"
+                          : "Preparing…"}
+                      </button>
+
+                    </div>
+
+                    <p className="mt-3 text-center text-[9px] leading-relaxed text-paper/20">
+                      One-time invite · expires in {state.countdown}
+                    </p>
+                  </div>
                 </div>
               )}
           </div>

@@ -148,7 +148,7 @@ expectSource(
 
 expectSource(
   invitationPanel,
-  'import { QRCodeSVG } from "qrcode.react"',
+  'import { QRCodeCanvas } from "qrcode.react"',
   "Invite QR renderer is missing",
 );
 
@@ -160,8 +160,20 @@ expectSource(
 
 expectSource(
   invitationPanel,
-  '"Show QR"',
+  "Show QR",
   "Invite QR toggle is missing",
+);
+
+expectSource(
+  invitationPanel,
+  "Share QR",
+  "Invite QR sharing action is missing",
+);
+
+expectSource(
+  invitationPanel,
+  "navigator.share",
+  "Invite QR native sharing path is missing",
 );
 
 expectSource(
