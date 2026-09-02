@@ -5,6 +5,11 @@ const invitePage = fs.readFileSync(
   "utf8",
 );
 
+const invitationPanel = fs.readFileSync(
+  "frontend/components/room/invitation/InvitationPanel.tsx",
+  "utf8",
+);
+
 const invitationLib = fs.readFileSync(
   "frontend/lib/deal-room/invitation.ts",
   "utf8",
@@ -139,6 +144,30 @@ expectSource(
   invitePage,
   "existingRoom?.roomSecret",
   "Existing direct room secret preservation is missing",
+);
+
+expectSource(
+  invitationPanel,
+  'import { QRCodeSVG } from "qrcode.react"',
+  "Invite QR renderer is missing",
+);
+
+expectSource(
+  invitationPanel,
+  'value={state.link}',
+  "Invite QR must encode the complete client-side invite link",
+);
+
+expectSource(
+  invitationPanel,
+  '"Show QR"',
+  "Invite QR toggle is missing",
+);
+
+expectSource(
+  invitationPanel,
+  '!state.expired',
+  "Expired invites must not render an active QR code",
 );
 
 console.log("invite recovery boundary checks: PASS");

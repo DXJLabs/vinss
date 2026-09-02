@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import type {
   GroupInviteDuration,
@@ -48,6 +49,11 @@ function InviteCard({
   const [
     shareOpen,
     setShareOpen,
+  ] = useState(false);
+
+  const [
+    qrOpen,
+    setQrOpen,
   ] = useState(false);
 
   return (
@@ -239,23 +245,65 @@ function InviteCard({
             )}
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-wire/60 pt-3">
-            <span className="text-[10px] text-paper/25">
-              {state.expired
-                ? "Invite expired"
-                : `Expires in ${state.countdown}`}
-            </span>
+          <div className="mt-3 border-t border-wire/60 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] text-paper/25">
+                {state.expired
+                  ? "Invite expired"
+                  : `Expires in ${state.countdown}`}
+              </span>
 
-            <button
-              type="button"
-              onClick={() =>
-                void onCreate()
-              }
-              disabled={disabled}
-              className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal disabled:opacity-30"
-            >
-              Regenerate
-            </button>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setQrOpen(
+                      (value) => !value,
+                    )
+                  }
+                  disabled={
+                    disabled ||
+                    state.pending ||
+                    state.expired
+                  }
+                  aria-expanded={qrOpen}
+                  className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal disabled:opacity-30"
+                >
+                  {qrOpen
+                    ? "Hide QR"
+                    : "Show QR"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onCreate()
+                  }
+                  disabled={disabled}
+                  className="font-display text-[8px] uppercase tracking-[0.12em] text-paper/30 transition hover:text-signal disabled:opacity-30"
+                >
+                  Regenerate
+                </button>
+              </div>
+            </div>
+
+            {qrOpen &&
+              !state.pending &&
+              !state.expired && (
+                <div className="mt-3 flex flex-col items-center border border-wire bg-paper p-4">
+                  <QRCodeSVG
+                    value={state.link}
+                    size={184}
+                    level="M"
+                    marginSize={1}
+                    aria-label="VINSS invite QR code"
+                  />
+
+                  <p className="mt-3 text-center font-display text-[8px] uppercase tracking-[0.12em] text-ink/45">
+                    Scan to open invite
+                  </p>
+                </div>
+              )}
           </div>
         </div>
       )}
