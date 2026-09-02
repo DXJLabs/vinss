@@ -105,7 +105,7 @@ export function WalletConnectButton({
 
   const capability = connected
     ? session?.strk20Capable
-      ? "STRK20 · SUPPORTED"
+      ? "STRK20 · Shielded"
       : "STRK20 · NOT SUPPORTED"
     : "NOT CONNECTED";
 
@@ -139,7 +139,7 @@ export function WalletConnectButton({
 
       {connected &&
         showCapability && (
-          <div className="flex items-center gap-1.5 pr-1 text-[9px] font-mono uppercase tracking-wider text-paper/45">
+          <div className="flex items-center gap-1.5 pr-1 text-[9px] font-mono tracking-wider text-paper/45">
             <span className="h-1.5 w-1.5 rounded-full bg-signal" />
 
             <span>

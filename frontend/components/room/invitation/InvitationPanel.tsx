@@ -95,10 +95,17 @@ function InviteCard({
 
 
 
+  const [
+    qrShareError,
+    setQrShareError,
+  ] = useState<string | null>(null);
+
   const shareQr = async () => {
+    setQrShareError(null);
+
     if (!qrShareFile) {
-      window.alert(
-        "QR is still preparing. Try again.",
+      setQrShareError(
+        "QR image is still preparing.",
       );
       return;
     }
@@ -106,17 +113,29 @@ function InviteCard({
     if (
       typeof navigator.share !== "function"
     ) {
-      window.alert(
-        "QR image sharing is not available in this browser.",
+      setQrShareError(
+        "Native sharing is unavailable.",
+      );
+      return;
+    }
+
+    if (
+      typeof navigator.canShare === "function" &&
+      !navigator.canShare({
+        files: [qrShareFile],
+      })
+    ) {
+      setQrShareError(
+        "This browser can share links, but not image files.",
       );
       return;
     }
 
     try {
-      // Share the QR image only.
-      // No long invite URL is attached.
       await navigator.share({
         files: [qrShareFile],
+        title: "VINSS Invite",
+        text: "VINSS Private Invite",
       });
     } catch (error) {
       if (
@@ -126,14 +145,17 @@ function InviteCard({
         return;
       }
 
+      const message =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error);
+
       console.error(
         "[VINSS] QR image share failed",
         error,
       );
 
-      window.alert(
-        "Could not share the QR image.",
-      );
+      setQrShareError(message);
     }
   };
 
@@ -450,6 +472,11 @@ function InviteCard({
                           : "Preparing…"}
                       </button>
 
+                      {qrShareError && (
+                        <p className="col-span-2 px-2 text-center text-[9px] leading-relaxed text-paper/35">
+                          {qrShareError}
+                        </p>
+                      )}
                     </div>
 
                     <p className="mt-3 text-center text-[9px] leading-relaxed text-paper/20">

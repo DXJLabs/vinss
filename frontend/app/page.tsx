@@ -271,11 +271,11 @@ export default function HomePage() {
           <div className={styles.footerScan} aria-hidden="true" />
 
           <div className={styles.footerTop}>
-            <p className={styles.footerTitle}>Resources</p>
-            <nav aria-label="VINSS resources" className={styles.resourceNav}>
-              <a className={styles.resourceLink} href={`${GITHUB_URL}#how-it-works`} rel="noreferrer" target="_blank">How VINSS works ↗</a>
-              <a className={styles.resourceLink} href={`${GITHUB_URL}/blob/main/STRK20_INTEGRATION_PLAN.md`} rel="noreferrer" target="_blank">Technical docs ↗</a>
-              <a className={styles.resourceLink} href={`${GITHUB_URL}/blob/main/TEST_REPORT.md`} rel="noreferrer" target="_blank">Test evidence ↗</a>
+            <p className={styles.footerTitle}>Documentation</p>
+            <nav aria-label="VINSS documentation" className={styles.resourceNav}>
+              <a className={styles.resourceLink} href={`${GITHUB_URL}/tree/main/docs/product`} rel="noreferrer" target="_blank">Product docs ↗</a>
+              <a className={styles.resourceLink} href={`${GITHUB_URL}/tree/main/docs/technical`} rel="noreferrer" target="_blank">Technical docs ↗</a>
+              <a className={styles.resourceLink} href={`${GITHUB_URL}/blob/main/TEST_REPORT.md`} rel="noreferrer" target="_blank">Test report ↗</a>
             </nav>
           </div>
 

@@ -139,7 +139,6 @@ export function HomeWorkspace() {
   const [rooms, setRooms] = useState<LocalRoom[]>([]);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [label, setLabel] = useState("");
-  const [inviteLink, setInviteLink] = useState("");
   const [creating, setCreating] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState<LocalRoom | null>(null);
   const [activity, setActivity] = useState<ActivitySnapshot>({
@@ -192,11 +191,6 @@ export function HomeWorkspace() {
     }
   }
 
-  function openInvitation() {
-    const value = inviteLink.trim();
-    if (!value) return;
-    window.location.assign(value);
-  }
 
   function deleteLocalRoom(room: LocalRoom) {
     const next = rooms.filter((entry) => entry.id !== room.id);
@@ -277,7 +271,7 @@ export function HomeWorkspace() {
                   No room on this device
                 </p>
                 <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-paper/34">
-                  Create a room for a specific agreement, or open a private invitation from your counterparty.
+                  Create a room for a specific agreement.
                 </p>
                 <button
                   className="mt-6 rounded-lg border border-signal/60 bg-signal/[0.045] px-4 py-2.5 font-display text-[8px] uppercase tracking-[0.18em] text-signal transition hover:bg-signal hover:text-ink"
@@ -335,15 +329,6 @@ export function HomeWorkspace() {
                 ))}
               </div>
             )}
-
-            <button
-              className="group flex w-full items-center justify-between border-t border-[#294255]/70 px-4 py-3.5 text-left font-display text-[8px] uppercase tracking-[0.16em] text-paper/34 transition hover:bg-signal/[0.025] hover:text-signal sm:px-5"
-              onClick={() => setLauncherOpen(true)}
-              type="button"
-            >
-              <span>Open invitation</span>
-              <span className="text-sm transition group-hover:rotate-90">+</span>
-            </button>
           </section>
 
           <aside data-guide="live-tx" id="live-tx">
@@ -456,37 +441,7 @@ export function HomeWorkspace() {
                 </button>
               </form>
 
-              <details className="group mt-5 border-t border-wire/70 pt-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                  <div>
-                    <p className="font-display text-[9px] uppercase tracking-[0.18em] text-paper/48">Have an invitation?</p>
-                    <p className="mt-1 text-[10px] text-paper/28">Join an existing private room</p>
-                  </div>
-                  <span className="font-display text-paper/30 transition group-open:rotate-45">+</span>
-                </summary>
-                <div className="pt-4">
-                  <input
-                    className="h-11 w-full rounded-lg border border-wire bg-ink/70 px-3 text-xs text-paper outline-none transition placeholder:text-paper/18 focus:border-signal/55"
-                    onChange={(event) => setInviteLink(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        openInvitation();
-                      }
-                    }}
-                    placeholder="Paste private invite link"
-                    value={inviteLink}
-                  />
-                  <button
-                    className="mt-3 h-11 w-full rounded-lg border border-wire font-display text-[9px] uppercase tracking-[0.17em] text-paper/50 transition hover:border-signal/50 hover:text-signal disabled:cursor-not-allowed disabled:opacity-25"
-                    disabled={!inviteLink.trim()}
-                    onClick={openInvitation}
-                    type="button"
-                  >
-                    Open invitation →
-                  </button>
-                </div>
-              </details>
+
             </div>
           </section>
         </div>

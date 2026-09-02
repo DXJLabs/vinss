@@ -1,12 +1,30 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+const termsPath = path.join(
+  process.cwd(),
+  "content",
+  "legal",
+  "terms-of-service.md",
+);
+
+const terms = fs.readFileSync(termsPath, "utf8");
 
 export default function TermsPage() {
   return (
-    <main className="mx-auto min-h-screen w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12">
+    <main className="mx-auto min-h-screen w-full max-w-4xl px-5 py-8 sm:px-8 sm:py-12">
       <header className="flex items-center justify-between border-y border-wire/75 py-3">
-        <Link className="font-display text-sm tracking-[0.2em] text-paper" href="/">
+        <Link
+          className="font-display text-sm tracking-[0.2em] text-paper"
+          href="/"
+        >
           VINSS
         </Link>
+
         <Link
           className="font-display text-[8px] uppercase tracking-[0.17em] text-signal"
           href="/"
@@ -15,67 +33,63 @@ export default function TermsPage() {
         </Link>
       </header>
 
-      <article className="py-12 sm:py-16">
-        <p className="font-display text-[9px] uppercase tracking-[0.26em] text-signal">
-          Product terms
-        </p>
-        <h1 className="mt-4 text-4xl font-medium tracking-tight text-paper">
-          Terms of use
-        </h1>
-        <p className="mt-4 text-sm leading-7 text-paper/45">
-          VINSS is under active development. These plain-language terms describe
-          the current product boundary and are not a promise of features that
-          have not been verified.
-        </p>
+      <article
+        className="
+          py-10 text-sm leading-7 text-paper/55
+          [&_h1]:mb-3 [&_h1]:mt-3
+          [&_h1]:text-3xl [&_h1]:font-medium
+          [&_h1]:tracking-tight [&_h1]:text-paper
+          sm:[&_h1]:text-4xl
 
-        <div className="mt-10 divide-y divide-wire/70 border-y border-wire/70">
-          <section className="py-6">
-            <h2 className="font-display text-xs uppercase tracking-[0.16em] text-paper/80">
-              User control
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-paper/42">
-              You control your wallet, approvals, room invitations, and private
-              deal context. VINSS Agent must not sign or move funds on your
-              behalf.
-            </p>
-          </section>
+          [&_h2]:mb-4 [&_h2]:mt-12
+          [&_h2]:border-t [&_h2]:border-wire/60
+          [&_h2]:pt-7 [&_h2]:font-display
+          [&_h2]:text-sm [&_h2]:uppercase
+          [&_h2]:tracking-[0.13em] [&_h2]:text-paper/85
 
-          <section className="py-6">
-            <h2 className="font-display text-xs uppercase tracking-[0.16em] text-paper/80">
-              Privacy boundary
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-paper/42">
-              Client-side encryption does not erase public blockchain metadata.
-              Pool interactions, timing, commitments, contract interactions, and
-              settlement results may remain publicly observable.
-            </p>
-          </section>
+          [&_h3]:mb-2 [&_h3]:mt-7
+          [&_h3]:font-display [&_h3]:text-xs
+          [&_h3]:text-paper/75
 
-          <section className="py-6">
-            <h2 className="font-display text-xs uppercase tracking-[0.16em] text-paper/80">
-              Early-stage software
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-paper/42">
-              Review deal terms and wallet prompts before approving an action.
-              Features marked integration or pending must not be treated as
-              production-verified settlement guarantees.
-            </p>
-          </section>
+          [&_p]:my-4
+          [&_strong]:font-medium [&_strong]:text-paper/80
 
-          <section className="py-6">
-            <h2 className="font-display text-xs uppercase tracking-[0.16em] text-paper/80">
-              No custody by interface
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-paper/42">
-              The VINSS interface coordinates wallet and contract actions. The
-              interface itself does not receive your wallet private key.
-            </p>
-          </section>
-        </div>
+          [&_ul]:my-4 [&_ul]:list-disc
+          [&_ul]:space-y-1 [&_ul]:pl-6
 
-        <p className="mt-8 font-display text-[8px] uppercase leading-5 tracking-[0.13em] text-paper/25">
-          Last updated · August 22, 2026
-        </p>
+          [&_ol]:my-4 [&_ol]:list-decimal
+          [&_ol]:space-y-1 [&_ol]:pl-6
+
+          [&_blockquote]:my-6
+          [&_blockquote]:border-l-2
+          [&_blockquote]:border-signal/50
+          [&_blockquote]:bg-signal/[0.025]
+          [&_blockquote]:px-4
+          [&_blockquote]:py-2
+          [&_blockquote]:text-paper/50
+
+          [&_pre]:my-5
+          [&_pre]:overflow-x-auto
+          [&_pre]:border
+          [&_pre]:border-wire/60
+          [&_pre]:bg-ink/70
+          [&_pre]:p-4
+          [&_pre]:font-mono
+          [&_pre]:text-xs
+          [&_pre]:leading-6
+          [&_pre]:text-paper/55
+
+          [&_a]:text-signal
+          [&_a]:underline
+          [&_a]:underline-offset-4
+
+          [&_hr]:my-8
+          [&_hr]:border-wire/60
+        "
+      >
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {terms}
+        </ReactMarkdown>
       </article>
     </main>
   );
