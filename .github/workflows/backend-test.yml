@@ -1,0 +1,169 @@
+name: Backend Test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "scripts/test-privacy-boundaries.mjs"
+      - ".github/workflows/backend-test.yml"
+
+  pull_request:
+    paths:
+      - "backend/**"
+      - "scripts/test-privacy-boundaries.mjs"
+      - ".github/workflows/backend-test.yml"
+
+jobs:
+  backend:
+    name: VINSS Backend Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        id: typescript
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Backend tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/vinss-backend-tests.log
+
+      - name: Backend test report
+        if: always()
+        working-directory: .
+        env:
+          TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
+          TEST_RESULT: ${{ steps.tests.outcome }}
+        run: |
+          icon() {
+            if [ "$1" = "success" ]; then
+              printf '✅ PASS'
+            else
+              printf '❌ FAIL'
+            fi
+          }
+
+          TEST_COUNT="$(
+            grep -E 'tests [0-9]+$' /tmp/vinss-backend-tests.log 2>/dev/null |
+            tail -1 |
+            awk '{print $NF}'
+          )"
+
+          PASS_COUNT="$(
+            grep -E 'pass [0-9]+$' /tmp/vinss-backend-tests.log 2>/dev/null |
+            tail -1 |
+            awk '{print $NF}'
+          )"
+
+          FAILED_COUNT="$(
+            grep -E 'fail [0-9]+$' /tmp/vinss-backend-tests.log 2>/dev/null |
+            tail -1 |
+            awk '{print $NF}'
+          )"
+
+          PASSED_CHECKS=0
+
+          if [ "$TYPESCRIPT_RESULT" = "success" ]; then
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+          fi
+
+          if [ "$TEST_RESULT" = "success" ]; then
+            PASSED_CHECKS=$((PASSED_CHECKS + 1))
+          fi
+
+          {
+            echo "## VINSS Backend Test Report"
+            echo ""
+            echo "| Validation | Result |"
+            echo "|---|---|"
+            echo "| TypeScript | $(icon "$TYPESCRIPT_RESULT") |"
+            echo "| Backend test suite | $(icon "$TEST_RESULT") |"
+            echo ""
+            echo "**Checks:** ${PASSED_CHECKS}/2 passed"
+            echo ""
+            echo "**Tests:** ${PASS_COUNT:-0}/${TEST_COUNT:-0} passed"
+            echo ""
+            echo "**Failed:** ${FAILED_COUNT:-0}"
+            echo ""
+
+            echo "### ✅ Passed Tests"
+            echo ""
+
+            if grep -q '^✔ ' /tmp/vinss-backend-tests.log 2>/dev/null; then
+              grep '^✔ ' /tmp/vinss-backend-tests.log |
+                sed -E \
+                  -e 's/^✔ /- ✅ /' \
+                  -e 's/ \([0-9.]+ms\)$//'
+            else
+              echo "- No individual passing tests were reported."
+            fi
+
+            echo ""
+            echo "### 🔐 Boundary Checks"
+            echo ""
+
+            if grep -qE 'checks: PASS$' /tmp/vinss-backend-tests.log 2>/dev/null; then
+              grep -E 'checks: PASS$' /tmp/vinss-backend-tests.log |
+                sed 's/^/- ✅ /'
+            else
+              echo "- No boundary checks were reported."
+            fi
+
+            if grep -q '^✖ ' /tmp/vinss-backend-tests.log 2>/dev/null; then
+              echo ""
+              echo "### ❌ Failed Tests"
+              echo ""
+              grep '^✖ ' /tmp/vinss-backend-tests.log |
+                sed -E \
+                  -e 's/^✖ /- ❌ /' \
+                  -e 's/ \([0-9.]+ms\)$//'
+            fi
+
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Branch:** \`${GITHUB_REF_NAME}\`"
+            echo ""
+            echo "**Commit:** \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce backend test result
+        if: always()
+        working-directory: .
+        env:
+          TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
+          TEST_RESULT: ${{ steps.tests.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [ "$TYPESCRIPT_RESULT" != "success" ] ||
+             [ "$TEST_RESULT" != "success" ]; then
+            echo "One or more backend checks failed."
+            exit 1
+          fi
+
+          echo "All backend checks passed."
