@@ -29,6 +29,7 @@ import {
   findLatestDisputeAgentSignature,
   requestDisputeAgentChallenge,
   signDisputeAgentChallenge,
+  type DisputeAgentChallenge,
   type DisputeAgentResult,
   type EscrowCoordinationRecord,
 } from "@/lib/deal-room/disputeAgent";
@@ -170,9 +171,54 @@ export function useDisputeAgentReview({
     ]);
 
   const [
-    caseCommitment,
-    setCaseCommitment,
-  ] = useState("");
+    challenge,
+    setChallenge,
+  ] =
+    useState<DisputeAgentChallenge | null>(
+      null,
+    );
+
+  const caseCommitment =
+    challenge?.caseCommitment ?? "";
+
+  /*
+   * Once both explicit evidence packets exist, fetch the canonical backend
+   * challenge. This restores the case commitment after refresh and lets both
+   * participants discover signatures for the exact same case.
+   */
+  useEffect(() => {
+    if (
+      !session ||
+      !disputeCase ||
+      !binding
+    ) {
+      setChallenge(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void requestDisputeAgentChallenge(
+      disputeCase,
+      binding,
+    )
+      .then((next) => {
+        if (!cancelled) {
+          setChallenge(next);
+        }
+      })
+      .catch(() => {
+        // signReview() surfaces the error if the user attempts to continue.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session,
+    disputeCase,
+    binding,
+  ]);
 
   const payerSignature =
     caseCommitment
@@ -265,7 +311,7 @@ export function useDisputeAgentReview({
 
         // New evidence invalidates old local evaluation display.
         setResult(null);
-        setCaseCommitment("");
+        setChallenge(null);
       },
     );
   }
@@ -289,23 +335,23 @@ export function useDisputeAgentReview({
          * challenge. This signature is consent to Agent review, not consent to
          * the Agent's eventual decision.
          */
-        const challenge =
-          await requestDisputeAgentChallenge(
+        const nextChallenge =
+          challenge ??
+          (await requestDisputeAgentChallenge(
             disputeCase,
             binding,
-          );
+          ));
 
         const signature =
           await signDisputeAgentChallenge(
             session!.account,
-            challenge.typedData[
+            nextChallenge.typedData[
               role
             ],
           );
 
-        setCaseCommitment(
-          challenge
-            .caseCommitment,
+        setChallenge(
+          nextChallenge,
         );
 
         await onSendCoordination(
@@ -317,7 +363,7 @@ export function useDisputeAgentReview({
             custodyCommitment:
               custodyCommitment.toString(),
             disputeAgentCaseCommitment:
-              challenge
+              nextChallenge
                 .caseCommitment,
             disputeAgentSignature:
               signature,
@@ -354,8 +400,8 @@ export function useDisputeAgentReview({
           );
 
         /*
-         * D2.1 is deliberately fail-closed: this result is advisory only and
-         * cannot execute or authorize a resolver transaction.
+         * The Agent has no signer. Any on-chain authorization can occur only
+         * through the backend's deterministic policy gate and dedicated resolver.
          */
         setResult(next);
       },
@@ -368,14 +414,15 @@ export function useDisputeAgentReview({
   /*
    * The second verified arbitration signature is the trigger.
    *
-   * Only the Payer client starts evaluation so Alice/Bob do not race two LLM
-   * requests for the same case. The backend still verifies BOTH signatures.
-   * If evaluation fails, the guard is released after a short delay so normal
-   * room synchronization can retry without another wallet signature.
+   * Either original participant may trigger evaluation after both signatures.
+   * The backend persists the first verified decision, so concurrent requests
+   * converge on the same result instead of creating multiple LLM decisions.
+   * If evaluation fails, room synchronization may retry without another
+   * wallet signature.
    */
   useEffect(() => {
     if (
-      role !== "payer" ||
+      !role ||
       !caseCommitment ||
       !payerSignature ||
       !payeeSignature ||
@@ -439,6 +486,7 @@ export function useDisputeAgentReview({
 
   return {
     result,
+    disputeCase,
     ownPacket,
     payerPacket,
     payeePacket,

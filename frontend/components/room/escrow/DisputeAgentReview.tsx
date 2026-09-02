@@ -114,7 +114,7 @@ export function DisputeAgentReview({
         VINSS Dispute Agent
       </p>
       <p className="mt-2 text-[10px] leading-relaxed text-paper/40">
-        Only evidence you explicitly submit here is disclosed for Agent review. Normal room chat remains private. The Agent cannot move funds or resolve custody.
+        Only evidence you explicitly submit here is disclosed for Agent review. Normal room chat remains private. The Agent has no signing key. If deterministic policy gates pass and AutoResolve is enabled, the dedicated resolver may authorize the resulting split on-chain.
       </p>
 
       {!review.ownPacket ? (
@@ -190,10 +190,136 @@ export function DisputeAgentReview({
       </div>
 
       {review.bothPackets &&
+        review.disputeCase && (
+          <details
+            className="mt-3 rounded-xl border border-paper/10 bg-black/10 p-3"
+            open
+          >
+            <summary className="cursor-pointer text-[9px] font-medium uppercase tracking-[0.12em] text-paper/55">
+              Review exact dispute case
+            </summary>
+
+            <div className="mt-3 space-y-3 text-[10px] leading-relaxed text-paper/45">
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                  Accepted deal
+                </p>
+                <p className="mt-1 text-paper/60">
+                  {review.disputeCase.acceptedTerms.summary}
+                </p>
+                <p className="mt-1">
+                  Asset: {review.disputeCase.principal.asset}
+                  {" · "}
+                  Raw principal: {review.disputeCase.principal.rawAmount}
+                  {" · "}
+                  Verification: {review.disputeCase.verificationClass}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                  Obligations
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {review.disputeCase.acceptedTerms.obligations.map(
+                    (item, index) => (
+                      <li key={`obligation-${index}`}>
+                        {item}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                  Completion criteria
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {review.disputeCase.acceptedTerms.completionCriteria.map(
+                    (item, index) => (
+                      <li key={`criterion-${index}`}>
+                        {item}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+
+              {[
+                ["Payer", review.disputeCase.payer],
+                ["Payee", review.disputeCase.payee],
+              ].map(([label, packet]) => {
+                const party =
+                  packet as typeof review.disputeCase.payer;
+
+                return (
+                  <div key={label as string}>
+                    <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                      {label as string} evidence
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-paper/60">
+                      {party.statement}
+                    </p>
+
+                    <div className="mt-2 space-y-1">
+                      {party.evidence.map(
+                        (item, index) => (
+                          <div
+                            className="rounded-lg bg-paper/[0.025] px-2.5 py-2"
+                            key={`${label}-${index}`}
+                          >
+                            <p className="text-paper/35">
+                              {item.kind} · {item.label}
+                            </p>
+                            <p className="mt-1 break-words text-paper/55">
+                              {item.value}
+                            </p>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div>
+                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                  Fulfillment snapshot
+                </p>
+                <p className="mt-1">
+                  Submitted: {review.disputeCase.fulfillment.submitted ? "yes" : "no"}
+                  {" · "}
+                  Confirmed: {review.disputeCase.fulfillment.confirmed ? "yes" : "no"}
+                </p>
+                <p className="mt-1 break-all font-mono text-[9px] text-paper/35">
+                  Evidence commitment: {review.disputeCase.fulfillment.evidenceCommitment}
+                </p>
+              </div>
+
+              {review.caseCommitment && (
+                <div>
+                  <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
+                    Case commitment
+                  </p>
+                  <p className="mt-1 break-all font-mono text-[9px] text-signal/70">
+                    {review.caseCommitment}
+                  </p>
+                </div>
+              )}
+
+              <p className="border-t border-paper/10 pt-3 text-[9px] text-paper/28">
+                Only this disclosed case is submitted to VINSS Dispute Agent. Unrelated room chat and room secrets are not included.
+              </p>
+            </div>
+          </details>
+        )}
+
+      {review.bothPackets &&
         !review.ownSignature && (
           <div className="mt-3">
             <p className="text-[9px] leading-relaxed text-paper/30">
-              Both evidence packets are ready. Sign the backend-issued SNIP-12 challenge to consent to review of this exact case. This signature does not accept the Agent decision.
+              Both evidence packets are ready. Sign the backend-issued SNIP-12 challenge to consent to review and possible AutoSplit authorization for this exact case. This does not mean you agree with the counterparty's claims.
             </p>
             <button
               type="button"
@@ -245,7 +371,7 @@ export function DisputeAgentReview({
                 : "Both signatures verified"}
             </p>
             <p className="mt-1 text-[10px] leading-relaxed text-paper/40">
-              Agent arbitration starts automatically.
+              Verified dispute evaluation starts automatically.
             </p>
           </div>
         )}
@@ -303,8 +429,9 @@ export function DisputeAgentReview({
             Policy:{" "}
             {review.result
               .policy.status}
-            {" · "}
-            Execution disabled
+            {" · Execution: "}
+            {review.result
+              .execution.status}
           </p>
         </div>
       )}

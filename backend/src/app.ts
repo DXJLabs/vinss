@@ -156,6 +156,7 @@ export function createApp(dependencies: AppDependencies): Express {
     app.use(
       createDisputeRouter(
         dependencies.config,
+        dependencies.database,
       ),
     );
   }

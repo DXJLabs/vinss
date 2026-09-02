@@ -12,6 +12,9 @@ import { RekberEventSource, RekberIndexer } from "./indexer/rekber.js";
 import { RekberStore } from "./indexer/rekberStore.js";
 import { DiscoveryIndexer } from "./indexer/service.js";
 import { DiscoveryStore } from "./indexer/store.js";
+import {
+  initializeDisputeDecisionStorage,
+} from "./dispute/store.js";
 import { initializeFeedbackStorage } from "./routes/feedback.js";
 
 async function main(): Promise<void> {
@@ -22,6 +25,10 @@ async function main(): Promise<void> {
   const certificateStore = new CertificateStore(database);
 
   try {
+    await initializeDisputeDecisionStorage(
+      database,
+    );
+
     await initializeFeedbackStorage(
       database,
     );
