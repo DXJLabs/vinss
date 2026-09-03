@@ -1936,24 +1936,6 @@ export function EscrowPanel({
           new Date().toISOString(),
       });
 
-      void onSendCoordination(
-        peerAddress,
-        {
-          kind: "fund_confirm",
-          dealOfferLocator,
-          custodyCommitment:
-            custodyCommitment.toString(),
-          parentEscrowLocator:
-            acceptRecord?.actionLocator,
-          fundingTransactionHash:
-            result.transactionHash,
-        },
-      ).catch((error) => {
-        console.error(
-          "[VINSS REKBER FUND CONFIRM]",
-          error,
-        );
-      });
     } catch (error) {
       if (
         pendingRekberActionRef.current !==
