@@ -2263,24 +2263,18 @@ export function EscrowPanel({
   ];
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-wire/70 bg-[#0b1015]/95 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
-      <header className="border-b border-wire/60 bg-black/10 px-4 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-signal/75">
-              Private payment protection
-            </p>
-            <h3 className="mt-1 text-xl font-medium text-paper">
-              Rekber Escrow
-            </h3>
-            <p className="mt-1 max-w-sm text-xs leading-relaxed text-paper/38">
-              The Payer secures the agreed funds. The Payee receives them after the settlement conditions are satisfied.
-            </p>
-          </div>
-
+    <section className="overflow-hidden">
+      <header className="px-1 pb-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-paper/30">
+            Settlement progress
+          </p>
+          <span className="text-[9px] text-signal/55">
+            Private · On-chain
+          </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-5 gap-1">
+        <div className="mt-3 grid grid-cols-5 gap-1.5">
           {steps.map((label, index) => {
             const position = index + 1;
             const done = stage > position;
@@ -2313,7 +2307,7 @@ export function EscrowPanel({
         </div>
       </header>
 
-      <div className="vinss-panel-step space-y-4 p-4">
+      <div className="vinss-panel-step space-y-3 px-1 pb-4 pt-2">
         {!accepted ? (
           <div className="rounded-xl bg-paper/[0.025] p-4">
             <p className="text-sm font-medium text-paper/70">
@@ -2342,7 +2336,7 @@ export function EscrowPanel({
         )}
 
         {accepted && createAction && role && (
-          <div className="rounded-xl bg-paper/[0.025] p-3 ring-1 ring-wire/55">
+          <div className="border-t border-wire/35 px-1 py-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[9px] uppercase tracking-[0.12em] text-paper/28">
@@ -2575,8 +2569,8 @@ export function EscrowPanel({
           !funded &&
           role === "payer" && (
             <div className="space-y-3">
-              <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
-                <p className="text-[9px] uppercase tracking-[0.13em] text-signal/70">
+              <div className="rounded-lg border-l-2 border-signal/45 bg-signal/[0.025] px-3 py-3">
+                <p className="text-[9px] uppercase tracking-[0.13em] text-signal/75">
                   Payee approval complete
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-paper/38">
@@ -2588,8 +2582,8 @@ export function EscrowPanel({
                 amount={accepted.amount}
                 asset={accepted.asset}
               />
-              <p className="rounded-xl border border-amber/25 bg-amber/[0.04] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
-                <strong className="text-amber">Payment step:</strong> this is the first action that moves the agreed amount plus the current on-chain VINSS service fee into Rekber Escrow.
+              <p className="rounded-lg bg-amber/[0.035] px-3 py-2.5 text-[10px] leading-relaxed text-paper/42">
+                <strong className="text-amber">Payment step:</strong> the principal and current on-chain VINSS fee move into Rekber only after you confirm in Ready X.
               </p>
               <button
                 type="button"

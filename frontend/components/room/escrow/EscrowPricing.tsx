@@ -70,6 +70,32 @@ function formatBaseUnits(
   return `${whole}.${fraction}`;
 }
 
+function formatTokenDisplay(
+  value: string,
+  maxFraction = 6,
+): string {
+  const separator =
+    value.indexOf(".");
+
+  if (separator === -1) {
+    return value;
+  }
+
+  const whole =
+    value.slice(0, separator);
+  const fraction =
+    value.slice(separator + 1);
+
+  const shortFraction =
+    fraction
+      .slice(0, maxFraction)
+      .replace(/0+$/, "");
+
+  return shortFraction
+    ? `${whole}.${shortFraction}`
+    : whole;
+}
+
 export function formatUsd(
   value: number,
 ): string {
@@ -231,11 +257,16 @@ function PriceLine({
   const canEstimateUsd =
     usdPrice !== null &&
     Number.isFinite(numericValue);
+  const displayValue =
+    formatTokenDisplay(tokenValue);
 
   return (
-    <div className="text-right">
-      <p className="text-xs font-medium text-paper/78">
-        {tokenValue} {asset}
+    <div className="min-w-0 text-right">
+      <p
+        className="whitespace-nowrap text-xs font-medium text-paper/78"
+        title={`${tokenValue} ${asset}`}
+      >
+        {displayValue} {asset}
       </p>
       {canEstimateUsd && (
         <p className="mt-0.5 text-[9px] text-paper/34">
@@ -271,7 +302,7 @@ export function EscrowAgreedAmount({
     ) && numericAmount > 0;
 
   return (
-    <div className="rounded-xl bg-paper/[0.025] p-4">
+    <div className="px-1 py-2">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[9px] uppercase tracking-[0.13em] text-paper/28">
@@ -436,19 +467,22 @@ export function EscrowPriceBreakdown({
             feeBaseUnits,
           settlementAsset.decimals,
         );
+  const feeExceedsPrincipal =
+    feeBaseUnits !== null &&
+    feeBaseUnits > principalBaseUnits;
 
   return (
-    <div className="rounded-xl bg-paper/[0.025] p-4 ring-1 ring-wire/55">
+    <div className="rounded-xl bg-paper/[0.018] px-3 py-3">
       <div className="flex items-center justify-between gap-4">
         <p className="text-[9px] uppercase tracking-[0.13em] text-paper/34">
-          Price breakdown
+          Payment
         </p>
         <span className="text-[8px] uppercase tracking-[0.1em] text-signal/60">
           On-chain quote
         </span>
       </div>
 
-      <div className="mt-3 divide-y divide-wire/40">
+      <div className="mt-2 divide-y divide-wire/30">
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-xs text-paper/48">
             Principal amount
@@ -481,12 +515,15 @@ export function EscrowPriceBreakdown({
 
         <div className="flex items-center justify-between gap-4 py-3">
           <span className="text-sm font-medium text-paper/75">
-            Total secured
+            Total to secure
           </span>
           {totalToken !== null ? (
             <div className="text-right">
-              <p className="text-sm font-semibold text-paper">
-                {totalToken} {asset}
+              <p
+                className="whitespace-nowrap text-sm font-semibold text-paper"
+                title={`${totalToken} ${asset}`}
+              >
+                {formatTokenDisplay(totalToken)} {asset}
               </p>
               {price !== null &&
                 Number.isFinite(
@@ -509,7 +546,36 @@ export function EscrowPriceBreakdown({
         </div>
       </div>
 
-      <div className="mt-3 rounded-lg bg-paper/[0.025] px-3 py-2.5 text-[9px] leading-relaxed text-paper/30">
+      {feeExceedsPrincipal && (
+        <div className="mt-2 rounded-lg bg-amber/[0.035] px-3 py-2 text-[9px] leading-relaxed text-amber/75">
+          Minimum fee pricing applies to this small payment.
+        </div>
+      )}
+
+      {feeToken !== null &&
+        totalToken !== null &&
+        (
+          formatTokenDisplay(feeToken) !==
+            feeToken ||
+          formatTokenDisplay(totalToken) !==
+            totalToken
+        ) && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[8px] text-paper/28">
+              Exact on-chain amounts
+            </summary>
+            <div className="mt-2 space-y-1 break-all font-mono text-[8px] leading-relaxed text-paper/32">
+              <p>
+                Fee · {feeToken} {asset}
+              </p>
+              <p>
+                Total · {totalToken} {asset}
+              </p>
+            </div>
+          </details>
+        )}
+
+      <div className="mt-3 px-1 text-[9px] leading-relaxed text-paper/30">
         {quoteError ? (
           "The Rekber contract quote is unavailable. Funding stays blocked until the current on-chain fee can be read."
         ) : quoteLoading ? (
@@ -521,7 +587,7 @@ export function EscrowPriceBreakdown({
         )}
       </div>
 
-      <div className="mt-2 text-[8px] leading-relaxed text-paper/22">
+      <div className="mt-2 border-t border-wire/25 pt-2 text-[8px] leading-relaxed text-paper/24">
         {supported ? (
           price !== null ? (
             <>

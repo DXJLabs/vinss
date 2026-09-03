@@ -858,11 +858,11 @@ export default function DealRoomPage() {
             >
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-paper/75">
-                    Escrow
+                  <p className="text-sm font-medium text-paper/90">
+                    Rekber Escrow
                   </p>
-                  <p className="mt-0.5 text-[9px] text-paper/28">
-                    Protect payment for an accepted agreement.
+                  <p className="mt-0.5 text-[9px] text-paper/32">
+                    Secure payment for an accepted agreement.
                   </p>
                 </div>
 
