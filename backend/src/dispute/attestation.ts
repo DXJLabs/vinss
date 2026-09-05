@@ -149,7 +149,7 @@ export interface DisputeAttestations {
   payee: string[];
 }
 
-function parseSignature(
+export function sanitizeDisputeSignature(
   value: unknown,
   role: DisputeRole,
 ): string[] {
@@ -206,22 +206,23 @@ export function sanitizeDisputeAttestations(
 
   return {
     payer:
-      parseSignature(
+      sanitizeDisputeSignature(
         record.payer,
         "payer",
       ),
     payee:
-      parseSignature(
+      sanitizeDisputeSignature(
         record.payee,
         "payee",
       ),
   };
 }
 
-export async function verifyDisputeAttestations(
+export async function verifyDisputeAttestation(
   config: AppConfig,
   disputeCase: DisputeCase,
-  attestations: DisputeAttestations,
+  role: DisputeRole,
+  signature: string[],
 ): Promise<void> {
   const provider =
     new RpcProvider({
@@ -229,41 +230,54 @@ export async function verifyDisputeAttestations(
         config.rpcUrl,
     });
 
-  for (
-    const role of
-    [
-      "payer",
-      "payee",
-    ] as const
-  ) {
-    const wallet =
-      walletForRole(
-        disputeCase,
-        role,
+  const wallet =
+    walletForRole(
+      disputeCase,
+      role,
+    );
+
+  let valid = false;
+
+  try {
+    valid =
+      await verifyMessageInStarknet(
+        provider,
+        buildDisputeAttestationTypedData(
+          config,
+          disputeCase,
+          role,
+        ),
+        signature,
+        wallet,
       );
-
-    let valid = false;
-
-    try {
-      valid =
-        await verifyMessageInStarknet(
-          provider,
-          buildDisputeAttestationTypedData(
-            config,
-            disputeCase,
-            role,
-          ),
-          attestations[role],
-          wallet,
-        );
-    } catch {
-      valid = false;
-    }
-
-    if (!valid) {
-      throw new Error(
-        `${role} dispute attestation is not valid for the declared wallet.`,
-      );
-    }
+  } catch {
+    valid = false;
   }
+
+  if (!valid) {
+    throw new Error(
+      `${role} dispute attestation is not valid for the declared wallet.`,
+    );
+  }
+}
+
+export async function verifyDisputeAttestations(
+  config: AppConfig,
+  disputeCase: DisputeCase,
+  attestations: DisputeAttestations,
+): Promise<void> {
+  await Promise.all([
+    verifyDisputeAttestation(
+      config,
+      disputeCase,
+      "payer",
+      attestations.payer,
+    ),
+    verifyDisputeAttestation(
+      config,
+      disputeCase,
+      "payee",
+      attestations.payee,
+    ),
+  ]);
 }

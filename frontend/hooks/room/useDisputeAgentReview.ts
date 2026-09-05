@@ -27,8 +27,10 @@ import {
   evaluateDisputeWithAgent,
   findLatestDisputeAgentPacket,
   findLatestDisputeAgentSignature,
+  getDisputeAgentAttestationStatus,
   requestDisputeAgentChallenge,
   signDisputeAgentChallenge,
+  submitDisputeAgentAttestation,
   type DisputeAgentChallenge,
   type DisputeAgentResult,
   type EscrowCoordinationRecord,
@@ -178,49 +180,158 @@ export function useDisputeAgentReview({
       null,
     );
 
-  const caseCommitment =
-    challenge?.caseCommitment ?? "";
+  const [
+    challengeLoading,
+    setChallengeLoading,
+  ] = useState(false);
+
+  const [
+    challengeError,
+    setChallengeError,
+  ] = useState("");
 
   /*
-   * Once both explicit evidence packets exist, fetch the canonical backend
-   * challenge. This restores the case commitment after refresh and lets both
-   * participants discover signatures for the exact same case.
+   * Rekber custody is polled frequently and therefore `state` may receive a
+   * new object identity even when every relevant value is unchanged.
+   * Serialize only the actual challenge input so identical cases do not
+   * continuously cancel/restart the backend challenge request.
+   */
+  const challengeInputKey =
+    useMemo(
+      () =>
+        disputeCase && binding
+          ? JSON.stringify({
+              case: disputeCase,
+              binding,
+            })
+          : "",
+      [
+        disputeCase,
+        binding,
+      ],
+    );
+
+  const challengeRequestKeyRef =
+    useRef("");
+
+  const challengeReady =
+    Boolean(
+      challenge &&
+      challengeInputKey &&
+      challengeRequestKeyRef.current ===
+        challengeInputKey,
+    );
+
+  const caseCommitment =
+    challengeReady
+      ? challenge!.caseCommitment
+      : "";
+
+  async function prepareChallenge(
+    force = false,
+  ): Promise<boolean> {
+    if (
+      !session ||
+      !disputeCase ||
+      !binding ||
+      !challengeInputKey
+    ) {
+      return false;
+    }
+
+    if (
+      !force &&
+      challengeRequestKeyRef.current ===
+        challengeInputKey
+    ) {
+      return challengeReady;
+    }
+
+    const requestKey =
+      challengeInputKey;
+
+    challengeRequestKeyRef.current =
+      requestKey;
+
+    setChallenge(null);
+    setChallengeLoading(true);
+    setChallengeError("");
+
+    try {
+      const next =
+        await requestDisputeAgentChallenge(
+          disputeCase,
+          binding,
+        );
+
+      if (
+        challengeRequestKeyRef.current !==
+        requestKey
+      ) {
+        return false;
+      }
+
+      setChallenge(next);
+      return true;
+    } catch (error) {
+      if (
+        challengeRequestKeyRef.current ===
+        requestKey
+      ) {
+        setChallengeError(
+          humanizeError(
+            error,
+            "Secure Agent signing challenge is unavailable.",
+          ),
+        );
+      }
+
+      return false;
+    } finally {
+      if (
+        challengeRequestKeyRef.current ===
+        requestKey
+      ) {
+        setChallengeLoading(false);
+      }
+    }
+  }
+
+  /*
+   * Prefetch exactly once for each distinct case. If custody polling returns
+   * an identical case one second later, challengeInputKey stays identical.
    */
   useEffect(() => {
     if (
       !session ||
-      !disputeCase ||
-      !binding
+      !challengeInputKey
     ) {
+      challengeRequestKeyRef.current =
+        "";
       setChallenge(null);
+      setChallengeLoading(false);
+      setChallengeError("");
       return;
     }
 
-    let cancelled = false;
+    if (
+      challengeRequestKeyRef.current ===
+        challengeInputKey
+    ) {
+      return;
+    }
 
-    void requestDisputeAgentChallenge(
-      disputeCase,
-      binding,
-    )
-      .then((next) => {
-        if (!cancelled) {
-          setChallenge(next);
-        }
-      })
-      .catch(() => {
-        // signReview() surfaces the error if the user attempts to continue.
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    void prepareChallenge();
   }, [
-    session,
-    disputeCase,
-    binding,
+    session?.account.address,
+    challengeInputKey,
   ]);
 
-  const payerSignature =
+  /*
+   * Legacy room signatures are still discovered once so existing mainnet
+   * cases can migrate without asking either party to sign or pay again.
+   */
+  const legacyPayerSignature =
     caseCommitment
       ? findLatestDisputeAgentSignature(
           escrowActions,
@@ -232,7 +343,7 @@ export function useDisputeAgentReview({
         null
       : null;
 
-  const payeeSignature =
+  const legacyPayeeSignature =
     caseCommitment
       ? findLatestDisputeAgentSignature(
           escrowActions,
@@ -243,6 +354,182 @@ export function useDisputeAgentReview({
           .disputeAgentSignature ??
         null
       : null;
+
+  const [
+    attestationStatus,
+    setAttestationStatus,
+  ] = useState({
+    payerSigned: false,
+    payeeSigned: false,
+  });
+
+  const attestationCaseRef =
+    useRef("");
+
+  const migratedLegacyRef =
+    useRef<Set<string>>(
+      new Set(),
+    );
+
+  const legacySignatureKey =
+    [
+      legacyPayerSignature
+        ?.join(":") ?? "",
+      legacyPayeeSignature
+        ?.join(":") ?? "",
+    ].join("|");
+
+  /*
+   * Signature presence is now synchronized from backend storage, not from a
+   * paid STRK20 coordination transaction.
+   *
+   * Old coordination signatures are verified and imported once. Status
+   * polling returns only booleans; peer signature bytes are never exposed.
+   */
+  useEffect(() => {
+    if (
+      !caseCommitment ||
+      !disputeCase ||
+      !binding
+    ) {
+      attestationCaseRef.current =
+        "";
+      setAttestationStatus({
+        payerSigned: false,
+        payeeSigned: false,
+      });
+      return;
+    }
+
+    if (
+      attestationCaseRef.current !==
+      caseCommitment
+    ) {
+      attestationCaseRef.current =
+        caseCommitment;
+      setAttestationStatus({
+        payerSigned: false,
+        payeeSigned: false,
+      });
+    }
+
+    let cancelled = false;
+
+    async function migrate(
+      role:
+        | "payer"
+        | "payee",
+      signature:
+        string[] | null,
+    ) {
+      if (!signature) {
+        return;
+      }
+
+      const key =
+        `${caseCommitment}:${role}:` +
+        signature.join(":");
+
+      if (
+        migratedLegacyRef.current
+          .has(key)
+      ) {
+        return;
+      }
+
+      await submitDisputeAgentAttestation(
+        disputeCase!,
+        binding!,
+        role,
+        signature,
+      );
+
+      migratedLegacyRef.current
+        .add(key);
+    }
+
+    async function syncStatus() {
+      try {
+        await migrate(
+          "payer",
+          legacyPayerSignature,
+        );
+        await migrate(
+          "payee",
+          legacyPayeeSignature,
+        );
+
+        const next =
+          await getDisputeAgentAttestationStatus(
+            disputeCase!,
+            binding!,
+          );
+
+        if (!cancelled) {
+          setAttestationStatus({
+            payerSigned:
+              next.payerSigned,
+            payeeSigned:
+              next.payeeSigned,
+          });
+        }
+      } catch {
+        /*
+         * Background status synchronization is retried. Explicit signing
+         * failures are surfaced by signReview() instead of creating popup
+         * loops or duplicate wallet transactions.
+         */
+      }
+    }
+
+    void syncStatus();
+
+    const timer =
+      window.setInterval(
+        () => {
+          void syncStatus();
+        },
+        3_000,
+      );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(
+        timer,
+      );
+    };
+  }, [
+    caseCommitment,
+    challengeInputKey,
+    legacySignatureKey,
+  ]);
+
+  /*
+   * Keep the existing component contract: UI only needs truthiness for signed
+   * state. Evaluation itself reads the real verified signatures server-side.
+   */
+  const storedMarker = [
+    "0x1",
+    "0x1",
+  ];
+
+  const payerSignature =
+    legacyPayerSignature ??
+    (
+      attestationStatus
+        .payerSigned
+        ? storedMarker
+        : null
+    );
+
+  const payeeSignature =
+    legacyPayeeSignature ??
+    (
+      attestationStatus
+        .payeeSigned
+        ? storedMarker
+        : null
+    );
 
   async function run(
     fallback: string,
@@ -322,7 +609,8 @@ export function useDisputeAgentReview({
       !role ||
       !disputeCase ||
       !binding ||
-      !peerAddress
+      !challengeReady ||
+      !challenge
     ) {
       return false;
     }
@@ -331,44 +619,43 @@ export function useDisputeAgentReview({
       "We couldn't sign the Dispute Agent review.",
       async () => {
         /*
-         * Backend checks live Rekber state before issuing the typed-data
-         * challenge. This signature is consent to Agent review, not consent to
-         * the Agent's eventual decision.
+         * One wallet signature only.
+         *
+         * No STRK20 transaction follows this signature. The backend verifies
+         * the exact SNIP-12 case, original Rekber role and live custody before
+         * persisting the attestation.
          */
-        const nextChallenge =
-          challenge ??
-          (await requestDisputeAgentChallenge(
-            disputeCase,
-            binding,
-          ));
-
         const signature =
           await signDisputeAgentChallenge(
             session!.account,
-            nextChallenge.typedData[
+            challenge.typedData[
               role
             ],
           );
 
-        setChallenge(
-          nextChallenge,
-        );
+        const next =
+          await submitDisputeAgentAttestation(
+            disputeCase,
+            binding,
+            role,
+            signature,
+          );
 
-        await onSendCoordination(
-          peerAddress,
-          {
-            kind: "dispute",
-            coordinationVersion: 3,
-            dealOfferLocator,
-            custodyCommitment:
-              custodyCommitment.toString(),
-            disputeAgentCaseCommitment:
-              nextChallenge
-                .caseCommitment,
-            disputeAgentSignature:
-              signature,
-          },
-        );
+        if (
+          next.caseCommitment !==
+          challenge.caseCommitment
+        ) {
+          throw new Error(
+            "Dispute case commitment changed while signing.",
+          );
+        }
+
+        setAttestationStatus({
+          payerSigned:
+            next.payerSigned,
+          payeeSigned:
+            next.payeeSigned,
+        });
       },
     );
   }
@@ -390,18 +677,13 @@ export function useDisputeAgentReview({
         const next =
           await evaluateDisputeWithAgent(
             disputeCase,
-            {
-              payer:
-                payerSignature,
-              payee:
-                payeeSignature,
-            },
             binding,
           );
 
         /*
          * The Agent has no signer. Any on-chain authorization can occur only
-         * through the backend's deterministic policy gate and dedicated resolver.
+         * through the backend's deterministic policy gate and dedicated
+         * resolver.
          */
         setResult(next);
       },
@@ -484,6 +766,13 @@ export function useDisputeAgentReview({
         ? payeeSignature
         : null;
 
+  const reviewReady =
+    Boolean(
+      disputeCase &&
+      binding &&
+      challengeReady,
+    );
+
   return {
     result,
     disputeCase,
@@ -491,6 +780,11 @@ export function useDisputeAgentReview({
     payerPacket,
     payeePacket,
     bothPackets,
+    reviewReady,
+    challengeLoading,
+    challengeError,
+    retryChallenge: () =>
+      prepareChallenge(true),
     caseCommitment,
     ownSignature,
     payerSignature,

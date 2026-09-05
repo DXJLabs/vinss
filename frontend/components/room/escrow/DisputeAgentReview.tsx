@@ -316,10 +316,51 @@ export function DisputeAgentReview({
         )}
 
       {review.bothPackets &&
+        !review.reviewReady &&
+        !review.ownSignature && (
+          <div className="mt-3 rounded-lg bg-paper/[0.025] px-3 py-2.5">
+            {review.challengeError ? (
+              <>
+                <p className="text-[10px] text-danger">
+                  Secure signing challenge unavailable
+                </p>
+                <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
+                  {review.challengeError}
+                </p>
+                <button
+                  type="button"
+                  disabled={review.challengeLoading}
+                  onClick={() =>
+                    void review.retryChallenge()
+                  }
+                  className="mt-3 w-full rounded-lg border border-signal/30 px-3 py-2.5 text-[10px] font-medium text-signal disabled:opacity-30"
+                >
+                  {review.challengeLoading
+                    ? "Preparing secure challenge…"
+                    : "Retry secure challenge →"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-[10px] text-paper/50">
+                  {review.disputeCase
+                    ? "Preparing secure signing challenge…"
+                    : "Preparing exact dispute case…"}
+                </p>
+                <p className="mt-1 text-[9px] leading-relaxed text-paper/28">
+                  Wallet signing is enabled only after VINSS verifies this exact case against live Rekber custody.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+      {review.bothPackets &&
+        review.reviewReady &&
         !review.ownSignature && (
           <div className="mt-3">
             <p className="text-[9px] leading-relaxed text-paper/30">
-              Both evidence packets are ready. Sign the backend-issued SNIP-12 challenge to consent to review and possible AutoSplit authorization for this exact case. This does not mean you agree with the counterparty's claims.
+              Both evidence packets are ready. Sign the backend-issued SNIP-12 challenge for this exact case. The signature is verified privately by VINSS and does not create another STRK20 transaction. It does not mean you agree with the counterparty's claims.
             </p>
             <button
               type="button"
@@ -344,7 +385,7 @@ export function DisputeAgentReview({
             </span>
             <p className="mt-1 text-paper/55">
               {review.payerSignature
-                ? "Verified packet ✓"
+                ? "Verified ✓"
                 : "Waiting"}
             </p>
           </div>
@@ -354,7 +395,7 @@ export function DisputeAgentReview({
             </span>
             <p className="mt-1 text-paper/55">
               {review.payeeSignature
-                ? "Verified packet ✓"
+                ? "Verified ✓"
                 : "Waiting"}
             </p>
           </div>

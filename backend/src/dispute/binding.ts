@@ -529,8 +529,18 @@ export async function verifyDisputeRekberBinding(
     ["payer dispute", setup.payerDisputeCommitment, custody.payerDisputeCommitment],
     ["payee dispute", acceptance.payeeDisputeCommitment, custody.payeeDisputeCommitment],
     ["refund consent", acceptance.payeeRefundConsentCommitment, custody.payeeRefundConsentCommitment],
-    ["fulfillment chain", acceptance.fulfillmentChainHead, custody.fulfillmentChainHead],
-    ["revision chain", setup.revisionChainHead, custody.revisionChainHead],
+
+    /*
+     * fulfillment_chain_head and revision_chain_head are intentionally
+     * mutable one-way chain cursors. Rekber advances them after a valid
+     * fulfillment/revision secret is revealed, so comparing the ORIGINAL
+     * signed head with the CURRENT live head would reject every progressed
+     * custody.
+     *
+     * Their original values remain bound by the payer/payee Agreement
+     * signatures below, while custodyCommitment and all immutable capability
+     * commitments are still matched against live Rekber storage here.
+     */
     ["payer certificate", setup.payerCertificateCommitment, custody.payerCertificateCommitment],
     ["payee certificate", acceptance.payeeCertificateCommitment, custody.payeeCertificateCommitment],
     ["setup deadline", setup.fulfillmentDeadline, custody.fulfillmentDeadline],

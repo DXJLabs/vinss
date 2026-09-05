@@ -23,6 +23,7 @@ import {
   sameStarknetAddress,
 } from "@/lib/privacy/participantKeys";
 import {
+  buildEscrowOfferSnapshot,
   parseSettlementAmount,
   resolveSettlementAsset,
 } from "@/lib/deal-room/escrow";
@@ -252,6 +253,35 @@ export function EscrowPanel({
     acceptedAction?.kind === "accept"
       ? acceptedAction
       : null;
+
+  /*
+   * Older live Rekber setup packets did not persist offerSnapshot.
+   * Recover it from the same authenticated accepted Offer already used
+   * to verify dealTermsCommitment, so existing funded/disputed custody
+   * can still build the exact Agent case without changing on-chain state.
+   */
+  const acceptedOfferSnapshot =
+    useMemo(() => {
+      if (
+        !accepted ||
+        !acceptedOffer?.actionLocator
+      ) {
+        return null;
+      }
+
+      try {
+        return buildEscrowOfferSnapshot(
+          acceptedOffer.actionLocator,
+          accepted,
+        );
+      } catch {
+        return null;
+      }
+    }, [
+      accepted,
+      acceptedOffer?.actionLocator,
+    ]);
+
   const walletAddress =
     session?.account.address ?? "";
 
@@ -2662,7 +2692,7 @@ export function EscrowPanel({
                   offerSnapshot={
                     createAction
                       ?.offerSnapshot ??
-                    null
+                    acceptedOfferSnapshot
                   }
                   rekberSetup={
                     createAction
@@ -2693,7 +2723,9 @@ export function EscrowPanel({
                 />
               )}
 
-            {role === "payer" && !releaseRecord && (
+            {role === "payer" &&
+              !releaseRecord &&
+              !custodyState?.disputed && (
               <button
                 type="button"
                 onClick={handleAuthorizeRelease}

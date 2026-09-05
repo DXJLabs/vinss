@@ -15,6 +15,9 @@ import { DiscoveryStore } from "./indexer/store.js";
 import {
   initializeDisputeDecisionStorage,
 } from "./dispute/store.js";
+import {
+  initializeDisputeAttestationStorage,
+} from "./dispute/attestationStore.js";
 import { initializeFeedbackStorage } from "./routes/feedback.js";
 
 async function main(): Promise<void> {
@@ -26,6 +29,10 @@ async function main(): Promise<void> {
 
   try {
     await initializeDisputeDecisionStorage(
+      database,
+    );
+
+    await initializeDisputeAttestationStorage(
       database,
     );
 

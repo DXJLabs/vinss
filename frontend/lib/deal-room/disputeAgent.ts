@@ -67,6 +67,12 @@ export interface DisputeAgentChallenge {
   };
 }
 
+export interface DisputeAgentAttestationStatus {
+  caseCommitment: string;
+  payerSigned: boolean;
+  payeeSigned: boolean;
+}
+
 export interface DisputeAgentDecision {
   decision:
     | "payer"
@@ -473,20 +479,54 @@ export function findLatestDisputeAgentSignature<
 async function postJson<T>(
   path: string,
   body: unknown,
+  timeoutMs = 0,
 ): Promise<T> {
-  const response =
-    await fetch(
-      `${BACKEND_URL}${path}`,
-      {
-        method: "POST",
-        headers: {
-          "content-type":
-            "application/json",
+  const controller =
+    timeoutMs > 0
+      ? new AbortController()
+      : null;
+
+  const timer =
+    controller
+      ? setTimeout(
+          () => controller.abort(),
+          timeoutMs,
+        )
+      : null;
+
+  let response: Response;
+
+  try {
+    response =
+      await fetch(
+        `${BACKEND_URL}${path}`,
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+          },
+          body:
+            JSON.stringify(body),
+          signal:
+            controller?.signal,
         },
-        body:
-          JSON.stringify(body),
-      },
-    );
+      );
+  } catch (error) {
+    if (
+      controller?.signal.aborted
+    ) {
+      throw new Error(
+        "Dispute Agent challenge timed out. Retry the secure challenge.",
+      );
+    }
+
+    throw error;
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  }
 
   const data =
     (await response.json()) as
@@ -514,9 +554,53 @@ export function requestDisputeAgentChallenge(
       case: disputeCase,
       binding,
     },
+    15_000,
   );
 }
 
+export function submitDisputeAgentAttestation(
+  disputeCase: DisputeAgentCase,
+  binding: DisputeRekberBinding,
+  role: SettlementRole,
+  signature: string[],
+): Promise<DisputeAgentAttestationStatus> {
+  return postJson(
+    "/dispute/attestation",
+    {
+      case: disputeCase,
+      binding,
+      role,
+      signature,
+    },
+    15_000,
+  );
+}
+
+export function getDisputeAgentAttestationStatus(
+  disputeCase: DisputeAgentCase,
+  binding: DisputeRekberBinding,
+): Promise<DisputeAgentAttestationStatus> {
+  return postJson(
+    "/dispute/attestation/status",
+    {
+      case: disputeCase,
+      binding,
+    },
+    10_000,
+  );
+}
+
+/*
+ * New clients no longer send attestation bytes with every evaluation request.
+ * The backend reads its previously verified persistent attestations.
+ *
+ * The 3-argument form remains temporarily supported for safe migration from
+ * existing rooms that already published signatures through old coordination.
+ */
+export function evaluateDisputeWithAgent(
+  disputeCase: DisputeAgentCase,
+  binding: DisputeRekberBinding,
+): Promise<DisputeAgentResult>;
 export function evaluateDisputeWithAgent(
   disputeCase: DisputeAgentCase,
   attestations: {
@@ -524,13 +608,40 @@ export function evaluateDisputeWithAgent(
     payee: string[];
   },
   binding: DisputeRekberBinding,
+): Promise<DisputeAgentResult>;
+export function evaluateDisputeWithAgent(
+  disputeCase: DisputeAgentCase,
+  second:
+    | DisputeRekberBinding
+    | {
+        payer: string[];
+        payee: string[];
+      },
+  third?: DisputeRekberBinding,
 ): Promise<DisputeAgentResult> {
+  const binding =
+    third ??
+    (second as DisputeRekberBinding);
+
+  const legacyAttestations =
+    third
+      ? second as {
+          payer: string[];
+          payee: string[];
+        }
+      : null;
+
   return postJson(
     "/dispute/evaluate",
     {
       case: disputeCase,
-      attestations,
       binding,
+      ...(legacyAttestations
+        ? {
+            attestations:
+              legacyAttestations,
+          }
+        : {}),
     },
   );
 }
