@@ -2648,7 +2648,16 @@ export function EscrowPanel({
                     </span>
                   </p>
                   <p className="mt-2 text-[10px] text-paper/35">
-                    Refund boundary: {formatDeadline(refundAfter)}
+                    {/*
+                     * The original timeout remains part of the custody record,
+                     * but it is no longer an active settlement path after a
+                     * dispute is locked.
+                     */}
+                    {custodyState?.disputed
+                      ? custodyState.resolutionAuthorized
+                        ? "Dispute resolution authorized"
+                        : "Dispute resolution in progress"
+                      : `Refund boundary: ${formatDeadline(refundAfter)}`}
                   </p>
                 </div>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-signal text-sm text-ink">
@@ -3034,8 +3043,20 @@ export function EscrowPanel({
         )}
       </div>
         {/* VINSS_REFUND_COUNTDOWN */}
+        {/*
+         * Timeout refund belongs only to the normal Rekber lifecycle.
+         *
+         * Once custody enters dispute, normal refund and release paths are
+         * paused. The original refund deadline must not be presented as an
+         * actionable recovery path.
+         *
+         * A dispute may still return 100% of principal to the Payer, but that
+         * outcome is settled through the resolution-claim path instead of the
+         * unilateral timeout-refund path.
+         */}
         {funded &&
           !settled &&
+          !custodyState?.disputed &&
           refundAfter > 0 && (
             <div className="mx-4 mb-4 rounded-xl border border-wire/60 bg-black/10 p-3">
               <div className="flex items-center justify-between gap-4">

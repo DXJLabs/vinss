@@ -38,6 +38,7 @@ import {
   type DisputeExecutionResult,
 } from "../dispute/executor.js";
 import {
+  decisionForDisputeExecution,
   evaluateDisputePolicy,
 } from "../dispute/policy.js";
 import {
@@ -757,6 +758,17 @@ export function createDisputeRouter(
             trust,
           );
 
+        /*
+         * The persisted Agent decision never gets rerolled. If evidence is too
+         * weak for a directional award, policy converts only the execution
+         * split to the deterministic 50/50 AutoSplit fallback.
+         */
+        const executionDecision =
+          decisionForDisputeExecution(
+            decision,
+            policy,
+          );
+
         let execution:
           DisputeExecutionResult = {
             status:
@@ -772,13 +784,16 @@ export function createDisputeRouter(
               config,
               custody,
               caseCommitment,
-              decision,
+              executionDecision,
             );
         }
 
         return res.json({
           caseCommitment,
-          decision,
+
+          // Show clients the exact split that can actually execute on-chain.
+          decision:
+            executionDecision,
           policy,
           provider:
             providerName,

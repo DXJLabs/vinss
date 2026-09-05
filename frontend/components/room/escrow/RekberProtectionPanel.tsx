@@ -170,15 +170,119 @@ export function RekberProtectionPanel({
     </div>
   );
 
+  /*
+   * Dispute allocations are authoritative on-chain settlement state.
+   *
+   * Once a dispute is locked, the normal release/refund lifecycle is paused.
+   * The resolver may authorize any valid Payer/Payee split, including
+   * 100/0, 50/50, or 0/100.
+   *
+   * A 100% Payer allocation may be described as a full refund in the UI,
+   * while the contract still settles it through the resolution-claim path.
+   */
+  const payerResolutionBps =
+    state.amount > 0n
+      ? (
+          state.resolutionPayerAmount *
+          10_000n
+        ) / state.amount
+      : 0n;
+
+  const payeeResolutionBps =
+    state.amount > 0n
+      ? (
+          state.resolutionPayeeAmount *
+          10_000n
+        ) / state.amount
+      : 0n;
+
+  const ownResolutionAmount =
+    role === "payer"
+      ? state.resolutionPayerAmount
+      : role === "payee"
+        ? state.resolutionPayeeAmount
+        : 0n;
+
+  const ownResolutionClaimed =
+    role === "payer"
+      ? state.resolutionPayerClaimed
+      : role === "payee"
+        ? state.resolutionPayeeClaimed
+        : false;
+
+  function formatResolutionPercent(
+    bps: bigint,
+  ): string {
+    const value =
+      Number(bps) / 100;
+
+    return Number.isInteger(value)
+      ? `${value}%`
+      : `${value.toFixed(2)}%`;
+  }
+
+  /*
+   * Keep dispute UX separate from normal Rekber refund UX.
+   *
+   * Before authorization, custody remains locked for dispute resolution.
+   * After authorization, show the exact Payer/Payee allocation and only the
+   * resolution claim available to the connected wallet.
+   */
   if (state.disputed) {
     return (
       <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
         <p className="text-[9px] uppercase tracking-[0.13em] text-amber">
-          Dispute locked
+          {state.resolutionAuthorized
+            ? "Dispute resolution"
+            : "Dispute locked"}
         </p>
+
         <p className="mt-2 text-xs leading-relaxed text-paper/45">
-          Normal release, auto-release, and unilateral timeout refund are paused while this custody is disputed.
+          {state.resolutionAuthorized
+            ? "Normal refund and release remain paused. Funds can move only through the authorized dispute allocation."
+            : "Normal release, auto-release, and unilateral timeout refund are paused while this custody is disputed."}
         </p>
+
+        {state.resolutionAuthorized && (
+          <div className="mt-3 rounded-lg bg-paper/[0.025] p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                  Payer
+                </p>
+                <p className="mt-1 text-sm font-medium text-paper/75">
+                  {formatResolutionPercent(
+                    payerResolutionBps,
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                  Payee
+                </p>
+                <p className="mt-1 text-sm font-medium text-paper/75">
+                  {formatResolutionPercent(
+                    payeeResolutionBps,
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/*
+             * A 100/0 dispute award is a full refund from the user's point of
+             * view, even though the contract executes it as a resolution claim.
+             */}
+            {state.resolutionPayerAmount ===
+              state.amount &&
+              state.resolutionPayeeAmount ===
+                0n && (
+                <p className="mt-2 border-t border-wire/40 pt-2 text-[10px] text-signal/80">
+                  Full refund awarded to Payer
+                </p>
+              )}
+          </div>
+        )}
 
         {state.resolutionAuthorized ? (
           actions.canClaimResolution ? (
@@ -194,9 +298,18 @@ export function RekberProtectionPanel({
                 ? "Claiming resolution…"
                 : "Claim my resolution share →"}
             </button>
+          ) : ownResolutionAmount > 0n &&
+            ownResolutionClaimed ? (
+            <p className="mt-3 rounded-lg bg-signal/[0.05] px-3 py-2.5 text-[10px] text-signal">
+              Your resolution share has been claimed ✓
+            </p>
+          ) : ownResolutionAmount === 0n ? (
+            <p className="mt-3 text-[10px] text-paper/35">
+              No dispute funds were allocated to this wallet.
+            </p>
           ) : (
             <p className="mt-3 text-[10px] text-paper/35">
-              Resolution split is authorized. This wallet has no unclaimed allocation.
+              This wallet has an allocation, but its claim capability is not available on this device.
             </p>
           )
         ) : (

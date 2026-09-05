@@ -9,6 +9,7 @@ import {
   sanitizeDisputeCase,
 } from "../src/dispute/evidence.ts";
 import {
+  decisionForDisputeExecution,
   evaluateDisputePolicy,
 } from "../src/dispute/policy.ts";
 
@@ -249,6 +250,83 @@ test(
           "AUTO_RESOLVE",
         reasons: [],
       },
+    );
+  },
+);
+
+test(
+  "weak subjective evidence uses deterministic automatic 50/50 fallback",
+  () => {
+    const disputeCase =
+      sanitizeDisputeCase(
+        rawCase(),
+      );
+
+    const commitment =
+      computeDisputeCaseCommitment(
+        disputeCase,
+      );
+
+    const agentDecision = {
+      decision:
+        "needs_review" as const,
+      payerBps: 5_000,
+      payeeBps: 5_000,
+      confidence: 0.62,
+      reason:
+        "The available evidence does not justify a directional award.",
+      evidenceCommitment:
+        commitment,
+      flags: [
+        "evidence_conflict",
+      ],
+    };
+
+    const policy =
+      evaluateDisputePolicy(
+        disputeCase,
+        commitment,
+        agentDecision,
+        undefined,
+        {
+          partyBindingVerified:
+            true,
+          verifiedPrincipalUsdMicros:
+            100_000_000,
+        },
+      );
+
+    assert.equal(
+      policy.status,
+      "AUTO_RESOLVE",
+    );
+
+    assert.equal(
+      policy.reasons.includes(
+        "AUTOMATIC_50_50_FALLBACK",
+      ),
+      true,
+    );
+
+    const executionDecision =
+      decisionForDisputeExecution(
+        agentDecision,
+        policy,
+      );
+
+    assert.equal(
+      executionDecision.decision,
+      "split",
+    );
+
+    assert.equal(
+      executionDecision.payerBps,
+      5_000,
+    );
+
+    assert.equal(
+      executionDecision.payeeBps,
+      5_000,
     );
   },
 );

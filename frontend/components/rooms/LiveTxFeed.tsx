@@ -65,7 +65,10 @@ const COMPACT_COUNT = 5;
 const ACTIVITY_LABELS: Record<ActivityKind, { label: string; accent: string; target: string }> = {
   message: { label: "MESSAGE", accent: "text-paper/78", target: "VINSS MESSAGE" },
   offer: { label: "OFFER · ACTION", accent: "text-paper/78", target: "VINSS OFFER" },
-  escrow: { label: "REKBER · START", accent: "text-paper/78", target: "VINSS REKBER" },
+  // Generic encrypted Rekber coordination is not equivalent to opening custody.
+  // Public lifecycle events below are the authoritative labels for fund,
+  // dispute, resolution, claim, release, and refund state changes.
+  escrow: { label: "REKBER · COORDINATION", accent: "text-paper/52", target: "VINSS REKBER" },
   invite_created: { label: "INVITE · CREATE", accent: "text-paper/78", target: "VINSS INVITE" },
   invite_consumed: { label: "INVITE · JOIN", accent: "text-signal/82", target: "VINSS INVITE" },
   rekber_funded: { label: "REKBER · FUND", accent: "text-signal/82", target: "VINSS REKBER" },
@@ -436,9 +439,34 @@ export function LiveTxFeed({ onSnapshot }: LiveTxFeedProps) {
     };
   }, [onSnapshot]);
 
+  /*
+   * Compact LOG TX should surface authoritative public lifecycle events instead
+   * of letting encrypted Rekber coordination packets dominate the five visible
+   * rows. Coordination remains available in the expanded audit view.
+   *
+   * This keeps DISPUTE / RESOLUTION / CLAIM visible when those on-chain events
+   * exist, while retaining the complete chronological stream under Expand log.
+   */
+  const compactItems = useMemo(() => {
+    const semanticItems =
+      items.filter(
+        (item) =>
+          item.kind !== "escrow",
+      );
+
+    return (
+      semanticItems.length > 0
+        ? semanticItems
+        : items
+    ).slice(0, COMPACT_COUNT);
+  }, [items]);
+
   const visibleItems = useMemo(
-    () => (expanded ? items : items.slice(0, COMPACT_COUNT)),
-    [expanded, items],
+    () =>
+      expanded
+        ? items
+        : compactItems,
+    [expanded, items, compactItems],
   );
 
   useEffect(() => {
