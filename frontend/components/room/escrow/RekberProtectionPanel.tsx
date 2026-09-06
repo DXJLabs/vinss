@@ -109,34 +109,35 @@ export function RekberProtectionPanel({
       {role === "payee" &&
         actions.canAuthorizeMutualRefund && (
           actions.hasValidMutualRefundConsent ? (
-            <div className="rounded-lg bg-paper/[0.025] px-3 py-2.5">
-              <p className="text-[10px] text-paper/55">
-                Full refund authorized ✓
+            <div className="rounded-xl bg-signal/[0.04] px-3 py-3">
+              <p className="text-[10px] font-medium text-signal">
+                Full refund approved ✓
               </p>
-              <p className="mt-1 text-[9px] leading-relaxed text-paper/28">
-                The Payer can now return the full principal while this custody remains open.
+              <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
+                The Payer can now return the payment.
               </p>
             </div>
           ) : (
-            <details className="group">
-              <summary className="cursor-pointer list-none text-[10px] text-paper/45 [&::-webkit-details-marker]:hidden">
-                Settle together instead ▾
+            <details>
+              <summary className="cursor-pointer list-none text-[10px] text-paper/40 [&::-webkit-details-marker]:hidden">
+                Both sides agree to cancel? ▾
               </summary>
-              <p className="mt-2 text-[9px] leading-relaxed text-amber/70">
-                If both sides agree, the full payment can be returned to the Payer instead of continuing the dispute.
+
+              <p className="mt-2 text-[9px] leading-relaxed text-paper/32">
+                If you both agree, the payment can be returned to the Payer instead of continuing the dispute.
               </p>
+
               <button
                 type="button"
                 disabled={busy}
                 onClick={() =>
-                  void actions
-                    .authorizeMutualRefund()
+                  void actions.authorizeMutualRefund()
                 }
                 className="mt-3 w-full rounded-xl border border-amber/30 px-4 py-3 text-xs font-medium text-amber disabled:opacity-30"
               >
                 {busy
-                  ? "Sharing authorization…"
-                  : "Authorize full refund →"}
+                  ? "Approving…"
+                  : "Allow full refund →"}
               </button>
             </details>
           )
@@ -145,25 +146,25 @@ export function RekberProtectionPanel({
       {role === "payer" &&
         actions.canCompleteMutualRefund &&
         actions.hasValidMutualRefundConsent && (
-          <div className="rounded-lg border border-amber/20 bg-amber/[0.035] p-3">
-            <p className="text-xs font-medium text-paper/70">
-              Payee authorized a full refund
+          <div className="rounded-xl border border-signal/15 bg-signal/[0.035] p-3">
+            <p className="text-[10px] font-medium text-signal">
+              Full refund approved
             </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
-              Completing this returns the entire principal to the Payer. The VINSS service fee remains non-refundable.
+            <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
+              The Payee agreed to return the payment. The VINSS service fee is not refunded.
             </p>
+
             <button
               type="button"
               disabled={busy}
               onClick={() =>
-                void actions
-                  .completeMutualRefund()
+                void actions.completeMutualRefund()
               }
-              className="mt-3 w-full rounded-xl border border-amber/35 px-4 py-3 text-xs font-medium text-amber disabled:opacity-30"
+              className="mt-3 w-full rounded-xl border border-signal/30 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
             >
               {busy
-                ? "Refunding in Ready X…"
-                : "Complete mutual refund →"}
+                ? "Returning payment…"
+                : "Return payment →"}
             </button>
           </div>
         )}
@@ -233,13 +234,13 @@ export function RekberProtectionPanel({
       <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
         <p className="text-[9px] uppercase tracking-[0.13em] text-amber">
           {state.resolutionAuthorized
-            ? "Resolution ready"
+            ? "Dispute resolved"
             : "Dispute in progress"}
         </p>
 
         <p className="mt-2 text-xs leading-relaxed text-paper/45">
           {state.resolutionAuthorized
-            ? "The result is ready. Check the split below and claim your share."
+            ? "The result is ready. Claim your share below."
             : "Your payment is locked while VINSS resolves the dispute."}
         </p>
 
@@ -278,7 +279,7 @@ export function RekberProtectionPanel({
               state.resolutionPayeeAmount ===
                 0n && (
                 <p className="mt-2 border-t border-wire/40 pt-2 text-[10px] text-signal/80">
-                  Full refund awarded to Payer
+                  Payer receives 100% of the payment
                 </p>
               )}
           </div>
@@ -295,7 +296,7 @@ export function RekberProtectionPanel({
               className="mt-3 w-full rounded-xl border border-signal/35 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
             >
               {busy
-                ? "Claiming resolution…"
+                ? "Claiming…"
                 : "Claim my share →"}
             </button>
           ) : ownResolutionAmount > 0n &&
@@ -309,12 +310,12 @@ export function RekberProtectionPanel({
             </p>
           ) : (
             <p className="mt-3 text-[10px] text-paper/35">
-              This wallet has an allocation, but its claim capability is not available on this device.
+              Your share is ready, but it cannot be claimed from this device.
             </p>
           )
         ) : (
           <p className="mt-3 text-[10px] text-paper/35">
-            Complete the steps below to resolve this dispute.
+            Complete the review below.
           </p>
         )}
 
@@ -367,20 +368,20 @@ export function RekberProtectionPanel({
     <div className="rounded-xl bg-paper/[0.02] p-4 ring-1 ring-wire/55">
       <div>
         <p className="text-[9px] uppercase tracking-[0.13em] text-paper/32">
-          Rekber protection
+          Deal protection
         </p>
         <p className="mt-1 text-[10px] leading-relaxed text-paper/35">
-          Fulfillment changes settlement rights. Confirm only what you actually received; disagreement should enter dispute instead of using a unilateral refund.
+          Confirm only if the work matches the deal. If something is wrong, open a dispute.
         </p>
       </div>
 
       {actions.canConfirm && (
         <div className="mt-3 rounded-lg border border-signal/20 bg-signal/[0.035] p-3">
           <p className="text-xs font-medium text-paper/70">
-            Fulfillment submitted
+            Work submitted
           </p>
           <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
-            This verification policy requires your explicit receipt confirmation before the review window starts.
+            Check the work before confirming that you received what was agreed.
           </p>
           <button
             type="button"
@@ -400,10 +401,10 @@ export function RekberProtectionPanel({
       {actions.canAutoRelease && (
         <div className="mt-3 rounded-lg border border-signal/20 bg-signal/[0.035] p-3">
           <p className="text-xs font-medium text-paper/70">
-            Review window finished
+            Review period ended
           </p>
           <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
-            Confirmed fulfillment cannot be locked forever by Payer silence.
+            The confirmed payment is now available to the Payee.
           </p>
           <button
             type="button"
@@ -415,7 +416,7 @@ export function RekberProtectionPanel({
           >
             {busy
               ? "Claiming in Ready X…"
-              : "Claim after review timeout →"}
+              : "Claim payment →"}
           </button>
         </div>
       )}
@@ -423,16 +424,28 @@ export function RekberProtectionPanel({
       {actions.canDispute && (
         <div className="mt-3 border-t border-wire/50 pt-3">
           {actions.hasPrivateDisputeEvidence ? (
-            <div className="rounded-lg border border-danger/20 bg-danger/[0.025] p-3">
+            <div className="rounded-xl border border-danger/20 bg-danger/[0.025] p-3">
               <p className="text-[10px] font-medium text-danger">
-                Private dispute evidence shared ✓
+                Ready to open dispute
               </p>
-              <p className="mt-1 whitespace-pre-wrap text-[10px] leading-relaxed text-paper/38">
-                {privateDisputeAction?.reason}
+
+              <p className="mt-1 text-[9px] leading-relaxed text-paper/32">
+                Your reason has been saved privately.
               </p>
-              <p className="mt-2 text-[9px] leading-relaxed text-paper/25">
-                Step 2/2 locks only this evidence commitment on-chain.
+
+              <div className="mt-3 rounded-lg bg-paper/[0.025] px-3 py-2.5">
+                <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                  Your reason
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-[10px] leading-relaxed text-paper/55">
+                  {privateDisputeAction?.reason}
+                </p>
+              </div>
+
+              <p className="mt-3 text-[9px] leading-relaxed text-paper/35">
+                Opening the dispute locks the payment until the issue is resolved. You will add the details for review next.
               </p>
+
               <button
                 type="button"
                 disabled={busy}
@@ -442,26 +455,41 @@ export function RekberProtectionPanel({
                 className="mt-3 w-full rounded-xl border border-danger/35 px-4 py-3 text-xs font-medium text-danger disabled:opacity-30"
               >
                 {busy
-                  ? "Locking in Ready X…"
-                  : "Lock dispute on-chain →"}
+                  ? "Opening dispute…"
+                  : "Open dispute →"}
               </button>
             </div>
           ) : !disputeOpen ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                setDisputeOpen(true)
-              }
-              className="w-full rounded-xl border border-danger/30 px-4 py-3 text-xs font-medium text-danger disabled:opacity-30"
-            >
-              Open dispute
-            </button>
+            <div className="rounded-xl bg-paper/[0.02] p-3">
+              <p className="text-[10px] font-medium text-paper/60">
+                Something wrong?
+              </p>
+
+              <p className="mt-1 text-[9px] leading-relaxed text-paper/32">
+                If the work does not match the deal, you can open a dispute. The payment will be locked while the issue is reviewed.
+              </p>
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  setDisputeOpen(true)
+                }
+                className="mt-3 w-full rounded-xl border border-danger/30 px-4 py-3 text-xs font-medium text-danger disabled:opacity-30"
+              >
+                Open dispute →
+              </button>
+            </div>
           ) : (
-            <>
-              <label className="text-[9px] uppercase tracking-[0.12em] text-paper/32">
-                Dispute reason
-              </label>
+            <div className="rounded-xl border border-danger/15 bg-danger/[0.02] p-3">
+              <p className="text-[10px] font-medium text-paper/65">
+                Why are you opening a dispute?
+              </p>
+
+              <p className="mt-1 text-[9px] leading-relaxed text-paper/30">
+                Give a short reason. You can add more details after the dispute is opened.
+              </p>
+
               <textarea
                 value={disputeReason}
                 onChange={(event) =>
@@ -471,12 +499,10 @@ export function RekberProtectionPanel({
                 }
                 rows={3}
                 disabled={busy}
-                placeholder="Describe what does not match the accepted deal…"
-                className="mt-2 w-full resize-none rounded-lg border border-wire bg-transparent px-3 py-2 text-xs text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
+                placeholder="Example: The delivered work does not match the agreed scope."
+                className="mt-3 w-full resize-none rounded-xl border border-wire bg-transparent px-3 py-3 text-xs leading-relaxed text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
               />
-              <p className="mt-1 text-[9px] leading-relaxed text-paper/25">
-                Step 1/2 sends this reason only through encrypted peer coordination. It does not lock the custody yet.
-              </p>
+
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -489,6 +515,7 @@ export function RekberProtectionPanel({
                 >
                   Cancel
                 </button>
+
                 <button
                   type="button"
                   disabled={
@@ -497,10 +524,9 @@ export function RekberProtectionPanel({
                   }
                   onClick={async () => {
                     const shared =
-                      await actions
-                        .shareDisputeEvidence(
-                          disputeReason,
-                        );
+                      await actions.shareDisputeEvidence(
+                        disputeReason,
+                      );
 
                     if (shared) {
                       setDisputeOpen(false);
@@ -510,11 +536,11 @@ export function RekberProtectionPanel({
                   className="rounded-xl border border-danger/35 px-3 py-2.5 text-[10px] font-medium text-danger disabled:opacity-30"
                 >
                   {busy
-                    ? "Sharing…"
-                    : "Share evidence →"}
+                    ? "Saving…"
+                    : "Continue →"}
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

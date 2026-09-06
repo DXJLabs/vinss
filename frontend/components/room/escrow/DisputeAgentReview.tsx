@@ -115,14 +115,14 @@ export function DisputeAgentReview({
           Dispute review
         </p>
         <p className="mt-1.5 text-[10px] leading-relaxed text-paper/40">
-          Share your side. VINSS reviews only the information submitted for this dispute.
+          Add the details VINSS should consider. Your normal room chat stays private.
         </p>
       </div>
 
       {!review.ownPacket ? (
         <div className="mt-4">
           <label className="text-[9px] uppercase tracking-[0.12em] text-paper/32">
-            Your side
+            Your review details
           </label>
 
           <textarea
@@ -134,7 +134,7 @@ export function DisputeAgentReview({
             }
             rows={3}
             disabled={busy}
-            placeholder="What happened, and what should VINSS consider?"
+            placeholder="Explain what happened and what part of the deal was not met."
             className="mt-2 w-full resize-none rounded-xl border border-wire bg-transparent px-3 py-3 text-xs leading-relaxed text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
           />
 
@@ -158,13 +158,13 @@ export function DisputeAgentReview({
           >
             {busy
               ? "Submitting…"
-              : "Submit my side →"}
+              : "Submit details →"}
           </button>
         </div>
       ) : (
         <div className="mt-4 rounded-xl bg-signal/[0.05] px-3 py-3">
           <p className="text-[10px] font-medium text-signal">
-            Your side submitted ✓
+            Your details submitted ✓
           </p>
         </div>
       )}
@@ -301,7 +301,7 @@ export function DisputeAgentReview({
         !review.ownSignature && (
           <div className="mt-4">
             <p className="text-[10px] leading-relaxed text-paper/42">
-              Both sides are ready. Confirm this dispute so VINSS can resolve it automatically.
+              Both sides are ready. Confirm this dispute so VINSS can review it.
             </p>
 
             <p className="mt-1 text-[9px] text-paper/25">
@@ -375,7 +375,13 @@ export function DisputeAgentReview({
               review.result.execution.status ===
                 "already_authorized"
                 ? "Result ready"
-                : "Processing"}
+                : review.result.policy.status ===
+                    "NEEDS_REVIEW"
+                  ? "Needs attention"
+                  : review.result.policy.status ===
+                      "REJECTED"
+                    ? "Cannot resolve"
+                    : "Processing"}
             </span>
           </div>
 
@@ -404,18 +410,24 @@ export function DisputeAgentReview({
           </div>
 
           <p className="mt-3 text-[10px] leading-relaxed text-paper/45">
-            {review.result.decision.reason}
+            VINSS resolved the dispute using the information submitted by both sides.
           </p>
 
           <details className="mt-3 border-t border-paper/10 pt-2">
             <summary className="cursor-pointer text-[8px] text-paper/25">
-              Technical status
+              Technical details
             </summary>
-            <p className="mt-2 text-[8px] text-paper/25">
-              {review.result.policy.status}
-              {" · "}
-              {review.result.execution.status}
-            </p>
+
+            <div className="mt-2 space-y-1 text-[8px] leading-relaxed text-paper/25">
+              <p>
+                {review.result.policy.status}
+                {" · "}
+                {review.result.execution.status}
+              </p>
+              <p>
+                {review.result.decision.reason}
+              </p>
+            </div>
           </details>
         </div>
       )}
