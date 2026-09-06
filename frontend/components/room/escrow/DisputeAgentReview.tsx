@@ -109,19 +109,22 @@ export function DisputeAgentReview({
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-paper/10 bg-paper/[0.025] p-4">
-      <p className="text-[9px] uppercase tracking-[0.13em] text-paper/35">
-        VINSS Dispute Agent
-      </p>
-      <p className="mt-2 text-[10px] leading-relaxed text-paper/40">
-        Only evidence you explicitly submit here is disclosed for Agent review. Normal room chat remains private. The Agent has no signing key. If deterministic policy gates pass and AutoResolve is enabled, the dedicated resolver may authorize the resulting split on-chain.
-      </p>
+    <div className="mt-3 rounded-xl border border-paper/10 bg-paper/[0.02] p-4">
+      <div>
+        <p className="text-[9px] uppercase tracking-[0.13em] text-paper/35">
+          Dispute review
+        </p>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-paper/40">
+          Share your side. VINSS reviews only the information submitted for this dispute.
+        </p>
+      </div>
 
       {!review.ownPacket ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <label className="text-[9px] uppercase tracking-[0.12em] text-paper/32">
-            My dispute evidence
+            Your side
           </label>
+
           <textarea
             value={statement}
             onChange={(event) =>
@@ -129,11 +132,12 @@ export function DisputeAgentReview({
                 event.target.value,
               )
             }
-            rows={4}
+            rows={3}
             disabled={busy}
-            placeholder="State the facts the Agent should evaluate. Do not include unrelated private chat."
-            className="mt-2 w-full resize-none rounded-lg border border-wire bg-transparent px-3 py-2 text-xs text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
+            placeholder="What happened, and what should VINSS consider?"
+            className="mt-2 w-full resize-none rounded-xl border border-wire bg-transparent px-3 py-3 text-xs leading-relaxed text-paper outline-none placeholder:text-paper/20 disabled:opacity-40"
           />
+
           <button
             type="button"
             disabled={
@@ -142,48 +146,48 @@ export function DisputeAgentReview({
             }
             onClick={async () => {
               const sent =
-                await review
-                  .submitEvidence(
-                    statement,
-                  );
+                await review.submitEvidence(
+                  statement,
+                );
 
               if (sent) {
                 setStatement("");
               }
             }}
-            className="mt-3 w-full rounded-xl border border-paper/15 px-4 py-3 text-xs font-medium text-paper/60 disabled:opacity-30"
+            className="mt-3 w-full rounded-xl border border-signal/30 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
           >
             {busy
-              ? "Sharing evidence…"
-              : "Submit evidence to Agent review →"}
+              ? "Submitting…"
+              : "Submit my side →"}
           </button>
         </div>
       ) : (
-        <div className="mt-3 rounded-lg bg-signal/[0.035] px-3 py-2.5">
-          <p className="text-[10px] text-signal">
-            My evidence submitted ✓
+        <div className="mt-4 rounded-xl bg-signal/[0.05] px-3 py-3">
+          <p className="text-[10px] font-medium text-signal">
+            Your side submitted ✓
           </p>
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
-        <div className="rounded-lg bg-paper/[0.025] px-3 py-2">
-          <span className="text-paper/30">
-            Payer evidence
-          </span>
-          <p className="mt-1 text-paper/55">
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-paper/[0.025] px-3 py-2.5">
+          <p className="text-[9px] text-paper/30">
+            Payer
+          </p>
+          <p className="mt-1 text-[10px] text-paper/60">
             {review.payerPacket
-              ? "Ready ✓"
+              ? "Submitted ✓"
               : "Waiting"}
           </p>
         </div>
-        <div className="rounded-lg bg-paper/[0.025] px-3 py-2">
-          <span className="text-paper/30">
-            Payee evidence
-          </span>
-          <p className="mt-1 text-paper/55">
+
+        <div className="rounded-xl bg-paper/[0.025] px-3 py-2.5">
+          <p className="text-[9px] text-paper/30">
+            Payee
+          </p>
+          <p className="mt-1 text-[10px] text-paper/60">
             {review.payeePacket
-              ? "Ready ✓"
+              ? "Submitted ✓"
               : "Waiting"}
           </p>
         </div>
@@ -191,126 +195,72 @@ export function DisputeAgentReview({
 
       {review.bothPackets &&
         review.disputeCase && (
-          <details
-            className="mt-3 rounded-xl border border-paper/10 bg-black/10 p-3"
-            open
-          >
-            <summary className="cursor-pointer text-[9px] font-medium uppercase tracking-[0.12em] text-paper/55">
-              Review exact dispute case
+          <details className="mt-3 rounded-xl border border-paper/8 bg-black/10 px-3 py-3">
+            <summary className="cursor-pointer text-[9px] text-paper/40">
+              View dispute details
             </summary>
 
             <div className="mt-3 space-y-3 text-[10px] leading-relaxed text-paper/45">
               <div>
-                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                  Accepted deal
+                <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                  Agreement
                 </p>
                 <p className="mt-1 text-paper/60">
                   {review.disputeCase.acceptedTerms.summary}
                 </p>
-                <p className="mt-1">
-                  Asset: {review.disputeCase.principal.asset}
-                  {" · "}
-                  Raw principal: {review.disputeCase.principal.rawAmount}
-                  {" · "}
-                  Verification: {review.disputeCase.verificationClass}
-                </p>
               </div>
 
-              <div>
-                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                  Obligations
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-4">
-                  {review.disputeCase.acceptedTerms.obligations.map(
-                    (item, index) => (
-                      <li key={`obligation-${index}`}>
-                        {item}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              </div>
-
-              <div>
-                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                  Completion criteria
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-4">
-                  {review.disputeCase.acceptedTerms.completionCriteria.map(
-                    (item, index) => (
-                      <li key={`criterion-${index}`}>
-                        {item}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              </div>
-
-              {[
-                ["Payer", review.disputeCase.payer],
-                ["Payee", review.disputeCase.payee],
-              ].map(([label, packet]) => {
-                const party =
-                  packet as typeof review.disputeCase.payer;
-
-                return (
-                  <div key={label as string}>
-                    <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                      {label as string} evidence
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-paper/60">
-                      {party.statement}
-                    </p>
-
-                    <div className="mt-2 space-y-1">
-                      {party.evidence.map(
-                        (item, index) => (
-                          <div
-                            className="rounded-lg bg-paper/[0.025] px-2.5 py-2"
-                            key={`${label}-${index}`}
-                          >
-                            <p className="text-paper/35">
-                              {item.kind} · {item.label}
-                            </p>
-                            <p className="mt-1 break-words text-paper/55">
-                              {item.value}
-                            </p>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div>
-                <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                  Fulfillment snapshot
-                </p>
-                <p className="mt-1">
-                  Submitted: {review.disputeCase.fulfillment.submitted ? "yes" : "no"}
-                  {" · "}
-                  Confirmed: {review.disputeCase.fulfillment.confirmed ? "yes" : "no"}
-                </p>
-                <p className="mt-1 break-all font-mono text-[9px] text-paper/35">
-                  Evidence commitment: {review.disputeCase.fulfillment.evidenceCommitment}
-                </p>
-              </div>
-
-              {review.caseCommitment && (
+              {review.disputeCase.acceptedTerms.obligations.length > 0 && (
                 <div>
-                  <p className="text-[9px] uppercase tracking-[0.1em] text-paper/25">
-                    Case commitment
+                  <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                    What was agreed
                   </p>
-                  <p className="mt-1 break-all font-mono text-[9px] text-signal/70">
-                    {review.caseCommitment}
-                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {review.disputeCase.acceptedTerms.obligations.map(
+                      (item, index) => (
+                        <li key={`obligation-${index}`}>
+                          {item}
+                        </li>
+                      ),
+                    )}
+                  </ul>
                 </div>
               )}
 
-              <p className="border-t border-paper/10 pt-3 text-[9px] text-paper/28">
-                Only this disclosed case is submitted to VINSS Dispute Agent. Unrelated room chat and room secrets are not included.
-              </p>
+              <div className="grid gap-2">
+                <div className="rounded-lg bg-paper/[0.025] p-2.5">
+                  <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                    Payer says
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-paper/55">
+                    {review.disputeCase.payer.statement}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-paper/[0.025] p-2.5">
+                  <p className="text-[8px] uppercase tracking-[0.1em] text-paper/25">
+                    Payee says
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-paper/55">
+                    {review.disputeCase.payee.statement}
+                  </p>
+                </div>
+              </div>
+
+              <details className="border-t border-paper/10 pt-2">
+                <summary className="cursor-pointer text-[8px] text-paper/25">
+                  Technical details
+                </summary>
+
+                <div className="mt-2 space-y-2 break-all font-mono text-[8px] leading-relaxed text-paper/25">
+                  <p>
+                    Case: {review.caseCommitment ?? "Preparing"}
+                  </p>
+                  <p>
+                    Evidence: {review.disputeCase.fulfillment.evidenceCommitment}
+                  </p>
+                </div>
+              </details>
             </div>
           </details>
         )}
@@ -318,39 +268,30 @@ export function DisputeAgentReview({
       {review.bothPackets &&
         !review.reviewReady &&
         !review.ownSignature && (
-          <div className="mt-3 rounded-lg bg-paper/[0.025] px-3 py-2.5">
+          <div className="mt-3 rounded-xl bg-paper/[0.025] px-3 py-3">
             {review.challengeError ? (
               <>
                 <p className="text-[10px] text-danger">
-                  Secure signing challenge unavailable
+                  Unable to prepare confirmation
                 </p>
-                <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
-                  {review.challengeError}
-                </p>
+
                 <button
                   type="button"
                   disabled={review.challengeLoading}
                   onClick={() =>
                     void review.retryChallenge()
                   }
-                  className="mt-3 w-full rounded-lg border border-signal/30 px-3 py-2.5 text-[10px] font-medium text-signal disabled:opacity-30"
+                  className="mt-2 w-full rounded-lg border border-signal/25 px-3 py-2.5 text-[10px] text-signal disabled:opacity-30"
                 >
                   {review.challengeLoading
-                    ? "Preparing secure challenge…"
-                    : "Retry secure challenge →"}
+                    ? "Preparing…"
+                    : "Try again →"}
                 </button>
               </>
             ) : (
-              <>
-                <p className="text-[10px] text-paper/50">
-                  {review.disputeCase
-                    ? "Preparing secure signing challenge…"
-                    : "Preparing exact dispute case…"}
-                </p>
-                <p className="mt-1 text-[9px] leading-relaxed text-paper/28">
-                  Wallet signing is enabled only after VINSS verifies this exact case against live Rekber custody.
-                </p>
-              </>
+              <p className="text-[10px] text-paper/40">
+                Preparing your confirmation…
+              </p>
             )}
           </div>
         )}
@@ -358,44 +299,50 @@ export function DisputeAgentReview({
       {review.bothPackets &&
         review.reviewReady &&
         !review.ownSignature && (
-          <div className="mt-3">
-            <p className="text-[9px] leading-relaxed text-paper/30">
-              Both evidence packets are ready. Sign the backend-issued SNIP-12 challenge for this exact case. The signature is verified privately by VINSS and does not create another STRK20 transaction. It does not mean you agree with the counterparty's claims.
+          <div className="mt-4">
+            <p className="text-[10px] leading-relaxed text-paper/42">
+              Both sides are ready. Confirm this dispute so VINSS can resolve it automatically.
             </p>
+
+            <p className="mt-1 text-[9px] text-paper/25">
+              This confirmation does not move funds or mean you agree with the other side.
+            </p>
+
             <button
               type="button"
               disabled={busy}
               onClick={() =>
                 void review.signReview()
               }
-              className="mt-3 w-full rounded-xl border border-signal/30 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
+              className="mt-3 w-full rounded-xl border border-signal/35 px-4 py-3 text-xs font-medium text-signal disabled:opacity-30"
             >
               {busy
-                ? "Signing review…"
-                : "Sign Agent review →"}
+                ? "Confirming…"
+                : "Confirm dispute →"}
             </button>
           </div>
         )}
 
       {review.caseCommitment && (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
-          <div className="rounded-lg bg-paper/[0.025] px-3 py-2">
-            <span className="text-paper/30">
-              Payer signature
-            </span>
-            <p className="mt-1 text-paper/55">
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-paper/[0.025] px-3 py-2.5">
+            <p className="text-[9px] text-paper/30">
+              Payer confirmation
+            </p>
+            <p className="mt-1 text-[10px] text-paper/60">
               {review.payerSignature
-                ? "Verified ✓"
+                ? "Confirmed ✓"
                 : "Waiting"}
             </p>
           </div>
-          <div className="rounded-lg bg-paper/[0.025] px-3 py-2">
-            <span className="text-paper/30">
-              Payee signature
-            </span>
-            <p className="mt-1 text-paper/55">
+
+          <div className="rounded-xl bg-paper/[0.025] px-3 py-2.5">
+            <p className="text-[9px] text-paper/30">
+              Payee confirmation
+            </p>
+            <p className="mt-1 text-[10px] text-paper/60">
               {review.payeeSignature
-                ? "Verified ✓"
+                ? "Confirmed ✓"
                 : "Waiting"}
             </p>
           </div>
@@ -405,75 +352,71 @@ export function DisputeAgentReview({
       {review.payerSignature &&
         review.payeeSignature &&
         !review.result && (
-          <div className="mt-3 rounded-xl border border-signal/15 bg-signal/[0.035] px-4 py-3">
-            <p className="text-xs font-medium text-signal">
-              {busy
-                ? "Agent reviewing dispute…"
-                : "Both signatures verified"}
+          <div className="mt-3 rounded-xl border border-signal/15 bg-signal/[0.04] px-3 py-3">
+            <p className="text-[10px] font-medium text-signal">
+              Reviewing dispute
             </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-paper/40">
-              Verified dispute evaluation starts automatically.
+            <p className="mt-1 text-[9px] text-paper/35">
+              No action needed. VINSS is reviewing both sides.
             </p>
           </div>
         )}
 
       {review.result && (
-        <div className="mt-3 rounded-xl border border-signal/20 bg-signal/[0.035] p-3">
+        <div className="mt-3 rounded-xl border border-signal/20 bg-signal/[0.04] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-medium text-signal">
-              Agent decision
+              Dispute result
             </p>
-            <span className="text-[9px] uppercase tracking-[0.1em] text-paper/30">
+
+            <span className="text-[8px] uppercase tracking-[0.1em] text-paper/30">
               {review.result.execution.status ===
                 "authorized" ||
               review.result.execution.status ===
                 "already_authorized"
-                ? "Split authorized"
-                : review.result.policy.status ===
-                    "NEEDS_REVIEW"
-                  ? "Needs review"
-                  : "Policy checked"}
+                ? "Result ready"
+                : "Processing"}
             </span>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-paper/[0.03] p-2.5">
+            <div className="rounded-lg bg-paper/[0.03] p-3">
               <p className="text-[9px] text-paper/30">
                 Payer
               </p>
-              <p className="mt-1 text-sm font-medium text-paper/75">
+              <p className="mt-1 text-lg font-medium text-paper/80">
                 {percent(
-                  review.result
-                    .decision.payerBps,
+                  review.result.decision.payerBps,
                 )}
               </p>
             </div>
-            <div className="rounded-lg bg-paper/[0.03] p-2.5">
+
+            <div className="rounded-lg bg-paper/[0.03] p-3">
               <p className="text-[9px] text-paper/30">
                 Payee
               </p>
-              <p className="mt-1 text-sm font-medium text-paper/75">
+              <p className="mt-1 text-lg font-medium text-paper/80">
                 {percent(
-                  review.result
-                    .decision.payeeBps,
+                  review.result.decision.payeeBps,
                 )}
               </p>
             </div>
           </div>
 
-          <p className="mt-3 text-[10px] leading-relaxed text-paper/50">
-            {review.result
-              .decision.reason}
+          <p className="mt-3 text-[10px] leading-relaxed text-paper/45">
+            {review.result.decision.reason}
           </p>
 
-          <p className="mt-2 text-[9px] text-paper/28">
-            Policy:{" "}
-            {review.result
-              .policy.status}
-            {" · Execution: "}
-            {review.result
-              .execution.status}
-          </p>
+          <details className="mt-3 border-t border-paper/10 pt-2">
+            <summary className="cursor-pointer text-[8px] text-paper/25">
+              Technical status
+            </summary>
+            <p className="mt-2 text-[8px] text-paper/25">
+              {review.result.policy.status}
+              {" · "}
+              {review.result.execution.status}
+            </p>
+          </details>
         </div>
       )}
     </div>

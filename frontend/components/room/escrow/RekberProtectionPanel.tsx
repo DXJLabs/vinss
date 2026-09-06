@@ -120,10 +120,10 @@ export function RekberProtectionPanel({
           ) : (
             <details className="group">
               <summary className="cursor-pointer list-none text-[10px] text-paper/45 [&::-webkit-details-marker]:hidden">
-                Mutual cancellation ▾
+                Settle together instead ▾
               </summary>
               <p className="mt-2 text-[9px] leading-relaxed text-amber/70">
-                Authorizing a full refund reveals your precommitted refund-consent secret to the Payer through encrypted coordination. Treat this as an explicit, non-revocable authorization while the custody remains open.
+                If both sides agree, the full payment can be returned to the Payer instead of continuing the dispute.
               </p>
               <button
                 type="button"
@@ -233,14 +233,14 @@ export function RekberProtectionPanel({
       <div className="rounded-xl border border-amber/25 bg-amber/[0.04] p-4">
         <p className="text-[9px] uppercase tracking-[0.13em] text-amber">
           {state.resolutionAuthorized
-            ? "Dispute resolution"
-            : "Dispute locked"}
+            ? "Resolution ready"
+            : "Dispute in progress"}
         </p>
 
         <p className="mt-2 text-xs leading-relaxed text-paper/45">
           {state.resolutionAuthorized
-            ? "Normal refund and release remain paused. Funds can move only through the authorized dispute allocation."
-            : "Normal release, auto-release, and unilateral timeout refund are paused while this custody is disputed."}
+            ? "The result is ready. Check the split below and claim your share."
+            : "Your payment is locked while VINSS resolves the dispute."}
         </p>
 
         {state.resolutionAuthorized && (
@@ -296,16 +296,16 @@ export function RekberProtectionPanel({
             >
               {busy
                 ? "Claiming resolution…"
-                : "Claim my resolution share →"}
+                : "Claim my share →"}
             </button>
           ) : ownResolutionAmount > 0n &&
             ownResolutionClaimed ? (
             <p className="mt-3 rounded-lg bg-signal/[0.05] px-3 py-2.5 text-[10px] text-signal">
-              Your resolution share has been claimed ✓
+              Your share has been claimed ✓
             </p>
           ) : ownResolutionAmount === 0n ? (
             <p className="mt-3 text-[10px] text-paper/35">
-              No dispute funds were allocated to this wallet.
+              This wallet has no share to claim.
             </p>
           ) : (
             <p className="mt-3 text-[10px] text-paper/35">
@@ -314,7 +314,7 @@ export function RekberProtectionPanel({
           )
         ) : (
           <p className="mt-3 text-[10px] text-paper/35">
-            Waiting for an authorized Payer/Payee resolution split.
+            Complete the steps below to resolve this dispute.
           </p>
         )}
 
