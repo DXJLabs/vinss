@@ -247,7 +247,7 @@ function RoomTabs() {
         </div>
 
         <div className="px-2 py-2.5 text-center text-[10px] font-medium text-paper/38">
-          Royalty
+          Loyalty
         </div>
       </div>
     </nav>

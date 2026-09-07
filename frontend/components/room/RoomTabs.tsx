@@ -4,8 +4,8 @@ export type RoomTab =
   | "timeline"
   | "offer"
   | "escrow"
-  | "loyalty"
-  | "royalty";
+  | "activity"
+  | "loyalty";
 
 type MessageMode =
   | "chat"
@@ -29,8 +29,8 @@ export function RoomTabs({
   onMessageModeChange,
 }: RoomTabsProps) {
   const messageSurface =
-    value !== "loyalty" &&
-    value !== "royalty";
+    value !== "activity" &&
+    value !== "loyalty";
 
   const items = [
     {
@@ -63,17 +63,17 @@ export function RoomTabs({
       key: "activity",
       label: "Activity",
       active:
+        value === "activity",
+      onClick: () =>
+        onChange("activity"),
+    },
+    {
+      key: "loyalty",
+      label: "Loyalty",
+      active:
         value === "loyalty",
       onClick: () =>
         onChange("loyalty"),
-    },
-    {
-      key: "royalty",
-      label: "Royalty",
-      active:
-        value === "royalty",
-      onClick: () =>
-        onChange("royalty"),
     },
   ] as const;
 

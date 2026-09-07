@@ -30,7 +30,7 @@ import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomTabs, type RoomTab } from "@/components/room/RoomTabs";
 import { ActivityPanel } from "@/components/room/activity/ActivityPanel";
-import { RoyaltyPanel } from "@/components/room/royalty/RoyaltyPanel";
+import { LoyaltyPanel } from "@/components/room/loyalty/LoyaltyPanel";
 import { useRoom } from "@/hooks/room/useRoom";
 import { useRoomConversation } from "@/hooks/room/useRoomConversation";
 import { useRoomInvitation } from "@/hooks/room/useRoomInvitation";
@@ -133,8 +133,8 @@ export default function DealRoomPage() {
     session,
     channelKey,
     active:
-      tab !== "loyalty" &&
-      tab !== "royalty",
+      tab !== "activity" &&
+      tab !== "loyalty",
     setBusy,
     setError,
   });
@@ -619,8 +619,8 @@ export default function DealRoomPage() {
           />
         )}
 
-      {tab !== "loyalty" &&
-        tab !== "royalty" &&
+      {tab !== "activity" &&
+        tab !== "loyalty" &&
         !showAccessDetails && (
           <AgentPanel
             roomLabel={room?.label}
@@ -651,8 +651,8 @@ export default function DealRoomPage() {
         )}
 
       {!showAccessDetails &&
-        tab !== "loyalty" &&
-        tab !== "royalty" && (
+        tab !== "activity" &&
+        tab !== "loyalty" && (
         <ConversationPanel
           roomId={room?.id ?? params.roomId}
           entries={entries}
@@ -908,7 +908,7 @@ export default function DealRoomPage() {
       )}
 
       {!showAccessDetails &&
-        tab === "loyalty" && (
+        tab === "activity" && (
           <ActivityPanel
             entries={[
               ...entries,
@@ -918,8 +918,8 @@ export default function DealRoomPage() {
         )}
 
       {!showAccessDetails &&
-        tab === "royalty" && (
-          <RoyaltyPanel
+        tab === "loyalty" && (
+          <LoyaltyPanel
             address={
               session?.account.address
             }
