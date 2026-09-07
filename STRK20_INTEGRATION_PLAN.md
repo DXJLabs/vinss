@@ -1,6 +1,6 @@
 # STRK20 Integration & Privacy Architecture — VINSS
 
-**Updated:** 2026-09-08  
+**Updated:** 2026-09-08
 **Status:** Starknet Mainnet — normal two-party deal lifecycle verified
 
 VINSS is a **Private Deal Room on Starknet** built around STRK20 as its privacy and execution substrate.
@@ -9,7 +9,7 @@ STRK20 is not used only for a private transfer at the end of a deal. VINSS carri
 
 > **Hide what does not need to be public. Verify what needs to be proven.**
 
-For the current mainnet capability matrix and deployed addresses, see [`README.md`](./README.md).  
+For the current mainnet capability matrix and deployed addresses, see [`README.md`](./README.md).
 For machine-readable submission evidence, see [`strk20.json`](./strk20.json).
 
 ---
