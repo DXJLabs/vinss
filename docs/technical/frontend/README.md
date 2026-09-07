@@ -1453,7 +1453,7 @@ Other background coordination actions use a negligible replay-protection spend i
 `quoteRekberWorkflowFee()` currently resolves the Rekber revenue FeePolicy reference but then returns:
 
 ```text
-3 STRK
+1 STRK
 ```
 
 as a frontend application workflow amount.
@@ -1933,7 +1933,7 @@ Do not treat all frontend fees as one mechanism.
 | Message | MessageHelper FeePolicy quote |
 | Offer | OfferHelper FeePolicy quote |
 | Rekber funding | `quote_rekber_fee(token, principal)` |
-| Selected Rekber workflow actions | current frontend 3 STRK workflow amount |
+| Selected Rekber workflow actions | current frontend 1 STRK workflow amount |
 | Replay-only coordination | negligible current spend (for example 10 wei) |
 
 ---
@@ -2799,11 +2799,10 @@ frontend/hooks/room/useDisputeAgentReview.ts
 6. [Private Offers](./offers.md)
 7. [Escrow Rekber](./escrow-rekber.md)
 8. [Wallet & STRK20 Integration](./wallet-strk20.md)
-9. [Paymaster & Sponsorship Model](./paymaster.md)
-10. [Agent Integration](./agent-integration.md)
-11. [Local State](./local-state.md)
-12. [Configuration](./configuration.md)
-13. [Testing & Deployment](./testing-deployment.md)
+9. [Agent Integration](./agent-integration.md)
+10. [Local State](./local-state.md)
+11. [Configuration](./configuration.md)
+12. [Testing & Deployment](./testing-deployment.md)
 14. [Current Scope](./current-scope.md)
 
 These filenames are the current technical frontend documentation set.
@@ -2942,7 +2941,7 @@ It is not a canonical durable on-chain Group registry.
 
 ---
 
-## Caveat — Workflow fee 3 STRK is frontend application policy
+## Caveat — Workflow fee 1 STRK is frontend application policy
 
 Selected Rekber workflow fee is currently a frontend fixed amount rather than a fresh action quote returned directly from `FeePolicy.quote_fee`.
 
@@ -3764,7 +3763,7 @@ and future frontend documentation should remain anchored to current source plus 
 - Helper FeePolicy resolution.
 - Room/Message/Offer quotes.
 - Rekber funding quote.
-- Current separate 3 STRK workflow fee behavior.
+- Current separate 1 STRK workflow fee behavior.
 
 
 ## frontend/lib/agent.ts

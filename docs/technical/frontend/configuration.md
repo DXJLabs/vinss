@@ -551,13 +551,13 @@ and caches that address.
 3. returns:
 
 ```text
-3 STRK
+1 STRK
 ```
 
 as:
 
 ```text
-3n * 10n ** 18n
+1n * 10n ** 18n
 ```
 
 ---
@@ -567,14 +567,14 @@ as:
 
 Current source says the canonical FeePolicy REKBER action quote includes the larger sponsor reserve used by the funding economics.
 
-Using it for ordinary Agreement/Submit Work workflow revenue would overcharge the intended frontend workflow action.
+Using it for ordinary Rekber workflow revenue would overcharge the intended frontend workflow action.
 
 ---
 
 
 ## Current Workflow-Fee Caveat
 
-The 3 STRK amount is currently a frontend application-policy constant.
+The 1 STRK amount is currently a frontend application-policy constant.
 
 It is not equivalent to:
 
@@ -631,7 +631,7 @@ so the frontend must not reproduce the canonical funding amount from a local for
 | Invite CREATE / room activation | helper FeePolicy `quote_fee(1)` | No |
 | Message | MessageHelper FeePolicy `quote_fee(2)` | No |
 | Offer | OfferHelper FeePolicy `quote_fee(3)` | No |
-| Rekber workflow charge | current frontend 3 STRK after revenue-policy validation | **Yes** |
+| Rekber workflow charge | current frontend 1 STRK after revenue-policy validation | **Yes** |
 | Rekber funding | Rekber `quote_rekber_fee(token, principal)` | No |
 | Invite CONSUME / selected replay-only actions | negligible replay-protection spend in domain source | source-defined |
 
@@ -1217,7 +1217,7 @@ Current source-defined examples include:
 ```text
 MIN_WALLET_API_VERSION = 0.10.3
 VINSS_FEE_ACTION ids
-3 STRK current Rekber workflow fee
+1 STRK current Rekber workflow fee
 direct Invite TTL = 1h
 Group Invite TTL options = 24h / 7d
 ```
@@ -1238,7 +1238,7 @@ These require code change rather than dashboard env update.
 | Agent advisory BPS | `NEXT_PUBLIC_VINSS_FEE_BPS` | env + redeploy |
 | Wallet compatibility | minimum API version | source code |
 | Fee action ids | room/message/offer/rekber ids | source code + protocol alignment |
-| Rekber workflow 3 STRK | source constant | source code |
+| Rekber workflow 1 STRK | source constant | source code |
 
 ---
 
@@ -1615,7 +1615,7 @@ settlement token config
 | `C7` | Offer fee comes from current OfferHelper FeePolicy quote. |
 | `C8` | Invite CREATE fee comes from current Invite FeePolicy quote. |
 | `C9` | Rekber funding fee comes from `quote_rekber_fee(token, principal)`. |
-| `C10` | Current Rekber workflow 3 STRK charge is separate frontend application policy. |
+| `C10` | Current Rekber workflow 1 STRK charge is separate frontend application policy. |
 | `C11` | `NEXT_PUBLIC_VINSS_FEE_BPS` is advisory Agent/UI math, not canonical fees. |
 | `C12` | Treasury is public but high-impact and must be verified. |
 | `C13` | OpenNote token must match deployed helper/revenue semantics. |
@@ -1816,7 +1816,7 @@ Notes:
 | Room activation | Invite.get_fee_policy -> FeePolicy.quote_fee(1) | bigint > 0 |
 | Message | MessageHelper.get_fee_policy -> FeePolicy.quote_fee(2) | bigint > 0 |
 | Offer | OfferHelper.get_fee_policy -> FeePolicy.quote_fee(3) | bigint > 0 |
-| Rekber workflow | Rekber.get_revenue_fee_policy validation -> local 3 STRK | 3 * 10^18 |
+| Rekber workflow | Rekber.get_revenue_fee_policy validation -> local 1 STRK | 3 * 10^18 |
 | Rekber funding | Rekber.quote_rekber_fee(token, principal) | bigint > 0 |
 
 
@@ -1868,7 +1868,7 @@ no production-critical fallback used
 | Change OpenNote token | Critical economic/transaction | Wallet bundle token semantics change |
 | Change STRK/USDC | Critical financial | Settlement asset identity changes |
 | Change advisory fee BPS | Low protocol / UI economic | Agent estimate only |
-| Change 3 STRK workflow fee source code | Economic | Selected Rekber workflow charge changes |
+| Change 1 STRK workflow fee source code | Economic | Selected Rekber workflow charge changes |
 
 
 # Final Configuration Diagram
@@ -1915,7 +1915,7 @@ The most important correction is:
 
 The important exception is:
 
-> `quoteRekberWorkflowFee()` currently validates the Rekber revenue FeePolicy reference but returns a source-defined 3 STRK workflow charge rather than calling `quote_fee(4)`.
+> `quoteRekberWorkflowFee()` currently validates the Rekber revenue FeePolicy reference but returns a source-defined 1 STRK workflow charge rather than calling `quote_fee(4)`.
 
 The most important deployment caveat is:
 

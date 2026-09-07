@@ -1992,7 +1992,7 @@ Remove/gate this before strict production privacy claims.
 | Private Escrow create/accept/dispute | current Rekber workflow fee helper | frontend application policy |
 | Background coordination | negligible replay spend | not another VINSS revenue fee |
 | Rekber funding | Rekber quote_rekber_fee | token/principal aware |
-| Selected Rekber workflow actions | current 3 STRK workflow amount | separate from funding quote |
+| Selected Rekber workflow actions | current 1 STRK workflow amount | separate from funding quote |
 
 
 # 66 — Flow Invariants

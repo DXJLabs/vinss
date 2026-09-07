@@ -1439,27 +1439,6 @@ Capability detection is a compatibility signal, not transaction finality.
 
 ---
 
-# AVNU Boundary
-
-`frontend/package.json` currently includes:
-
-```text
-@avnu/avnu-sdk
-```
-
-but the transaction modules audited here submit through:
-
-```text
-WalletAccountV6
-strk20InvokeTransaction
-```
-
-rather than directly constructing AVNU SDK paymaster calls in those modules.
-
-Do not infer direct AVNU transaction construction merely from package dependency presence.
-
----
-
 # Paymaster / Wallet Cost Boundary
 
 Fees shown or charged by wallet/private-transaction infrastructure are separate from VINSS application FeePolicy revenue.

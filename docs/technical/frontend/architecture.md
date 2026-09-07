@@ -1329,7 +1329,7 @@ Current source has several fee paths:
 | Message | MessageHelper FeePolicy quote |
 | Offer | OfferHelper FeePolicy quote |
 | Rekber funding | Rekber `quote_rekber_fee(token, principal)` |
-| selected Rekber workflow actions | frontend current 3 STRK workflow amount |
+| selected Rekber workflow actions | frontend current 1 STRK workflow amount |
 | replay-only private coordination | negligible replay spend |
 
 Architecture docs must keep fee-source authority explicit.

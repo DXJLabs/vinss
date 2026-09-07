@@ -615,7 +615,7 @@ Treat the conflicting comment as stale source commentary until code/comments are
 `quoteRekberWorkflowFee()` currently resolves the Rekber revenue FeePolicy relationship and then returns:
 
 ```text
-3 STRK
+1 STRK
 ```
 
 as the selected frontend workflow charge.
@@ -1903,12 +1903,12 @@ Rekber currently has multiple economic paths.
 ---
 
 
-## 3 STRK Workflow Amount
+## 1 STRK Workflow Amount
 
 Current frontend workflow fee helper returns:
 
 ```text
-3 STRK
+1 STRK
 ```
 
 after validating the Rekber revenue FeePolicy relation.
@@ -2371,7 +2371,7 @@ Different Rekber stages use different strongest evidence:
 |---|---|
 | `E1` | Do not hardcode funding fee as principal/50 in frontend docs. |
 | `E2` | Funding calls quote_rekber_fee immediately before transaction construction. |
-| `E3` | Current selected workflow fee is 3 STRK frontend policy. |
+| `E3` | Current selected workflow fee is 1 STRK frontend policy. |
 | `E4` | Funding fee and workflow fee are separate concepts. |
 | `E5` | Service fee is non-refundable. |
 | `E6` | Resolution split operates on principal allocation, not fee refund. |
@@ -2594,7 +2594,7 @@ mainnet transaction success
 | Caveat | Current implication |
 |---|---|
 | Fee comment inconsistency | `escrow.ts` comment says only payer create is revenue-bearing, executable condition charges create/accept/dispute. |
-| Workflow fee policy split | Selected workflow fee is currently frontend-defined 3 STRK after revenue-policy validation. |
+| Workflow fee policy split | Selected workflow fee is currently frontend-defined 1 STRK after revenue-policy validation. |
 | Source tests are not E2E | Five mapping + six protection + one dispute source cases are logic evidence only. |
 | Frontend orchestration concentration | EscrowPanel still owns much of production transaction sequencing; refactors are intentionally conservative. |
 | Local secret protection depends on room key | Rekber secret records are encrypted application storage, not secure enclave storage. |

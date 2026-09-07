@@ -1090,7 +1090,7 @@ Current economic paths are not one fixed frontend table.
 | Message | MessageHelper FeePolicy quote |
 | Offer | OfferHelper FeePolicy quote |
 | Rekber funding | `quote_rekber_fee(token, principal)` |
-| selected Rekber workflow actions | current frontend 3 STRK workflow amount |
+| selected Rekber workflow actions | current frontend 1 STRK workflow amount |
 | replay-only actions | negligible source-defined replay spend |
 
 ---
@@ -1774,7 +1774,7 @@ mainnet economics
 | Group local-first model | Group membership is not canonical durable chain state. |
 | Presence process-local backend | Ephemeral state can split with multiple backend replicas. |
 | Attachment lifecycle | No complete delete/retention/rotation model. |
-| Rekber workflow fee | Selected workflow fee is currently source-defined 3 STRK rather than same dynamic FeePolicy action path. |
+| Rekber workflow fee | Selected workflow fee is currently source-defined 1 STRK rather than same dynamic FeePolicy action path. |
 | Targeted frontend tests | Many browser flows do not have dedicated frontend automated tests. |
 | Playwright evidence | Scripts exist; passing current browser suite is a separate evidence question. |
 

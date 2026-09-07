@@ -2054,7 +2054,6 @@ Current frontend package declares:
 Next.js ^16.3.1
 React ^19.2.8
 starknet 10.4.0
-@avnu/avnu-sdk ^4.2.0
 @playwright/test ^1.54.2
 TypeScript ^5.5.0
 ```
