@@ -1,23 +1,43 @@
 # VINSS Verification Report
 
-Date: 2026-08-14
+**Updated:** 2026-09-08
+**Network:** Starknet Mainnet
+**Status:** Mainnet product flow verified
 
-## Verified in this build
+## Mainnet Product Verification
 
-- Backend agent tool unit tests: **4/4 PASS**.
-- Privacy boundary static checks: **PASS**.
-- Demo video generated: `test-artifacts/vinss-demo.webm` — 1440×900, VP9, 13 seconds.
-- Agent tool allowlist contains analysis, fee calculation, and counter-offer drafting only.
-- Frontend does not reference `GROQ_API_KEY`.
-- Room secrets are no longer rendered in the room list; they are exposed only through an explicit Access details view.
-- Escrow deposit now requires a custody commitment created during encrypted coordination and reuses that commitment for settlement preparation.
+| Capability | Mainnet status |
+| --- | --- |
+| Encrypted Message | ✅ Verified |
+| Structured Offer lifecycle | ✅ Verified |
+| Escrow Rekber funding | ✅ Verified |
+| Fulfillment submission | ✅ Verified |
+| Fulfillment confirmation | ✅ Verified |
+| Rekber release | ✅ Verified |
+| Settlement Certificate — Party A | ✅ Verified |
+| Settlement Certificate — Party B | ✅ Verified |
+| Dispute / resolution | ✅ Verified |
 
-## Not claimed as verified
+## Automated Validation
 
-- `npm install` for the frontend/backend did not complete in the build environment before timeout, so a full Next.js/Express dependency-backed build was not claimed green.
-- Playwright browser E2E tests are included in `e2e/vinss.spec.ts` and configured to record video, but were not executed because Playwright dependencies were not installed.
-- Real Ready wallet signing, STRK20 proving, Sepolia two-party E2E, and contract deployment remain manual/testnet verification items from `STRK20_INTEGRATION_PLAN.md`.
+| Workflow | Validation |
+| --- | --- |
+| `frontend-test.yml` | TypeScript, invite recovery regression, privacy-boundary regression, production build |
+| `backend-test.yml` | TypeScript, backend test suite, privacy-boundary regression |
+| `contracts-test.yml` | Cairo build and Starknet Foundry tests |
+| `deploy-mainnet.yml` | Mainnet safety gates, SN_MAIN RPC verification, tested-source enforcement, deployment and verification |
 
-## Demo artifact
+The Mainnet deployment workflow requires a successful dedicated Contracts Test and rejects deployment when the current `contracts/` content differs from the tested source.
 
-The included video is a UX walkthrough of the intended invisible-agent experience. It is a product/demo recording, not evidence of a successful blockchain transaction.
+Exact test counts and individual results are reported by the current GitHub Actions run summaries.
+
+## Evidence Sources
+
+- [`README.md`](./README.md)
+- [`STRK20_INTEGRATION_PLAN.md`](./STRK20_INTEGRATION_PLAN.md)
+- [`strk20.json`](./strk20.json)
+- [`.github/workflows/`](./.github/workflows/)
+- [`reports/TESTS.md`](./reports/TESTS.md)
+- [`reports/DEPLOYMENTS.md`](./reports/DEPLOYMENTS.md)
+
+Historical reports remain development history; current Mainnet verification is defined by the current repository, GitHub Actions, and Mainnet evidence.
