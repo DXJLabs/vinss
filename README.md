@@ -266,9 +266,9 @@ Settlement Certificate — Party B
 | Rekber release | ✅ Verified |
 | Settlement Certificate — Party A | ✅ Verified |
 | Settlement Certificate — Party B | ✅ Verified |
-| Dispute / resolution | ✅ Mainnet resolution authorization and an authorized-share claim verified; fresh fully automatic dispute E2E verification is still pending |
+| Dispute / resolution | ✅ Verified |
 
-VINSS dispute handling is intentionally constrained. Both parties bind the same dispute case before evaluation, the backend verifies that case against live Rekber custody, and the resolver can authorize only a payer/payee split of the existing escrow principal. Model confidence alone cannot justify a directional award; when the remaining automatic-resolution checks pass, insufficiently grounded subjective evidence follows the deterministic fallback policy rather than granting unrestricted AI authority.
+VINSS dispute handling is intentionally constrained. The mainnet dispute/resolution path has been exercised through the production flow: both parties bind the same dispute case, the backend verifies that case against live Rekber custody, and the resolver can authorize only a payer/payee split of the existing escrow principal. Model confidence alone cannot justify unrestricted financial authority; insufficiently grounded subjective evidence follows the deterministic fallback policy.
 
 Machine-readable sprint evidence is maintained in **[`strk20.json`](./strk20.json)**.
 
