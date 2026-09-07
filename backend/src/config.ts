@@ -45,7 +45,6 @@ export interface AppConfig {
   };
   features: {
     agent: boolean;
-    loyalty: boolean;
   };
   rateLimits: {
     windowMs: number;
@@ -364,7 +363,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         env.AGENT_ENABLED,
         network !== "mainnet",
       ),
-      loyalty: parseBoolean(env.LOYALTY_ENABLED, false),
     },
     rateLimits: {
       windowMs: parseInteger(

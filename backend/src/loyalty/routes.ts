@@ -4,87 +4,113 @@ import {
   type Response,
 } from "express";
 
-import { config } from "../config.js";
+import type {
+  StarknetNetwork,
+} from "../config.js";
+
 import {
-  awardAction,
-  getLoyalty,
-  getLoyaltyRules,
+  CertificateStore,
+} from "../indexer/certificateStore.js";
+
+import {
+  calculateLoyalty,
 } from "./service.js";
-import type { LoyaltyAction } from "./types.js";
 
-export const loyaltyRouter = Router();
-
-const ACTIONS: LoyaltyAction[] = [
-  "message_sent",
-  "offer_created",
-  "offer_countered",
-  "offer_accepted",
-  "work_submitted",
-  "work_reviewed",
-  "referral_joined",
-  "referral_activated",
-  "referral_converted",
-  "rekber_released",
-  "rekber_refunded",
-];
-
-loyaltyRouter.get(
-  "/loyalty/config",
-  (_req: Request, res: Response) => {
-    return res.json({
-      network: config.network,
-      ...getLoyaltyRules(),
-    });
-  },
-);
-
-loyaltyRouter.get(
-  "/loyalty/:subject",
-  (req: Request, res: Response) => {
-    return res.json(
-      getLoyalty(config.network, req.params.subject),
+function canonicalAddress(
+  value: string,
+): string {
+  if (
+    !/^0x[0-9a-fA-F]+$/.test(value)
+  ) {
+    throw new Error(
+      "Invalid Starknet address.",
     );
-  },
-);
+  }
 
-loyaltyRouter.post(
-  "/loyalty/events",
-  (req: Request, res: Response) => {
-    const { subject, action, eventId } = req.body ?? {};
+  const numeric = BigInt(value);
 
-    if (
-      typeof subject !== "string" ||
-      typeof action !== "string" ||
-      typeof eventId !== "string"
-    ) {
-      return res.status(400).json({
-        error:
-          "subject, action and eventId are required",
-      });
-    }
+  if (
+    numeric <= 0n ||
+    numeric >= 1n << 251n
+  ) {
+    throw new Error(
+      "Invalid Starknet address.",
+    );
+  }
 
-    if (!ACTIONS.includes(action as LoyaltyAction)) {
-      return res.status(400).json({
-        error: `invalid loyalty action: ${action}`,
-      });
-    }
+  return `0x${numeric.toString(16)}`;
+}
 
-    try {
-      return res.json(
-        awardAction(
-          config.network,
-          subject,
-          action as LoyaltyAction,
-          eventId,
-        ),
-      );
-    } catch (error) {
-      return res.status(400).json({
-        error:
+export function createLoyaltyRouter(
+  certificateStore: CertificateStore,
+  network: StarknetNetwork,
+  certificateContractAddress: string,
+): Router {
+  const router = Router();
+
+  router.get(
+    "/loyalty/:address",
+    async (
+      req: Request,
+      res: Response,
+    ) => {
+      let address: string;
+
+      try {
+        address = canonicalAddress(
+          req.params.address,
+        );
+      } catch (error) {
+        return res.status(400).json({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Invalid address.",
+        });
+      }
+
+      try {
+        const stats =
+          await certificateStore
+            .recipientStats(
+              network,
+              certificateContractAddress,
+              address,
+            );
+
+        const loyalty =
+          calculateLoyalty({
+            certificateCount:
+              stats.certificateCount,
+            successfulSettlements:
+              stats.successfulSettlements,
+          });
+
+        return res.json({
+          network,
+          address,
+          ...loyalty,
+          latestCertificateIssuedAt:
+            stats.latestIssuedAt,
+          conversion: {
+            status: "coming_soon",
+          },
+        });
+      } catch (error) {
+        console.error(
+          "[loyalty] lookup failed",
           error instanceof Error
-            ? error.message
-            : "Invalid loyalty event",
-      });
-    }
-  },
-);
+            ? error.name
+            : "UnknownError",
+        );
+
+        return res.status(500).json({
+          error:
+            "Loyalty lookup failed.",
+        });
+      }
+    },
+  );
+
+  return router;
+}

@@ -424,87 +424,32 @@ export const openApiDocument = {
         },
       },
     },
-    "/loyalty/config": {
+    "/loyalty/{address}": {
       get: {
         tags: ["Loyalty"],
-        summary: "Get network-scoped loyalty rules",
-        responses: {
-          "200": {
-            description: "Points and levels",
-          },
-        },
-      },
-    },
-    "/loyalty/{subject}": {
-      get: {
-        tags: ["Loyalty"],
-        summary: "Get a network-scoped loyalty account",
+        summary: "Read certificate-derived VINSS Loyalty points",
+        description:
+          "Returns read-only Loyalty points derived from indexed Settlement Certificate and successful Rekber settlement data. Clients cannot award themselves points.",
         parameters: [
           {
             in: "path",
-            name: "subject",
+            name: "address",
             required: true,
             schema: {
               type: "string",
+              pattern: "^0x[0-9a-fA-F]+$",
             },
           },
         ],
         responses: {
           "200": {
-            description: "Loyalty account",
-          },
-        },
-      },
-    },
-    "/loyalty/events": {
-      post: {
-        tags: ["Loyalty"],
-        summary: "Award a network-scoped loyalty event",
-        description:
-          "Loyalty remains a separate application service and is not part of the discovery indexer.",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["subject", "action", "eventId"],
-                properties: {
-                  subject: {
-                    type: "string",
-                    minLength: 1,
-                  },
-                  action: {
-                    type: "string",
-                    enum: [
-                      "message_sent",
-                      "offer_created",
-                      "offer_countered",
-                      "offer_accepted",
-                      "work_submitted",
-                      "work_reviewed",
-                      "referral_joined",
-                      "referral_activated",
-                      "referral_converted",
-                      "rekber_released",
-                      "rekber_refunded",
-                    ],
-                  },
-                  eventId: {
-                    type: "string",
-                    minLength: 1,
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Updated loyalty account",
+            description: "Loyalty points and settlement multiplier",
           },
           "400": {
-            description: "Invalid loyalty event",
+            description: "Invalid Starknet address",
+          },
+          "500": {
+            description: "Loyalty lookup failed",
           },
         },
       },

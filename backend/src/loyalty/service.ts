@@ -1,163 +1,118 @@
-import type { StarknetNetwork } from "../config.js";
-import {
-  BASE_POINTS,
-  basePointsForAction,
-  CERTIFICATE_TIERS,
-} from "./rules.js";
-import type {
-  LoyaltyAccount,
-  LoyaltyAction,
-  LoyaltyEvent,
-  LoyaltyLevel,
-} from "./types.js";
+export const BASE_SETTLEMENT_POINTS = 200;
 
-const LEVELS: Array<{
-  level: LoyaltyLevel;
-  minPoints: number;
-  multiplier: number;
-}> = [
+const MULTIPLIER_TIERS = [
   {
-    level: "DIAMOND",
-    minPoints: 250_000,
-    multiplier: 2.0,
+    minCertificates: 10,
+    multiplier: 2,
   },
   {
-    level: "PLATINUM",
-    minPoints: 50_000,
+    minCertificates: 5,
+    multiplier: 1.75,
+  },
+  {
+    minCertificates: 3,
     multiplier: 1.5,
   },
   {
-    level: "GOLD",
-    minPoints: 10_000,
+    minCertificates: 1,
     multiplier: 1.25,
   },
   {
-    level: "SILVER",
-    minPoints: 2_500,
-    multiplier: 1.1,
+    minCertificates: 0,
+    multiplier: 1,
   },
-  {
-    level: "BRONZE",
-    minPoints: 500,
-    multiplier: 1.05,
-  },
-  {
-    level: "STARTER",
-    minPoints: 0,
-    multiplier: 1.0,
-  },
-];
+] as const;
 
-const accounts = new Map<string, LoyaltyAccount>();
-const events = new Map<string, LoyaltyEvent>();
-
-function accountKey(
-  network: StarknetNetwork,
-  subject: string,
-): string {
-  return `${network}:${subject}`;
-}
-
-function eventKey(
-  network: StarknetNetwork,
-  eventId: string,
-): string {
-  return `${network}:${eventId}`;
-}
-
-export function pointsForAction(
-  action: LoyaltyAction,
+export function getCertificateMultiplier(
+  certificateCount: number,
 ): number {
-  return basePointsForAction(action);
-}
-
-export function getLevel(points: number) {
   return (
-    LEVELS.find((entry) => points >= entry.minPoints) ??
-    LEVELS.at(-1)!
+    MULTIPLIER_TIERS.find(
+      (tier) =>
+        certificateCount >=
+        tier.minCertificates,
+    )?.multiplier ?? 1
   );
 }
 
-export function getLoyalty(
-  network: StarknetNetwork,
-  subject: string,
-): LoyaltyAccount {
-  const existing = accounts.get(
-    accountKey(network, subject),
-  );
-
-  if (existing) {
-    return { ...existing };
+export function getNextCertificateTier(
+  certificateCount: number,
+): {
+  certificateTarget: number;
+  multiplier: number;
+} | null {
+  if (certificateCount < 1) {
+    return {
+      certificateTarget: 1,
+      multiplier: 1.25,
+    };
   }
 
-  return {
-    network,
-    subject,
-    points: 0,
-    level: "STARTER",
-    multiplier: 1.0,
-  };
+  if (certificateCount < 3) {
+    return {
+      certificateTarget: 3,
+      multiplier: 1.5,
+    };
+  }
+
+  if (certificateCount < 5) {
+    return {
+      certificateTarget: 5,
+      multiplier: 1.75,
+    };
+  }
+
+  if (certificateCount < 10) {
+    return {
+      certificateTarget: 10,
+      multiplier: 2,
+    };
+  }
+
+  return null;
 }
 
-export function awardAction(
-  network: StarknetNetwork,
-  subject: string,
-  action: LoyaltyAction,
-  eventId: string,
-): LoyaltyAccount {
-  if (!subject.trim()) {
-    throw new Error("subject is required");
-  }
+export function calculateLoyalty(input: {
+  certificateCount: number;
+  successfulSettlements: number;
+}) {
+  const certificateCount = Math.max(
+    0,
+    Math.floor(input.certificateCount),
+  );
 
-  if (!eventId.trim()) {
-    throw new Error("eventId is required");
-  }
+  const successfulSettlements = Math.max(
+    0,
+    Math.floor(input.successfulSettlements),
+  );
 
-  const scopedEventKey = eventKey(network, eventId);
-  const existingEvent = events.get(scopedEventKey);
-
-  if (existingEvent) {
-    return getLoyalty(
-      existingEvent.network,
-      existingEvent.subject,
+  const multiplier =
+    getCertificateMultiplier(
+      certificateCount,
     );
-  }
 
-  const earned = pointsForAction(action);
-  const current = getLoyalty(network, subject);
-  const totalPoints = current.points + earned;
-  const level = getLevel(totalPoints);
+  const basePoints =
+    successfulSettlements *
+    BASE_SETTLEMENT_POINTS;
 
-  const account: LoyaltyAccount = {
-    network,
-    subject,
-    points: totalPoints,
-    level: level.level,
-    multiplier: level.multiplier,
-  };
+  const points = Math.round(
+    basePoints * multiplier,
+  );
 
-  accounts.set(accountKey(network, subject), account);
+  const next =
+    getNextCertificateTier(
+      certificateCount,
+    );
 
-  events.set(scopedEventKey, {
-    network,
-    eventId,
-    subject,
-    action,
-    points: earned,
-    createdAt: new Date().toISOString(),
-  });
-
-  return { ...account };
-}
-
-export function getLoyaltyRules() {
   return {
-    points: { ...BASE_POINTS },
-    certificateMultipliers:
-      CERTIFICATE_TIERS.map((entry) => ({
-        ...entry,
-        multiplier: entry.multiplierBps / 10_000,
-      })),
-    levels: LEVELS.map((entry) => ({ ...entry })),
+    points,
+    basePoints,
+    certificateCount,
+    successfulSettlements,
+    multiplier,
+    nextCertificateTarget:
+      next?.certificateTarget ?? null,
+    nextMultiplier:
+      next?.multiplier ?? null,
   };
 }

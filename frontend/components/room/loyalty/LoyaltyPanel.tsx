@@ -68,7 +68,7 @@ export function LoyaltyPanel({
       try {
         const response =
           await fetch(
-            `${BACKEND_URL}/royalty/${encodeURIComponent(
+            `${BACKEND_URL}/loyalty/${encodeURIComponent(
               address,
             )}`,
             {

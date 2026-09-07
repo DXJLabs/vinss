@@ -16,7 +16,6 @@ import { RekberIndexer } from "./indexer/rekber.js";
 import { RekberStore } from "./indexer/rekberStore.js";
 import { DiscoveryIndexer } from "./indexer/service.js";
 import { DiscoveryStore } from "./indexer/store.js";
-import { loyaltyRouter } from "./loyalty/routes.js";
 import { createFixedWindowRateLimit } from "./middleware/rateLimit.js";
 import { openApiDocument } from "./openapi.js";
 import { agentRouter } from "./routes/agent.js";
@@ -28,7 +27,7 @@ import { createHealthRouter } from "./routes/health.js";
 import { createFeedbackRouter } from "./routes/feedback.js";
 import { presenceRouter } from "./routes/presence.js";
 import { createRekberRouter } from "./routes/rekber.js";
-import { createRoyaltyRouter } from "./royalty/routes.js";
+import { createLoyaltyRouter } from "./loyalty/routes.js";
 
 interface AppDependencies {
   database: Pool;
@@ -123,11 +122,11 @@ export function createApp(dependencies: AppDependencies): Express {
     ),
   );
 
-  // Royalty is read-only and derived from
+  // Loyalty is read-only and derived from
   // indexed Settlement Certificate events.
   // No client can award itself points.
   app.use(
-    createRoyaltyRouter(
+    createLoyaltyRouter(
       dependencies.certificateStore,
       dependencies.config.network,
       dependencies.config.contracts.settlementCertificate,
@@ -161,11 +160,6 @@ export function createApp(dependencies: AppDependencies): Express {
     );
   }
 
-  // Loyalty writes are unauthenticated/in-memory today. They stay fail-closed
-  // unless an operator deliberately enables this non-valuable preview.
-  if (dependencies.config.features.loyalty) {
-    app.use(loyaltyRouter);
-  }
   app.use(presenceRouter);
   app.use(createAttachmentRouter(dependencies.database));
 

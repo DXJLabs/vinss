@@ -45,7 +45,6 @@ function testConfig(): AppConfig {
     },
     features: {
       agent: true,
-      loyalty: false,
     },
     rateLimits: {
       windowMs: 60_000,

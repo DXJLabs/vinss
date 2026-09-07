@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  calculateRoyalty,
+  calculateLoyalty,
   getCertificateMultiplier,
-} from "../src/royalty/service.js";
+} from "../src/loyalty/service.js";
 
 test(
-  "certificate multiplier follows VINSS Royalty tiers",
+  "certificate multiplier follows VINSS Loyalty tiers",
   () => {
     assert.equal(
       getCertificateMultiplier(0),
@@ -41,10 +41,10 @@ test(
 );
 
 test(
-  "royalty points are settlement based",
+  "loyalty points are settlement based",
   () => {
     assert.deepEqual(
-      calculateRoyalty({
+      calculateLoyalty({
         certificateCount: 3,
         successfulSettlements: 3,
       }),
@@ -62,24 +62,24 @@ test(
 );
 
 test(
-  "royalty multiplier is capped at 2x",
+  "loyalty multiplier is capped at 2x",
   () => {
-    const royalty =
-      calculateRoyalty({
+    const loyalty =
+      calculateLoyalty({
         certificateCount: 15,
         successfulSettlements: 15,
       });
 
     assert.equal(
-      royalty.multiplier,
+      loyalty.multiplier,
       2,
     );
     assert.equal(
-      royalty.nextCertificateTarget,
+      loyalty.nextCertificateTarget,
       null,
     );
     assert.equal(
-      royalty.nextMultiplier,
+      loyalty.nextMultiplier,
       null,
     );
   },
