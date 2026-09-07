@@ -135,7 +135,7 @@ The contract computes the percentage component as:
 
 ```text
 percentage_fee = principal / 50
-               = 2% of principal
+               = floor(2% of principal)
 ```
 
 It then obtains the dynamic Rekber floor from the shared FeePolicy:

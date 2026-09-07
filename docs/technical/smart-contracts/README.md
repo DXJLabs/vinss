@@ -141,7 +141,7 @@ max(
 
 The caller-supplied funding quote must exactly match the contract-computed quote at execution.
 
-The frontend currently charges 3 STRK for the fee-bearing Agreement and Submit Work workflow actions. This belongs to application transaction-bundle behavior and is not enforced by `VinssEscrowRekber`.
+The frontend currently uses a 1 STRK application-level workflow charge for selected Rekber coordination and lifecycle actions. This belongs to application transaction-bundle behavior and is not enforced by `VinssEscrowRekber`.
 
 ## Contract vs Application Boundary
 

@@ -640,13 +640,15 @@ This means the admin can adapt the sponsor-cost protection to real transaction e
 
 ## Application Workflow Fee Boundary
 
-The current frontend separately returns:
+The current frontend separately uses `quoteRekberWorkflowFee()` as an application-level STRK charge for selected Rekber coordination and lifecycle actions.
+
+The current executable frontend helper returns:
 
 ```text
-3 STRK
+1 STRK
 ```
 
-for selected fee-bearing Rekber workflow actions such as Agreement and Submit Work.
+The exact set of fee-bearing workflow actions is defined by the frontend application layer rather than by `VinssFeePolicy`.
 
 That frontend workflow price deliberately does **not** use:
 
@@ -656,17 +658,17 @@ FEE_ACTION_REKBER
 
 because action `4` contains the six-action sponsor reserve intended for Rekber funding economics.
 
-The current frontend distinction is:
+Keep these concepts separate:
 
 ```text
-Agreement / Submit Work workflow charge
-    -> application transaction-bundle behavior
+selected Rekber workflow charge
+    -> frontend application transaction behavior
 
 Rekber funding fee
     -> VinssEscrowRekber.quote_rekber_fee(token, principal)
 ```
 
-Therefore the frontend `3 STRK` workflow charge is not enforced by:
+Therefore the current `1 STRK` workflow charge is not enforced by:
 
 ```text
 VinssFeePolicy.quote_fee(FEE_ACTION_REKBER)

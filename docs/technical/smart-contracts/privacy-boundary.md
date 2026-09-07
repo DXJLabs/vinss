@@ -698,7 +698,7 @@ get_custody(custody_commitment)
 
 ABI.
 
-Therefore they must be treated as public state. filecite placeholder removed in generated doc context>
+Therefore they must be treated as public state.
 
 ## Public Token and Principal
 

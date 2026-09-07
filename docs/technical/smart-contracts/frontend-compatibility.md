@@ -52,9 +52,10 @@ Rekber capability domains              aligned
 Certificate commitment domains         aligned
 Rekber funding action 1                aligned
 Rekber terminal/output action layouts  aligned in logical payload construction
+Rekber state-only action layouts       aligned in logical payload construction
 ```
 
-There is, however, a **known Rekber state-only invocation mismatch on the current `main` frontend**. See [Known Rekber State-Only Invocation Mismatch](#known-rekber-state-only-invocation-mismatch).
+Current frontend source routes Rekber state-only actions with exact logical calldata and does not append custody output-note placeholders to those calls.
 
 This means a successful Cairo build or contract test suite must not be used as proof that every Ready X browser path is currently calldata-compatible.
 
@@ -693,91 +694,6 @@ Exact logical length:
 ```text
 4
 ```
-
----
-
-## Known Rekber State-Only Invocation Mismatch
-
-**Status: current frontend `main` requires correction before these paths can be described as fully contract-compatible.**
-
-The shared frontend helper in:
-
-```text
-frontend/lib/deal-room/settlement.ts
-```
-
-currently builds:
-
-```text
-const calldata = [
-  ...payload,
-  "${openNoteIds[0]}",
-]
-```
-
-for calls routed through `invokeSettlement()`.
-
-That behavior is correct for Rekber actions that return custody output, because their contract logical calldata explicitly ends in `output_note_id`.
-
-It is **not** compatible with the state-only actions above.
-
-Current Cairo requires:
-
-```text
-submit fulfillment    selector 4 -> calldata.len() == 4
-confirm fulfillment   selector 5 -> calldata.len() == 4
-open dispute          selector 6 -> calldata.len() == 5
-request revision      selector 7 -> calldata.len() == 4
-```
-
-Appending `${openNoteIds[0]}` changes those lengths to:
-
-```text
-4 -> 5
-4 -> 5
-5 -> 6
-4 -> 5
-```
-
-which violates the contract's exact-length assertions.
-
-The current frontend wrappers for these state transitions call the shared settlement helper, and selected ones also request the application-level workflow charge.
-
-### Correct Compatibility Shape
-
-State-only calls need a transaction shape that keeps two concepts separate:
-
-```text
-application/replay withdrawal
-!=
-custody OPEN output
-```
-
-Conceptually:
-
-```mermaid
-flowchart TD
-    ACTION{Rekber action}
-
-    ACTION -->|returns principal/share| OUTPUT[Create OPEN output note]
-    OUTPUT --> PLACEHOLDER[Append output_note_id]
-    PLACEHOLDER --> INVOKE1[Invoke exact Cairo calldata]
-
-    ACTION -->|state-only| NOOUTPUT[No custody OPEN output]
-    NOOUTPUT --> FEE[Optional application/replay withdrawal]
-    FEE --> INVOKE2[Invoke exact Cairo calldata with no placeholder]
-```
-
-A future frontend fix should therefore distinguish at least:
-
-```text
-needsCustodyOutput
-chargeApplicationRevenue
-```
-
-instead of treating revenue charging as proof that an OPEN custody note is required.
-
-This document records the incompatibility; it does not redefine the Cairo ABI to accommodate the current frontend helper.
 
 ---
 

@@ -1402,7 +1402,7 @@ no revenue token
 no revenue OpenNoteDeposit
 ```
 
-Therefore any current frontend 3 STRK or other workflow charge must not be documented as a contract invariant of this helper.
+Therefore any current frontend workflow charge must not be documented as a contract invariant of this helper.
 
 If VINSS later wants mandatory on-chain pricing for selected private coordination actions, that requires an explicit architecture change that preserves the fact that action semantics are currently encrypted.
 
