@@ -6,6 +6,8 @@ import type {
 const MAX_REASON = 4_000;
 const MAX_FLAGS = 12;
 const MAX_FLAG = 120;
+const MAX_SUPPORT = 16;
+const MAX_SUPPORT_REF = 120;
 
 function isRecord(
   value: unknown,
@@ -173,6 +175,29 @@ export function parseDisputeAgentDecision(
           .filter(Boolean)
       : [];
 
+  const support =
+    Array.isArray(value.support)
+      ? value.support
+          .slice(0, MAX_SUPPORT)
+          .filter(
+            (
+              item,
+            ): item is string =>
+              typeof item ===
+              "string",
+          )
+          .map(
+            (item) =>
+              item
+                .trim()
+                .slice(
+                  0,
+                  MAX_SUPPORT_REF,
+                ),
+          )
+          .filter(Boolean)
+      : [];
+
   return {
     decision:
       parseDecisionKind(
@@ -192,5 +217,8 @@ export function parseDisputeAgentDecision(
     reason,
     evidenceCommitment,
     flags,
+    ...(support.length > 0
+      ? { support }
+      : {}),
   };
 }

@@ -233,6 +233,11 @@ test(
           evidenceCommitment:
             commitment,
           flags: [],
+          support: [
+            "term:criterion:0",
+            "payer:evidence:0",
+            "payee:evidence:0",
+          ],
         },
         undefined,
         {
@@ -250,6 +255,145 @@ test(
           "AUTO_RESOLVE",
         reasons: [],
       },
+    );
+  },
+);
+
+test(
+  "confidence alone cannot authorize a directional financial award",
+  () => {
+    const disputeCase =
+      sanitizeDisputeCase(
+        rawCase(),
+      );
+
+    const commitment =
+      computeDisputeCaseCommitment(
+        disputeCase,
+      );
+
+    const agentDecision = {
+      decision:
+        "split" as const,
+      payerBps: 3_000,
+      payeeBps: 7_000,
+      confidence: 0.99,
+      reason:
+        "Agent claims a directional result.",
+      evidenceCommitment:
+        commitment,
+      flags: [],
+      support: [],
+    };
+
+    const policy =
+      evaluateDisputePolicy(
+        disputeCase,
+        commitment,
+        agentDecision,
+        undefined,
+        {
+          partyBindingVerified:
+            true,
+          verifiedPrincipalUsdMicros:
+            100_000_000,
+        },
+      );
+
+    assert.equal(
+      policy.status,
+      "AUTO_RESOLVE",
+    );
+
+    assert.equal(
+      policy.reasons.includes(
+        "DIRECTIONAL_SUPPORT_NOT_VERIFIED",
+      ),
+      true,
+    );
+
+    const executionDecision =
+      decisionForDisputeExecution(
+        agentDecision,
+        policy,
+      );
+
+    assert.equal(
+      executionDecision.payerBps,
+      5_000,
+    );
+
+    assert.equal(
+      executionDecision.payeeBps,
+      5_000,
+    );
+  },
+);
+
+test(
+  "invented evidence references cannot authorize a directional award",
+  () => {
+    const disputeCase =
+      sanitizeDisputeCase(
+        rawCase(),
+      );
+
+    const commitment =
+      computeDisputeCaseCommitment(
+        disputeCase,
+      );
+
+    const agentDecision = {
+      decision:
+        "payee" as const,
+      payerBps: 0,
+      payeeBps: 10_000,
+      confidence: 0.99,
+      reason:
+        "Agent cited evidence that does not exist.",
+      evidenceCommitment:
+        commitment,
+      flags: [],
+      support: [
+        "term:criterion:0",
+        "payer:evidence:0",
+        "payee:evidence:999",
+      ],
+    };
+
+    const policy =
+      evaluateDisputePolicy(
+        disputeCase,
+        commitment,
+        agentDecision,
+        undefined,
+        {
+          partyBindingVerified:
+            true,
+          verifiedPrincipalUsdMicros:
+            100_000_000,
+        },
+      );
+
+    assert.equal(
+      policy.status,
+      "AUTO_RESOLVE",
+    );
+
+    const executionDecision =
+      decisionForDisputeExecution(
+        agentDecision,
+        policy,
+      );
+
+    assert.equal(
+      executionDecision.payerBps,
+      5_000,
+    );
+
+    assert.equal(
+      executionDecision.payeeBps,
+      5_000,
     );
   },
 );

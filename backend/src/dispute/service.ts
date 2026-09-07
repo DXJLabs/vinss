@@ -42,9 +42,29 @@ Return exactly one JSON object:
   "confidence": number 0..1,
   "reason": "short evidence-grounded explanation",
   "evidenceCommitment": "exact caseCommitment",
-  "flags": ["optional_machine_flag"]
+  "flags": ["optional_machine_flag"],
+  "support": [
+    "term:obligation:0",
+    "term:criterion:0",
+    "payer:evidence:0",
+    "payee:evidence:0"
+  ]
 }
 payerBps + payeeBps must equal 10000.
+
+support may contain ONLY references that actually exist in disputeCase:
+- term:obligation:<index>
+- term:criterion:<index>
+- payer:evidence:<index>
+- payee:evidence:<index>
+
+For any directional result other than exact 50/50:
+- cite at least one accepted term;
+- cite evidence from Payer;
+- cite evidence from Payee;
+- never invent a support reference.
+
+If the evidence is only subjective statements, conflicts, is missing, or does not justify a directional award, use needs_review with a 50/50 split.
 Do not include markdown.
 `;
 

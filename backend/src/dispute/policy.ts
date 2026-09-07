@@ -51,6 +51,140 @@ function decisionShapeIsConsistent(
   }
 }
 
+function directionalSupportIsGrounded(
+  disputeCase: DisputeCase,
+  decision: DisputeAgentDecision,
+): boolean {
+  /*
+   * Exact 50/50 does not grant directional authority to either party.
+   * Directional outcomes require stronger grounding.
+   */
+  if (
+    decision.payerBps === 5_000 &&
+    decision.payeeBps === 5_000
+  ) {
+    return true;
+  }
+
+  const support =
+    decision.support ?? [];
+
+  if (support.length === 0) {
+    return false;
+  }
+
+  let acceptedTerm = false;
+  let payerEvidence = false;
+  let payeeEvidence = false;
+  let corroboratingEvidence = false;
+
+  for (const reference of support) {
+    let match =
+      /^term:obligation:(\d+)$/.exec(
+        reference,
+      );
+
+    if (match) {
+      const index = Number(match[1]);
+
+      if (
+        !Number.isSafeInteger(index) ||
+        !disputeCase.acceptedTerms
+          .obligations[index]
+      ) {
+        return false;
+      }
+
+      acceptedTerm = true;
+      continue;
+    }
+
+    match =
+      /^term:criterion:(\d+)$/.exec(
+        reference,
+      );
+
+    if (match) {
+      const index = Number(match[1]);
+
+      if (
+        !Number.isSafeInteger(index) ||
+        !disputeCase.acceptedTerms
+          .completionCriteria[index]
+      ) {
+        return false;
+      }
+
+      acceptedTerm = true;
+      continue;
+    }
+
+    match =
+      /^payer:evidence:(\d+)$/.exec(
+        reference,
+      );
+
+    if (match) {
+      const index = Number(match[1]);
+      const item =
+        disputeCase.payer
+          .evidence[index];
+
+      if (!item) {
+        return false;
+      }
+
+      payerEvidence = true;
+
+      if (
+        item.kind !== "statement" &&
+        item.kind !== "other"
+      ) {
+        corroboratingEvidence = true;
+      }
+
+      continue;
+    }
+
+    match =
+      /^payee:evidence:(\d+)$/.exec(
+        reference,
+      );
+
+    if (match) {
+      const index = Number(match[1]);
+      const item =
+        disputeCase.payee
+          .evidence[index];
+
+      if (!item) {
+        return false;
+      }
+
+      payeeEvidence = true;
+
+      if (
+        item.kind !== "statement" &&
+        item.kind !== "other"
+      ) {
+        corroboratingEvidence = true;
+      }
+
+      continue;
+    }
+
+    // Any unknown/invented reference invalidates directional grounding.
+    return false;
+  }
+
+  return (
+    acceptedTerm &&
+    payerEvidence &&
+    payeeEvidence &&
+    corroboratingEvidence
+  );
+}
+
 /**
  * The Agent recommends. This deterministic gate decides whether a later
  * executor may even consider the recommendation.
@@ -157,6 +291,30 @@ export function evaluateDisputePolicy(
   ) {
     hardStop.push(
       "OBJECTIVE_VERIFICATION_REQUIRED",
+    );
+  }
+
+  /*
+   * Confidence is advisory. It can never, by itself, grant directional
+   * financial authority.
+   *
+   * A non-50/50 result must be grounded in exact references to:
+   * - Accepted Deal terms;
+   * - Payer evidence;
+   * - Payee evidence;
+   * and at least one evidence item stronger than a bare statement.
+   *
+   * Missing, invented or statement-only grounding becomes deterministic
+   * 50/50 rather than trusting LLM confidence.
+   */
+  if (
+    !directionalSupportIsGrounded(
+      disputeCase,
+      decision,
+    )
+  ) {
+    fallback.push(
+      "DIRECTIONAL_SUPPORT_NOT_VERIFIED",
     );
   }
 

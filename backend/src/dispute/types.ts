@@ -97,6 +97,12 @@ export interface DisputeAgentDecision {
   reason: string;
   evidenceCommitment: string;
   flags: string[];
+
+  /*
+   * References into the exact signed dispute case.
+   * Optional so already-persisted legacy decisions remain readable.
+   */
+  support?: string[];
 }
 
 export type DisputePolicyStatus =
