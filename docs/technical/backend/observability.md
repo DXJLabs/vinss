@@ -240,7 +240,7 @@ POST /dispute/evaluate
 
 GET /activity
 
-GET /royalty/0xabc
+GET /loyalty/0xabc
 ```
 
 ---
@@ -336,7 +336,7 @@ Path parameters remain part of `req.path`.
 Example:
 
 ```text
-/royalty/0xabc
+/loyalty/0xabc
 ```
 
 contains the address in the path.
@@ -1164,12 +1164,12 @@ Activity lookup failed.
 
 ---
 
-# Royalty Lookup Failure
+# Loyalty Lookup Failure
 
-Current Royalty log includes:
+Current Loyalty log includes:
 
 ```text
-[royalty] lookup failed <ErrorName>
+[loyalty] lookup failed <ErrorName>
 ```
 
 ---
@@ -2143,14 +2143,14 @@ http_response_size_bytes{route}
 Use normalized route labels:
 
 ```text
-/royalty/:address
+/loyalty/:address
 /attachments/:id
 ```
 
 instead of raw:
 
 ```text
-/royalty/0x123...
+/loyalty/0x123...
 /attachments/uuid...
 ```
 
@@ -2407,19 +2407,19 @@ Avoid user-level labels.
 
 ---
 
-# Royalty Metrics
+# Loyalty Metrics
 
 Useful:
 
 ```text
-royalty_lookup_total{status}
+loyalty_lookup_total{status}
 
-royalty_lookup_error_total
+loyalty_lookup_error_total
 ```
 
 ---
 
-# Do Not Log Full Royalty Address by Default
+# Do Not Log Full Loyalty Address by Default
 
 Public does not mean necessary.
 
@@ -2848,7 +2848,7 @@ attachment storage errors
 
 Feedback email failures
 
-Royalty lookup failures
+Loyalty lookup failures
 
 Activity DB errors
 
@@ -2935,7 +2935,7 @@ Certificate lag impacts:
 ```text
 certificate activity
 
-Royalty points
+Loyalty points
 ```
 
 but does not change on-chain ownership.
@@ -3046,7 +3046,7 @@ provider response text
 
 # Current Error Name Strategy
 
-Indexer and Royalty already demonstrate a safer pattern:
+Indexer and Loyalty already demonstrate a safer pattern:
 
 ```text
 Error.name
@@ -3774,26 +3774,26 @@ CertificateIndexer checkpoint
 
 /activity
 
-/royalty
+/loyalty
 ```
 
 ---
 
-# Royalty Staleness
+# Loyalty Staleness
 
-Royalty can be stale if CertificateIndexer is stale.
+Loyalty can be stale if CertificateIndexer is stale.
 
 ---
 
 # Monitor Upstream First
 
-If Royalty seems wrong:
+If Loyalty seems wrong:
 
 ```text
 check certificate checkpoint
 ```
 
-before treating Royalty formula as broken.
+before treating Loyalty formula as broken.
 
 ---
 
@@ -3999,7 +3999,7 @@ Attachment token=<capability>
 | Discovery route | fixed failure category |
 | Rekber route | fixed failure category |
 | Activity route | fixed failure category |
-| Royalty route | failure + error name |
+| Loyalty route | failure + error name |
 | Agent provider | provider ID only |
 | Dispute catch | intentionally no sensitive log |
 | Attachment GET | attachment ID + status |

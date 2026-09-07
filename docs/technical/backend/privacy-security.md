@@ -2491,7 +2491,7 @@ Path identifiers can still appear.
 Examples:
 
 ```text
-/royalty/0xabc
+/loyalty/0xabc
 
 /attachments/<uuid>
 ```
@@ -3314,9 +3314,9 @@ Certificate claim occurs through the contract/wallet path.
 
 ---
 
-# Royalty Security Boundary
+# Loyalty Security Boundary
 
-Royalty is:
+Loyalty is:
 
 ```text
 read-only
@@ -3328,11 +3328,11 @@ and derived from indexed Settlement Certificate events.
 
 # No Client Award API
 
-Client cannot call a Royalty route to create arbitrary points.
+Client cannot call a Loyalty route to create arbitrary points.
 
 ---
 
-# Royalty Is Still Application Policy
+# Loyalty Is Still Application Policy
 
 Point arithmetic is backend logic, not contract-enforced value.
 
@@ -3340,7 +3340,7 @@ Point arithmetic is backend logic, not contract-enforced value.
 
 # Legacy Loyalty Security Boundary
 
-Legacy Loyalty is separate from Royalty.
+Legacy Loyalty is separate from Loyalty.
 
 ---
 
@@ -3783,7 +3783,7 @@ Examples:
 
 /rekber/events
 
-/royalty/:address
+/loyalty/:address
 ```
 
 ---
@@ -3847,7 +3847,7 @@ Current app composition does not wrap:
 
 /rekber/events
 
-/royalty
+/loyalty
 
 /presence
 
@@ -3910,7 +3910,7 @@ Attachments
 Feedback
     -> always mounted
 
-Royalty
+Loyalty
     -> always mounted
 ```
 
@@ -4538,9 +4538,9 @@ It does not reveal decryption keys.
 
 ---
 
-# Royalty Aggregation
+# Loyalty Aggregation
 
-`GET /royalty/:address` makes certificate-derived history/points easy to query for an address.
+`GET /loyalty/:address` makes certificate-derived history/points easy to query for an address.
 
 ---
 
@@ -5874,7 +5874,7 @@ contract
 >
 CertificateStore
 >
-Royalty/UI
+Loyalty/UI
 ```
 
 ---

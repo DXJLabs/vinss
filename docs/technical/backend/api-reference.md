@@ -41,7 +41,7 @@ GET  /activity
 
 POST /feedback
 
-GET  /royalty/:address
+GET  /loyalty/:address
 
 POST /presence/publish
 POST /presence/poll
@@ -81,7 +81,7 @@ flowchart TD
     PRES[Presence]
     ATT[Encrypted attachments]
     FB[Feedback]
-    ROY[Royalty]
+    ROY[Loyalty]
 
     AG[Agent feature gate]
     DIS[Dispute]
@@ -331,7 +331,7 @@ Notably, executable runtime routes currently absent from the OpenAPI path map in
 
 ```text
 GET /rekber/events
-GET /royalty/:address
+GET /loyalty/:address
 
 PUT /attachments/:id
 GET /attachments/:id
@@ -1300,9 +1300,9 @@ Response:
 
 ---
 
-# Royalty API
+# Loyalty API
 
-# `GET /royalty/:address`
+# `GET /loyalty/:address`
 
 Purpose:
 
@@ -1315,7 +1315,7 @@ This route is read-only.
 
 ---
 
-# Royalty Address Validation
+# Loyalty Address Validation
 
 `:address` must be:
 
@@ -1343,7 +1343,7 @@ with:
 
 ---
 
-# Royalty Data Authority
+# Loyalty Data Authority
 
 The route queries:
 
@@ -1359,11 +1359,11 @@ Settlement Certificate contract address
 recipient address
 ```
 
-The client cannot directly submit a Royalty award through this endpoint.
+The client cannot directly submit a Loyalty award through this endpoint.
 
 ---
 
-# Royalty Success Shape
+# Loyalty Success Shape
 
 Current response includes:
 
@@ -1389,7 +1389,7 @@ Values depend on indexed certificate state.
 
 ---
 
-# Royalty Current Formula
+# Loyalty Current Formula
 
 Base:
 
@@ -1415,7 +1415,7 @@ round(basePoints * multiplier)
 
 ---
 
-# Royalty Conversion
+# Loyalty Conversion
 
 Current response always exposes:
 
@@ -1431,7 +1431,7 @@ The current API does not perform points-to-token conversion.
 
 ---
 
-# Royalty Lookup Failure
+# Loyalty Lookup Failure
 
 HTTP:
 
@@ -1443,7 +1443,7 @@ Response:
 
 ```json
 {
-  "error": "Royalty lookup failed."
+  "error": "Loyalty lookup failed."
 }
 ```
 
@@ -3365,12 +3365,12 @@ This is why it is feature-gated and disabled by default.
 
 ---
 
-# Royalty vs Loyalty API
+# Loyalty vs Loyalty API
 
 Do not confuse:
 
 ```text
-GET /royalty/:address
+GET /loyalty/:address
 ```
 
 with:
@@ -3379,7 +3379,7 @@ with:
 /loyalty/*
 ```
 
-Royalty:
+Loyalty:
 
 ```text
 always mounted
@@ -3407,7 +3407,7 @@ preview
 | `POST /discover` | `200` | `400`, `429`, `500` |
 | `GET /activity` | `200` | `400`, `500` |
 | `GET /rekber/events` | `200` | `400`, `500` |
-| `GET /royalty/:address` | `200` | `400`, `500` |
+| `GET /loyalty/:address` | `200` | `400`, `500` |
 | `POST /presence/publish` | `204` | `400` |
 | `POST /presence/poll` | `200` | `400` |
 | `PUT /attachments/:id` | `201` | `400`, `401`, `409`, `413`, `503` |
@@ -3434,7 +3434,7 @@ Activity lookup failed.
 
 Rekber lookup failed.
 
-Royalty lookup failed.
+Loyalty lookup failed.
 
 Agent failed.
 
@@ -3474,7 +3474,7 @@ Current important mechanisms differ by route.
 | `/discover` | Request validation + rate limit; no room credential |
 | `/activity` | Public read |
 | `/rekber/events` | Public read |
-| `/royalty/:address` | Public read |
+| `/loyalty/:address` | Public read |
 | Presence | Opaque channel ID; no wallet auth |
 | Attachments | Capability token header |
 | Feedback | Validation + rate limit |
@@ -3516,9 +3516,9 @@ It is not a privacy leak relative to chain visibility, but it can make public da
 
 ---
 
-# Royalty Is Public Recipient-Derived State
+# Loyalty Is Public Recipient-Derived State
 
-`GET /royalty/:address` accepts an arbitrary valid address and returns certificate-derived points state.
+`GET /loyalty/:address` accepts an arbitrary valid address and returns certificate-derived points state.
 
 It is not a private account endpoint.
 
@@ -3663,7 +3663,7 @@ GET /docs
 POST /discover
 GET /activity
 GET /rekber/events
-GET /royalty/:address
+GET /loyalty/:address
 POST /presence/poll
 GET /attachments/:id
 GET /agent/providers
@@ -3782,7 +3782,7 @@ RPC/provider timeouts
 
 OpenAPI drift tests
 
-abuse limits for public Activity/Rekber/Royalty endpoints
+abuse limits for public Activity/Rekber/Loyalty endpoints
 
 database query monitoring
 ```
@@ -3798,7 +3798,7 @@ Current high-priority sync gaps:
 ```text
 document /rekber/events
 
-document /royalty/{address}
+document /loyalty/{address}
 
 document PUT /attachments/{id}
 
@@ -3851,7 +3851,7 @@ flowchart LR
     D[/POST discover/]
     A[/GET activity/]
     R[/GET rekber events/]
-    RO[/GET royalty address/]
+    RO[/GET loyalty address/]
 
     P[/presence publish poll/]
     AT[/attachments/]
@@ -3905,7 +3905,7 @@ flowchart LR
 | `/discover` | Public ciphertext + opaque routing metadata |
 | `/activity` | Public indexed activity metadata |
 | `/rekber/events` | Public Rekber lifecycle/accounting |
-| `/royalty/:address` | Public certificate-derived application points |
+| `/loyalty/:address` | Public certificate-derived application points |
 | Presence | Encrypted ephemeral payload |
 | Attachments | Encrypted persistent blob |
 | Feedback | Plaintext product feedback |
@@ -3958,7 +3958,7 @@ flowchart TD
     DISC[/discover/]
     ACT[/activity/]
     REK[/rekber events/]
-    ROY[/royalty/]
+    ROY[/loyalty/]
 
     FE[Frontend]
 
@@ -4072,7 +4072,7 @@ GET /rekber/events
 GET /activity
     expected merged network data
 
-GET /royalty/:address
+GET /loyalty/:address
     correct mainnet certificate address
 
 attachments
@@ -4107,7 +4107,7 @@ At the time this document was aligned to source:
 ```text
 OpenAPI missing:
     /rekber/events
-    /royalty/{address}
+    /loyalty/{address}
     /attachments/{id}
     /dispute/challenge
     /dispute/evaluate
@@ -4140,7 +4140,7 @@ persistent public Certificate-derived activity
 
 global activity
 
-Royalty
+Loyalty
 
 encrypted attachments
 

@@ -3415,12 +3415,12 @@ GET /activity
 
 ---
 
-# Presence vs Royalty
+# Presence vs Loyalty
 
 Presence does not affect:
 
 ```text
-Royalty points
+Loyalty points
 ```
 
 ---

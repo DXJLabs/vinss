@@ -1204,13 +1204,13 @@ nextCursor field
 
 ---
 
-# Smoke 7 — Royalty
+# Smoke 7 — Loyalty
 
 Use a known valid public address:
 
 ```bash
 curl -i -s \
-  'https://<backend-domain>/royalty/0x<known-address>'
+  'https://<backend-domain>/loyalty/0x<known-address>'
 ```
 
 Verify:
@@ -1740,9 +1740,9 @@ Do not enable it as a production valuable rewards ledger.
 
 ---
 
-# Royalty Deployment
+# Loyalty Deployment
 
-Royalty is always mounted and derives from:
+Loyalty is always mounted and derives from:
 
 ```text
 Settlement Certificate index
@@ -2362,7 +2362,7 @@ There is no current Feedback feature flag.
 | Database | connection/backup | startup + persistent API reads |
 | Discovery | tests | `/discover` + privacy-negative test |
 | Rekber | tests | `/rekber/events` |
-| Certificate | tests | `/activity` / Royalty |
+| Certificate | tests | `/activity` / Loyalty |
 | Presence | route tests | publish/poll if needed |
 | Attachments | tests | controlled capability test |
 | Agent | tests/config | providers only if enabled |
@@ -2536,7 +2536,7 @@ SETTLEMENT_CERTIFICATE_ADDRESS
 
 and start block.
 
-Royalty and certificate activity depend on this index.
+Loyalty and certificate activity depend on this index.
 
 ---
 

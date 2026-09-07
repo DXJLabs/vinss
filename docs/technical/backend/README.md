@@ -41,7 +41,7 @@ That distinction is important.
 | Encrypted presence | Relay opaque encrypted presence envelopes with TTL | In-memory | Enabled |
 | Encrypted attachments | Store opaque binary ciphertext protected by capability token hash | PostgreSQL | Enabled |
 | Feedback | Persist post-deal feedback and optionally send email notification | PostgreSQL | Enabled |
-| Royalty | Read-only points view derived from indexed Settlement Certificates | PostgreSQL-derived | Enabled |
+| Loyalty | Read-only points view derived from indexed Settlement Certificates | PostgreSQL-derived | Enabled |
 | VINSS Agent | Privacy-sanitized Agent context plus explicit user prompt | External provider dependent | Feature-gated |
 | Dispute Agent / AutoResolve | Verify disclosed dispute case, attestations, Rekber binding and optionally authorize resolution | Mixed on-chain / runtime | Feature-gated |
 | Legacy Loyalty preview | Client-submitted in-memory points ledger | In-memory | Disabled by default |
@@ -217,7 +217,7 @@ Canonical event:
 SettlementCertificateIssued
 ```
 
-It indexes the public certificate credential fields required by backend activity and Royalty views.
+It indexes the public certificate credential fields required by backend activity and Loyalty views.
 
 ---
 
@@ -1364,12 +1364,12 @@ Do not flatten these into one privacy claim.
 
 ---
 
-# Royalty Service
+# Loyalty Service
 
 Canonical endpoint:
 
 ```text
-GET /royalty/:address
+GET /loyalty/:address
 ```
 
 The service is read-only.
@@ -1378,9 +1378,9 @@ It does not accept client-submitted award events.
 
 ---
 
-# Royalty Data Source
+# Loyalty Data Source
 
-Royalty derives from:
+Loyalty derives from:
 
 ```text
 CertificateStore
@@ -1404,7 +1404,7 @@ I completed a settlement
 
 ---
 
-# Current Royalty Formula
+# Current Loyalty Formula
 
 Current service constant:
 
@@ -1440,7 +1440,7 @@ They are not smart-contract invariants.
 
 ---
 
-# Royalty Conversion Boundary
+# Loyalty Conversion Boundary
 
 The endpoint currently returns:
 
@@ -1450,7 +1450,7 @@ conversion.status = coming_soon
 
 Therefore points-to-token or points-to-gas conversion is not implemented by this service.
 
-Do not describe Royalty conversion as live.
+Do not describe Loyalty conversion as live.
 
 ---
 
@@ -1498,12 +1498,12 @@ Therefore Loyalty is not a production settlement ledger.
 
 ---
 
-# Royalty vs Loyalty
+# Loyalty vs Loyalty
 
 Do not confuse:
 
 ```text
-Royalty
+Loyalty
 ```
 
 with:
@@ -1516,10 +1516,10 @@ Current distinction:
 
 | Service | Authority source | Persistence | Write model |
 |---|---|---|---|
-| Royalty | Indexed Settlement Certificate events | PostgreSQL-derived | Read-only |
+| Loyalty | Indexed Settlement Certificate events | PostgreSQL-derived | Read-only |
 | Loyalty preview | Client-submitted events | In-memory | Client-write |
 
-For settlement reputation/points documentation, Royalty is the stronger current evidence-backed path.
+For settlement reputation/points documentation, Loyalty is the stronger current evidence-backed path.
 
 ---
 
@@ -2114,7 +2114,7 @@ GET  /activity
 
 POST /feedback
 
-GET  /royalty/:address
+GET  /loyalty/:address
 
 POST /presence/publish
 POST /presence/poll
@@ -2149,7 +2149,7 @@ flowchart LR
 
     ACT[/GET activity/]
     REK[/GET rekber events/]
-    ROY[/GET royalty address/]
+    ROY[/GET loyalty address/]
     DISC[/POST discover/]
 
     D --> ACT
@@ -2182,7 +2182,7 @@ is a merged public activity view.
 is a Rekber-specific lifecycle query.
 
 ```text
-/royalty/:address
+/loyalty/:address
 ```
 
 is a certificate-derived application view.
@@ -2349,9 +2349,9 @@ The backend does not mint certificates on behalf of users through the indexer.
 
 ---
 
-# Royalty Authority Boundary
+# Loyalty Authority Boundary
 
-Royalty does not award itself based on frontend assertions.
+Loyalty does not award itself based on frontend assertions.
 
 It derives current statistics from indexed certificate events.
 
@@ -2492,7 +2492,7 @@ Agent also gates Dispute route mounting.
 
 Loyalty is separately gated.
 
-Royalty is not gated by the legacy Loyalty flag.
+Loyalty is not gated by the legacy Loyalty flag.
 
 ---
 
@@ -2724,7 +2724,7 @@ Examples include:
 Discovery failed.
 Activity lookup failed.
 Rekber lookup failed.
-Royalty lookup failed.
+Loyalty lookup failed.
 Agent failed.
 ```
 
@@ -2767,7 +2767,7 @@ Agent tools
 Dispute attestation
 Dispute policy
 Dispute executor
-Royalty
+Loyalty
 Loyalty rules
 ```
 
@@ -2843,7 +2843,7 @@ flowchart TD
     DISC[/discover/]
     ACT[/activity/]
     REKAPI[/rekber events/]
-    ROY[/royalty/]
+    ROY[/loyalty/]
     ATT[/attachments/]
     FB[/feedback/]
     PRES[/presence/]
@@ -2921,7 +2921,7 @@ Certificate indexer
 GET /activity
 GET /health
 
-public Royalty derivation
+public Loyalty derivation
 ```
 
 ## Privacy-supporting transport/storage
@@ -3180,7 +3180,7 @@ Presence is durable.
 
 Legacy Loyalty is authoritative.
 
-Royalty conversion is live.
+Loyalty conversion is live.
 
 A green /health proves the whole product works.
 
@@ -3230,7 +3230,7 @@ attachment availability
 presence availability
 Agent provider routing
 feedback persistence
-Royalty calculation
+Loyalty calculation
 optional dispute resolver execution
 ```
 
@@ -3309,7 +3309,7 @@ Settlement Certificate indexing
 
 /activity merge behavior
 
-Royalty vs legacy Loyalty
+Loyalty vs legacy Loyalty
 
 encrypted attachment storage
 
@@ -3430,7 +3430,7 @@ Verify /activity includes expected merged data.
 
 Verify certificate event decoding.
 
-Verify Royalty derives from current CertificateStore.
+Verify Loyalty derives from current CertificateStore.
 
 Verify encrypted attachment upload/download.
 
@@ -3520,7 +3520,7 @@ pagination
 rate limits
 feature flags
 Agent sanitization
-application-derived Royalty points
+application-derived Loyalty points
 attachment service
 feedback service
 runtime health
@@ -3586,7 +3586,7 @@ Rekber event persistence
 certificate event persistence
 feedback
 attachments
-Royalty reads
+Loyalty reads
 activity reads
 ```
 
@@ -3623,13 +3623,13 @@ backend/src/indexer/rekberStore.ts
 backend/src/routes/rekber.ts
 ```
 
-For Certificate / Royalty:
+For Certificate / Loyalty:
 
 ```text
 backend/src/indexer/certificate.ts
 backend/src/indexer/certificateStore.ts
-backend/src/royalty/service.ts
-backend/src/royalty/routes.ts
+backend/src/loyalty/service.ts
+backend/src/loyalty/routes.ts
 ```
 
 For auxiliary services:
@@ -3656,7 +3656,7 @@ backend/src/dispute/
 
 A concise accurate description is:
 
-> VINSS backend is a PostgreSQL-backed Starknet indexing and application-service layer. Its core Deal Room discovery path stores and serves public encrypted helper payloads without decryption keys, while separate public-state indexers track Rekber lifecycle and Settlement Certificate events. Optional Agent and Dispute services use explicit disclosure boundaries, and auxiliary services provide encrypted attachments, ephemeral presence, feedback, activity, and certificate-derived Royalty views.
+> VINSS backend is a PostgreSQL-backed Starknet indexing and application-service layer. Its core Deal Room discovery path stores and serves public encrypted helper payloads without decryption keys, while separate public-state indexers track Rekber lifecycle and Settlement Certificate events. Optional Agent and Dispute services use explicit disclosure boundaries, and auxiliary services provide encrypted attachments, ephemeral presence, feedback, activity, and certificate-derived Loyalty views.
 
 That description matches the current source more closely than:
 

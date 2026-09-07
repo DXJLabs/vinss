@@ -284,7 +284,7 @@ Settlement Certificate read model
 
 Activity
 
-Royalty read model
+Loyalty read model
 
 Feedback if desired
 
@@ -1659,9 +1659,9 @@ Backend Certificate indexing is not required to move Rekber funds.
 
 ---
 
-# Royalty Dependency
+# Loyalty Dependency
 
-Royalty uses:
+Loyalty uses:
 
 ```text
 CertificateStore
@@ -1671,7 +1671,7 @@ CertificateStore
 
 # Certificate Lag Consequence
 
-Royalty can lag after a Certificate claim until the event is indexed.
+Loyalty can lag after a Certificate claim until the event is indexed.
 
 ---
 
@@ -2314,7 +2314,7 @@ Current app does not wrap:
 
 /rekber/events
 
-/royalty
+/loyalty
 
 /presence
 
@@ -2843,9 +2843,9 @@ Current in-memory client-write points should not automatically become valuable t
 
 ---
 
-# Layer 19 — Royalty
+# Layer 19 — Loyalty
 
-Royalty is separate from Legacy Loyalty.
+Loyalty is separate from Legacy Loyalty.
 
 ---
 
@@ -3661,7 +3661,7 @@ May remain process-functional while process itself stays alive because route is 
 
 # Core Product
 
-Discovery/Rekber/Certificate/Activity/Royalty depend heavily on DB availability.
+Discovery/Rekber/Certificate/Activity/Loyalty depend heavily on DB availability.
 
 ---
 
@@ -3756,7 +3756,7 @@ Bring:
 ```text
 Rekber
 
-Royalty
+Loyalty
 
 Attachments
 
@@ -4016,7 +4016,7 @@ GET /rekber/events?limit=1
 
 GET /activity?limit=1
 
-GET /royalty/<known-address> if relevant
+GET /loyalty/<known-address> if relevant
 ```
 
 ---
@@ -4670,7 +4670,7 @@ and is a more serious backend availability issue.
 | Rekber API | On | On |
 | Certificate index | On | On |
 | Activity | On | On |
-| Royalty | On | On |
+| Loyalty | On | On |
 | Feedback | On | Optional |
 | Presence | On | On only if single-replica assumption accepted |
 | Attachments | On | On only if storage path tested |
@@ -4692,7 +4692,7 @@ Presence
 
 Attachments
 
-Royalty
+Loyalty
 
 Activity
 ```
@@ -5075,7 +5075,7 @@ LOYALTY_ENABLED=false
 
 ---
 
-# Layer 66 — Royalty Gate
+# Layer 66 — Loyalty Gate
 
 ```text
 [ ] CertificateIndexer fresh
@@ -5401,7 +5401,7 @@ no backend CI
 | Presence | READY single-process | CONDITIONAL scaling |
 | Attachments | READY basic | CONDITIONAL storage smoke |
 | Legacy Loyalty | Not production-authoritative | Keep disabled |
-| Royalty | READY read-only | Certificate freshness required |
+| Loyalty | READY read-only | Certificate freshness required |
 | AutoResolve | READY guarded | Keep disabled unless full gate |
 | Monitoring | Minimal built-in | REQUIRED external |
 | Rollback | Source supports redeploy | REQUIRED operational procedure |
@@ -5696,7 +5696,7 @@ Lower authority but visible:
 
 ```text
 Presence loss
-Royalty lag
+Loyalty lag
 Feedback email failure
 ```
 
@@ -5753,7 +5753,7 @@ Legacy Loyalty
 
 Feedback
 
-Royalty display
+Loyalty display
 ```
 
 ---

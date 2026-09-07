@@ -242,7 +242,7 @@ Feedback email unavailable
 
 Agent provider outage while core Deal Room still works
 
-Royalty read unavailable
+Loyalty read unavailable
 
 rate limiter behaving incorrectly
 ```
@@ -630,7 +630,7 @@ This does not disable:
 /discover
 /rekber/events
 /activity
-/royalty
+/loyalty
 /presence
 /attachments
 /feedback
@@ -817,7 +817,7 @@ checkpoint enters error
 
 Dispute custody verification fails
 
-Royalty/certificate data empty unexpectedly
+Loyalty/certificate data empty unexpectedly
 ```
 
 Verify:
@@ -906,7 +906,7 @@ backend fails startup
 
 /rekber/events 500
 
-/royalty 500
+/loyalty 500
 
 attachments 503
 
@@ -1232,7 +1232,7 @@ certificate exists on-chain
 
 /activity lacks certificate_issued
 
-Royalty points not updated
+Loyalty points not updated
 
 certificate checkpoint stale/error
 ```
@@ -1254,14 +1254,14 @@ restore indexing
 
 recheck /activity
 
-recheck /royalty/:address
+recheck /loyalty/:address
 ```
 
 ---
 
-# Royalty Incident
+# Loyalty Incident
 
-Royalty derives from:
+Loyalty derives from:
 
 ```text
 CertificateStore
@@ -1269,7 +1269,7 @@ CertificateStore
 
 plus backend points formula.
 
-If Royalty is wrong:
+If Loyalty is wrong:
 
 ```text
 first verify certificate indexed stats
@@ -2136,7 +2136,7 @@ frontend cannot see new events
 
 wrong contract shown
 
-certificate/Royalty mismatch
+certificate/Loyalty mismatch
 
 UI appears stale
 ```
@@ -2262,7 +2262,7 @@ application semantics
 
 5. Is /activity updated?
 
-6. Is Royalty updated?
+6. Is Loyalty updated?
 ```
 
 ---
@@ -2479,7 +2479,7 @@ Presence was reset; no canonical Message/Offer records were lost.
 
 Agent was disabled; private chat and Rekber remained available.
 
-Royalty display was stale because Certificate indexing lagged; Certificate ownership was unchanged.
+Loyalty display was stale because Certificate indexing lagged; Certificate ownership was unchanged.
 ```
 
 ---

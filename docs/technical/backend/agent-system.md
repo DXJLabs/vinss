@@ -3428,7 +3428,7 @@ Core:
 /rekber/events
 /activity
 /health
-/royalty
+/loyalty
 /presence
 /attachments
 /feedback

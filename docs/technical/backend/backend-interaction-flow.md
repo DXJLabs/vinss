@@ -188,7 +188,7 @@ For the persistent index APIs:
 POST /discover
 GET /rekber/events
 GET /activity
-GET /royalty/:address
+GET /loyalty/:address
 ```
 
 the normal HTTP request reads already indexed PostgreSQL state.
@@ -938,29 +938,29 @@ is not currently accepted by the explicit allowlist.
 
 ---
 
-# Royalty Read Flow
+# Loyalty Read Flow
 
-Royalty is derived from CertificateStore.
+Loyalty is derived from CertificateStore.
 
 ```mermaid
 sequenceDiagram
     participant FE as Frontend
-    participant API as /royalty/:address
+    participant API as /loyalty/:address
     participant C as CertificateStore
-    participant S as Royalty Calculator
+    participant S as Loyalty Calculator
 
-    FE->>API: GET /royalty/0x...
+    FE->>API: GET /loyalty/0x...
     API->>API: Canonicalize Starknet address
     API->>C: recipientStats(network, certificate contract, address)
     C-->>API: certificateCount + successfulSettlements + latestIssuedAt
-    API->>S: calculateRoyalty(stats)
+    API->>S: calculateLoyalty(stats)
     S-->>API: points + multiplier + next target
-    API-->>FE: Royalty response
+    API-->>FE: Loyalty response
 ```
 
 ---
 
-# Royalty Authority Split
+# Loyalty Authority Split
 
 Evidence source:
 
@@ -971,24 +971,24 @@ SettlementCertificateIssued events
 Policy source:
 
 ```text
-backend Royalty calculation
+backend Loyalty calculation
 ```
 
 ---
 
-# Royalty Is Read-Only
+# Loyalty Is Read-Only
 
 Frontend cannot call:
 
 ```text
-POST /royalty/award
+POST /loyalty/award
 ```
 
 because no such route exists.
 
 ---
 
-# Royalty Conversion
+# Loyalty Conversion
 
 Current output:
 
@@ -1827,9 +1827,9 @@ Discovery index records
 
 ---
 
-# Royalty Replaces Loyalty as Stronger Evidence Path
+# Loyalty Replaces Loyalty as Stronger Evidence Path
 
-For settlement-based points, current Royalty read model derives from:
+For settlement-based points, current Loyalty read model derives from:
 
 ```text
 indexed SettlementCertificateIssued
@@ -1983,7 +1983,7 @@ PostgreSQL
 frontend:
     ↓
 /activity
-/royalty/:address
+/loyalty/:address
 ```
 
 ---
@@ -2026,7 +2026,7 @@ Backend intentionally does not receive those keys.
 | `/discover` | Yes, read request | Ciphertext only | PostgreSQL cache of chain |
 | `/rekber/events` | Yes, read request | Public state | PostgreSQL cache of chain |
 | `/activity` | Yes, read request | Public metadata | Derived backend read model |
-| `/royalty` | Yes, read request | Public certificate data | Backend formula over indexed chain evidence |
+| `/loyalty` | Yes, read request | Public certificate data | Backend formula over indexed chain evidence |
 | Presence | Yes | Ciphertext only | Backend ephemeral runtime |
 | Attachments | Yes | Ciphertext only | Backend storage service |
 | Feedback | Yes | Yes | Backend application DB |
@@ -2044,7 +2044,7 @@ Backend intentionally does not receive those keys.
 | Rekber events | PostgreSQL |
 | Certificate events | PostgreSQL |
 | Activity | Derived from PostgreSQL |
-| Royalty | Derived from CertificateStore |
+| Loyalty | Derived from CertificateStore |
 | Presence | Process memory |
 | Attachments | PostgreSQL |
 | Feedback | PostgreSQL |
@@ -2145,7 +2145,7 @@ but stored feedback remains if database insert already succeeded.
 
 ---
 
-# Royalty Read Failure
+# Loyalty Read Failure
 
 Can cause:
 
@@ -2181,7 +2181,7 @@ Can affect:
 /discover
 /rekber/events
 /activity
-/royalty
+/loyalty
 /health
 attachments
 feedback
@@ -2643,7 +2643,7 @@ RekberIndexer advances
 claim succeeds
 CertificateIndexer advances
 /activity sees issuance
-/royalty updates recipient stats
+/loyalty updates recipient stats
 ```
 
 ---
@@ -2722,7 +2722,7 @@ Presence becomes settlement evidence
 
 Attachment token becomes wallet identity
 
-Royalty accepts client-award POST
+Loyalty accepts client-award POST
 
 LLM directly calls wallet
 
@@ -2800,8 +2800,8 @@ Merged reads:
 
 ```text
 backend/src/routes/activity.ts
-backend/src/royalty/routes.ts
-backend/src/royalty/service.ts
+backend/src/loyalty/routes.ts
+backend/src/loyalty/service.ts
 ```
 
 Auxiliary:
@@ -2880,7 +2880,7 @@ Public Rekber lifecycle
 Settlement Certificate
     -> background Certificate indexing
     -> PostgreSQL
-    -> /activity + /royalty
+    -> /activity + /loyalty
 
 Presence
     -> request-time encrypted in-memory relay

@@ -226,7 +226,7 @@ loyalty-rules.test.ts
 
 rekber-indexer.test.ts
 
-royalty.test.ts
+loyalty.test.ts
 ```
 
 ---
@@ -253,7 +253,7 @@ The current nine files contain:
 | `indexer.test.ts` | 2 |
 | `loyalty-rules.test.ts` | 5 |
 | `rekber-indexer.test.ts` | 2 |
-| `royalty.test.ts` | 3 |
+| `loyalty.test.ts` | 3 |
 | **Total** | **39** |
 
 ---
@@ -430,7 +430,7 @@ Legacy Loyalty rules
 
 Rekber identity/basic resolved shape
 
-Royalty formula
+Loyalty formula
 ```
 
 ---
@@ -567,7 +567,7 @@ if no live resolver transaction test occurred.
 | Dispute policy | Yes | No | No | No |
 | Dispute executor | Arithmetic only | No | No | No |
 | Legacy Loyalty rules | Yes | No | No | No |
-| Royalty formula | Yes | No | No | No |
+| Loyalty formula | Yes | No | No | No |
 | Presence | No dedicated backend test | No | N/A | N/A |
 | Attachments | No dedicated test | No | No | N/A |
 | Feedback | No dedicated test | No | No | N/A |
@@ -1027,7 +1027,7 @@ checkpoint advancement
 
 /activity integration
 
-Royalty integration
+Loyalty integration
 ```
 
 ---
@@ -1867,19 +1867,19 @@ authorization
 
 ---
 
-# Royalty Tests
+# Loyalty Tests
 
 File:
 
 ```text
-backend/tests/royalty.test.ts
+backend/tests/loyalty.test.ts
 ```
 
 Three cases.
 
 ---
 
-# Royalty Case 1 — Certificate Tiers
+# Loyalty Case 1 — Certificate Tiers
 
 Verifies:
 
@@ -1897,7 +1897,7 @@ Verifies:
 
 ---
 
-# Royalty Case 2 — Settlement Formula
+# Loyalty Case 2 — Settlement Formula
 
 For:
 
@@ -1923,7 +1923,7 @@ nextMultiplier = 1.75
 
 ---
 
-# Royalty Case 3 — 2x Cap
+# Loyalty Case 3 — 2x Cap
 
 At high count:
 
@@ -1937,12 +1937,12 @@ nextMultiplier = null
 
 ---
 
-# Royalty Test Limitations
+# Loyalty Test Limitations
 
 Does not test:
 
 ```text
-GET /royalty/:address
+GET /loyalty/:address
 
 address validation
 
@@ -2226,7 +2226,7 @@ tests/rekber-indexer.test.ts
 It does not run:
 
 ```text
-royalty.test.ts
+loyalty.test.ts
 ```
 
 despite the similar product terminology.
@@ -2758,7 +2758,7 @@ activity read
 
 ---
 
-# Royalty Route
+# Loyalty Route
 
 Add:
 
@@ -3363,7 +3363,7 @@ Rekber event appears
 
 Certificate event appears
 
-Royalty updates after certificate indexing
+Loyalty updates after certificate indexing
 ```
 
 ---
@@ -3411,7 +3411,7 @@ GET /rekber/events?limit=1
 
 GET /activity?limit=1
 
-GET /royalty/<known-address>
+GET /loyalty/<known-address>
 ```
 
 as relevant.
@@ -4062,7 +4062,7 @@ for all valid certificate counts.
 
 ---
 
-# Royalty Property Test
+# Loyalty Property Test
 
 Invariant:
 
@@ -4322,7 +4322,7 @@ resolved share formula
 
 ---
 
-# Royalty failure
+# Loyalty failure
 
 Check:
 
@@ -4664,7 +4664,7 @@ P1:
     attachments
     Presence
     Feedback
-    Royalty route
+    Loyalty route
 
 P2:
     fuzz/property tests
@@ -4998,7 +4998,7 @@ resolver Account
 For:
 
 ```text
-calculateRoyalty
+calculateLoyalty
 
 evaluateDisputePolicy
 
@@ -5582,7 +5582,7 @@ Did evidence level change?
 
 [ ] checkpoint
 
-[ ] activity/Royalty integration
+[ ] activity/Loyalty integration
 ```
 
 ---
@@ -5810,7 +5810,7 @@ network-aware index identities
 
 Legacy Loyalty formula
 
-Royalty formula
+Loyalty formula
 
 cross-layer privacy/source invariants
 

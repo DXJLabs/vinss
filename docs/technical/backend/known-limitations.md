@@ -76,7 +76,7 @@ strict required mainnet configuration
 
 encrypted attachment storage
 
-certificate-derived Royalty
+certificate-derived Loyalty
 
 feature-gated Agent/Dispute
 ```
@@ -135,7 +135,7 @@ some route/schema drift
 | Agent/Dispute | Shared `AGENT_ENABLED` route gate | ACTIVE |
 | Dispute | Backend may hold resolver signing key | SECURITY TRADE-OFF |
 | Dispute | Broad 400 error mapping | ACTIVE |
-| Royalty | Conversion not implemented | ACTIVE |
+| Loyalty | Conversion not implemented | ACTIVE |
 | Legacy Loyalty | In-memory + unauthenticated write model | ACTIVE |
 | Health | Indexer-oriented, not full readiness | ACTIVE |
 | OpenAPI | Missing several runtime routes | DOCUMENTATION GAP |
@@ -2218,7 +2218,7 @@ The resolver account also depends on actual Starknet transaction execution condi
 
 ---
 
-# 40. Royalty Is Application Policy, Not Protocol
+# 40. Loyalty Is Application Policy, Not Protocol
 
 ## Status
 
@@ -2226,7 +2226,7 @@ The resolver account also depends on actual Starknet transaction execution condi
 DESIGN TRADE-OFF
 ```
 
-Royalty points are derived in backend application code from:
+Loyalty points are derived in backend application code from:
 
 ```text
 Settlement Certificate events
@@ -2242,7 +2242,7 @@ That is useful product flexibility but means points are not protocol invariants.
 
 ---
 
-# 41. Royalty Conversion Is Not Implemented
+# 41. Loyalty Conversion Is Not Implemented
 
 ## Status
 
@@ -2266,7 +2266,7 @@ today.
 
 ---
 
-# 42. Royalty Depends on Certificate Index Freshness
+# 42. Loyalty Depends on Certificate Index Freshness
 
 ## Status
 
@@ -2274,7 +2274,7 @@ today.
 ACTIVE
 ```
 
-Royalty reads:
+Loyalty reads:
 
 ```text
 CertificateStore
@@ -2289,7 +2289,7 @@ rather than directly querying chain on every request.
 If CertificateIndexer is stale:
 
 ```text
-Royalty points can be stale
+Loyalty points can be stale
 ```
 
 even though on-chain Certificate ownership is already updated.
@@ -2489,7 +2489,7 @@ Examples include:
 ```text
 /rekber/events
 
-/royalty/:address
+/loyalty/:address
 
 /attachments/:id
 
@@ -2839,7 +2839,7 @@ Certificate events
 
 Activity
 
-Royalty
+Loyalty
 
 Attachments
 
@@ -3045,7 +3045,7 @@ Privacy documentation should acknowledge indexing/searchability effects.
 
 ---
 
-# 64. Certificate-Derived Royalty Links Public Identity to Product Points
+# 64. Certificate-Derived Loyalty Links Public Identity to Product Points
 
 ## Status
 
@@ -3053,7 +3053,7 @@ Privacy documentation should acknowledge indexing/searchability effects.
 DESIGN TRADE-OFF
 ```
 
-Royalty query accepts a public Starknet address and derives points from certificate ownership.
+Loyalty query accepts a public Starknet address and derives points from certificate ownership.
 
 ---
 
@@ -3063,7 +3063,7 @@ Points and successful-settlement counts become easily queryable for that address
 
 ---
 
-# 65. No Authentication for Royalty Read
+# 65. No Authentication for Loyalty Read
 
 ## Status
 
@@ -3071,7 +3071,7 @@ Points and successful-settlement counts become easily queryable for that address
 DESIGN TRADE-OFF
 ```
 
-`GET /royalty/:address` is read-only and public.
+`GET /loyalty/:address` is read-only and public.
 
 It does not require wallet proof.
 
@@ -3638,7 +3638,7 @@ This includes:
 /discover
 /activity
 /rekber/events
-/royalty
+/loyalty
 ```
 
 ---
@@ -3747,7 +3747,7 @@ This is desirable cryptographically but means lost client capability has no serv
 
 ---
 
-# 89. Certificate/Royalty Index Can Lag Claim
+# 89. Certificate/Loyalty Index Can Lag Claim
 
 ## Status
 
@@ -3757,7 +3757,7 @@ ACTIVE
 
 Certificate claim is on-chain first.
 
-Backend Royalty updates only after:
+Backend Loyalty updates only after:
 
 ```text
 CertificateIndexer
@@ -4867,7 +4867,7 @@ No authenticated wallet quota exists.
 
 ---
 
-# 141. No Dedicated Abuse Protection for Royalty Reads
+# 141. No Dedicated Abuse Protection for Loyalty Reads
 
 ## Status
 
@@ -4875,7 +4875,7 @@ No authenticated wallet quota exists.
 ACTIVE
 ```
 
-Royalty route is not wrapped by the application fixed-window limiter in current app composition.
+Loyalty route is not wrapped by the application fixed-window limiter in current app composition.
 
 ---
 
@@ -4944,7 +4944,7 @@ activity
 
 rekber events
 
-royalty
+loyalty
 ```
 
 ---
@@ -5127,7 +5127,7 @@ Feedback protection is simple validation + rate limit.
 
 ---
 
-# 158. Royalty Does Not Prove Unique Human Identity
+# 158. Loyalty Does Not Prove Unique Human Identity
 
 ## Status
 
@@ -5151,7 +5151,7 @@ If one user uses multiple addresses, points are split unless higher-level aggreg
 
 ---
 
-# 160. No Cross-Wallet Royalty Linking
+# 160. No Cross-Wallet Loyalty Linking
 
 ## Status
 
@@ -5159,7 +5159,7 @@ If one user uses multiple addresses, points are split unless higher-level aggreg
 ACTIVE
 ```
 
-Current `/royalty/:address` operates on one canonicalized Starknet address.
+Current `/loyalty/:address` operates on one canonicalized Starknet address.
 
 ---
 
@@ -5175,7 +5175,7 @@ There is no persistent conversion ledger because conversion is not live.
 
 ---
 
-# 162. No Points Write API in Royalty
+# 162. No Points Write API in Loyalty
 
 ## Status
 
@@ -5185,7 +5185,7 @@ NOT A LIMITATION FOR SECURITY
 
 This is intentional.
 
-Clients cannot award themselves Royalty points.
+Clients cannot award themselves Loyalty points.
 
 ---
 
@@ -5586,7 +5586,7 @@ Feedback is always mounted.
 
 ---
 
-# 186. No Feature Flag for Royalty
+# 186. No Feature Flag for Loyalty
 
 ## Status
 
@@ -5594,7 +5594,7 @@ Feedback is always mounted.
 ACTIVE
 ```
 
-Royalty is always mounted.
+Loyalty is always mounted.
 
 ---
 
@@ -6239,7 +6239,7 @@ flowchart TD
 
     P2 --> K["OpenAPI completeness"]
     P2 --> M["Attachment retention/delete"]
-    P2 --> N["Royalty conversion"]
+    P2 --> N["Loyalty conversion"]
     P2 --> O["Legacy Loyalty redesign"]
 ```
 
@@ -6542,21 +6542,21 @@ stores.
 
 ---
 
-# Fixed: Royalty Client Award Risk
+# Fixed: Loyalty Client Award Risk
 
-Current Royalty is read-only and derived from CertificateStore.
+Current Loyalty is read-only and derived from CertificateStore.
 
 There is no:
 
 ```text
-POST /royalty/award
+POST /loyalty/award
 ```
 
 ---
 
 # Still Not Fixed: Legacy Loyalty
 
-Do not confuse Royalty hardening with Legacy Loyalty.
+Do not confuse Loyalty hardening with Legacy Loyalty.
 
 Legacy Loyalty remains:
 
@@ -6788,7 +6788,7 @@ Agent reads the full private room automatically.
 
 Backend has no transaction signing authority at all.
 
-Royalty is the same as Legacy Loyalty.
+Loyalty is the same as Legacy Loyalty.
 
 Health proves full product readiness.
 
@@ -6925,7 +6925,7 @@ object storage
 
 ---
 
-# If Royalty Becomes Valuable
+# If Loyalty Becomes Valuable
 
 Current certificate-derived calculation is stronger than Legacy Loyalty, but valuable economic conversion will need:
 
@@ -7026,7 +7026,7 @@ resolver operational funding/security
 ## Product
 
 ```text
-Royalty conversion not live
+Loyalty conversion not live
 
 Legacy Loyalty not production-authoritative
 ```

@@ -9,13 +9,13 @@ backend/src/loyalty/
 It is intentionally separated from the newer:
 
 ```text
-Royalty
+Loyalty
 ```
 
 read model implemented under:
 
 ```text
-backend/src/royalty/
+backend/src/loyalty/
 ```
 
 These two systems are **not the same service**, do not use the same evidence source, and do not use the same points formula.
@@ -54,7 +54,7 @@ Settlement Certificate ownership
 
 canonical settlement evidence
 
-Royalty certificate-derived points
+Loyalty certificate-derived points
 ```
 
 ---
@@ -70,7 +70,7 @@ backend/src/loyalty/
 and:
 
 ```text
-backend/src/royalty/
+backend/src/loyalty/
 ```
 
 They solve different problems.
@@ -81,7 +81,7 @@ Use these names precisely:
 Legacy Loyalty
     -> in-memory preview/event-award service
 
-Royalty
+Loyalty
     -> read-only certificate-derived points service
 ```
 
@@ -121,12 +121,12 @@ Tests:
 backend/tests/loyalty-rules.test.ts
 ```
 
-Related but separate Royalty source:
+Related but separate Loyalty source:
 
 ```text
-backend/src/royalty/routes.ts
+backend/src/loyalty/routes.ts
 
-backend/src/royalty/service.ts
+backend/src/loyalty/service.ts
 ```
 
 ---
@@ -142,7 +142,7 @@ flowchart TD
 
     CERT["Settlement Certificate events"]
     CSTORE["CertificateStore"]
-    ROY["Royalty"]
+    ROY["Loyalty"]
 
     CHAIN["Canonical Starknet state"]
 
@@ -153,7 +153,7 @@ flowchart TD
     CERT --> CSTORE
     CSTORE --> ROY
 
-    FE -->|"GET /royalty/:address"| ROY
+    FE -->|"GET /loyalty/:address"| ROY
 
     LOY -. not canonical .-> CHAIN
 ```
@@ -270,15 +270,15 @@ POST /loyalty/events
 
 ---
 
-# No Royalty Routes Here
+# No Loyalty Routes Here
 
 Legacy Loyalty does not own:
 
 ```text
-GET /royalty/:address
+GET /loyalty/:address
 ```
 
-That is the separate Royalty service.
+That is the separate Loyalty service.
 
 ---
 
@@ -1083,7 +1083,7 @@ Do not conflate:
 
 2. Legacy Loyalty certificate multiplier
 
-3. Royalty certificate multiplier
+3. Loyalty certificate multiplier
 ```
 
 They are separate.
@@ -1098,15 +1098,15 @@ flowchart TD
 
     LEVEL["Legacy Loyalty level multiplier"]
     LCERT["Legacy Loyalty certificate multiplier"]
-    ROY["Royalty certificate multiplier"]
+    ROY["Loyalty certificate multiplier"]
 
     LEVEL --> LM["Stored on LoyaltyAccount"]
     LCERT --> LR["Used by calculateRekberReward utility"]
-    ROY --> RR["Used by calculateRoyalty"]
+    ROY --> RR["Used by calculateLoyalty"]
 
     LM -. not applied by awardAction .-> M
     LR -. not wired to POST /loyalty/events .-> M
-    RR --> RUNTIME["Live /royalty read calculation"]
+    RR --> RUNTIME["Live /loyalty read calculation"]
 ```
 
 ---
@@ -1873,7 +1873,7 @@ multi-replica consistency
 
 ---
 
-# Legacy Loyalty vs Royalty
+# Legacy Loyalty vs Loyalty
 
 This distinction is mandatory.
 
@@ -1913,7 +1913,7 @@ no
 
 ---
 
-# Royalty
+# Loyalty
 
 Evidence source:
 
@@ -1949,9 +1949,9 @@ application-derived from public certificate evidence
 
 # Comparison Table
 
-| Property | Legacy Loyalty | Royalty |
+| Property | Legacy Loyalty | Loyalty |
 |---|---|---|
-| Path | `/loyalty/*` | `/royalty/:address` |
+| Path | `/loyalty/*` | `/loyalty/:address` |
 | Feature gated | Yes | No |
 | Default state | Disabled | Mounted |
 | Evidence | Client event | CertificateStore |
@@ -1965,9 +1965,9 @@ application-derived from public certificate evidence
 
 ---
 
-# Royalty Formula
+# Loyalty Formula
 
-Separate Royalty service uses:
+Separate Loyalty service uses:
 
 ```text
 BASE_SETTLEMENT_POINTS = 200
@@ -1975,9 +1975,9 @@ BASE_SETTLEMENT_POINTS = 200
 
 ---
 
-# Royalty Certificate Tiers
+# Loyalty Certificate Tiers
 
-Current Royalty tiers:
+Current Loyalty tiers:
 
 ```text
 0 certificates
@@ -1998,7 +1998,7 @@ Current Royalty tiers:
 
 ---
 
-# Royalty Formula
+# Loyalty Formula
 
 ```text
 basePoints =
@@ -2010,9 +2010,9 @@ points =
 
 ---
 
-# Royalty Next Tier
+# Loyalty Next Tier
 
-Royalty also computes:
+Loyalty also computes:
 
 ```text
 nextCertificateTarget
@@ -2022,7 +2022,7 @@ nextMultiplier
 
 ---
 
-# Royalty Conversion
+# Loyalty Conversion
 
 Current API reports:
 
@@ -2040,7 +2040,7 @@ Legacy Loyalty release rule:
 100 base Rekber points
 ```
 
-Royalty settlement rule:
+Loyalty settlement rule:
 
 ```text
 200 base points
@@ -2058,7 +2058,7 @@ Legacy Loyalty first certificate:
 1.10x
 ```
 
-Royalty first certificate:
+Loyalty first certificate:
 
 ```text
 1.25x
@@ -2083,7 +2083,7 @@ Legacy Loyalty
 and:
 
 ```text
-Royalty
+Loyalty
 ```
 
 can evolve differently.
@@ -2109,13 +2109,13 @@ backend/src/loyalty
 and:
 
 ```text
-Royalty
+Loyalty
 ```
 
 should mean:
 
 ```text
-backend/src/royalty
+backend/src/loyalty
 ```
 
 ---
@@ -2135,16 +2135,16 @@ Legacy action points
 
 or
 
-Certificate-derived Royalty points
+Certificate-derived Loyalty points
 ```
 
 before changing code.
 
 ---
 
-# Why Royalty Is Stronger Evidence
+# Why Loyalty Is Stronger Evidence
 
-Royalty derives from:
+Loyalty derives from:
 
 ```text
 indexed Settlement Certificate events
@@ -2166,9 +2166,9 @@ without chain verification.
 
 ---
 
-# Royalty Still Is Application Policy
+# Loyalty Still Is Application Policy
 
-Even though evidence is stronger, Royalty point arithmetic remains:
+Even though evidence is stronger, Loyalty point arithmetic remains:
 
 ```text
 backend application logic
@@ -2559,7 +2559,7 @@ Rekber can still settle
 
 Certificate can still be claimed
 
-Royalty can still be derived
+Loyalty can still be derived
 ```
 
 ---
@@ -2574,7 +2574,7 @@ flowchart LR
     OFFER["Offer"]
     REK["Rekber"]
     CERT["Certificate"]
-    ROY["Royalty"]
+    ROY["Loyalty"]
 
     LOY -. not required by .-> MSG
     LOY -. not required by .-> OFFER
@@ -3343,9 +3343,9 @@ or other verified source.
 
 ---
 
-# Royalty Already Does This Better
+# Loyalty Already Does This Better
 
-Royalty derives certificate count from:
+Loyalty derives certificate count from:
 
 ```text
 CertificateStore.recipientStats(...)
@@ -3357,7 +3357,7 @@ instead of accepting count from the client.
 
 # Possible Consolidation
 
-Future architecture could potentially retire Legacy Loyalty settlement rewards and use Royalty as the primary durable settlement-points path.
+Future architecture could potentially retire Legacy Loyalty settlement rewards and use Loyalty as the primary durable settlement-points path.
 
 This is a product decision, not current implementation.
 
@@ -3427,9 +3427,9 @@ Do not solve Loyalty evidence by storing room keys server-side.
 
 ---
 
-# Royalty Privacy Model
+# Loyalty Privacy Model
 
-Royalty operates only on public:
+Loyalty operates only on public:
 
 ```text
 Settlement Certificate
@@ -3870,7 +3870,7 @@ flowchart TD
 
 ---
 
-# Royalty Architecture Summary
+# Loyalty Architecture Summary
 
 ```mermaid
 flowchart TD
@@ -3878,8 +3878,8 @@ flowchart TD
     INDEX["CertificateIndexer"]
     STORE["CertificateStore"]
     STATS["recipientStats(address)"]
-    FORMULA["calculateRoyalty()"]
-    API["GET /royalty/:address"]
+    FORMULA["calculateLoyalty()"]
+    API["GET /loyalty/:address"]
 
     CHAIN --> INDEX
     INDEX --> STORE
@@ -3912,12 +3912,12 @@ For Legacy Loyalty:
 8. prose docs
 ```
 
-For Royalty:
+For Loyalty:
 
 ```text
-1. backend/src/royalty/service.ts
+1. backend/src/loyalty/service.ts
 
-2. backend/src/royalty/routes.ts
+2. backend/src/loyalty/routes.ts
 
 3. CertificateStore
 
@@ -3946,7 +3946,7 @@ Accurate:
 
 Accurate:
 
-> Royalty is a different read-only service derived from indexed Settlement Certificate events.
+> Loyalty is a different read-only service derived from indexed Settlement Certificate events.
 
 ---
 
@@ -3969,9 +3969,9 @@ Gold 1.25x automatically multiplies every earned point.
 
 rekber_resolved is a current LoyaltyAction.
 
-Royalty and Loyalty use the same multiplier table.
+Loyalty and Loyalty use the same multiplier table.
 
-Royalty is enabled by LOYALTY_ENABLED.
+Loyalty is enabled by LOYALTY_ENABLED.
 
 Restart preserves Loyalty points.
 
@@ -4010,9 +4010,9 @@ If points are shown to users while this service is enabled:
 
 ---
 
-# Royalty Rule
+# Loyalty Rule
 
-> Do not confuse Legacy Loyalty with Royalty; Royalty is certificate-derived, read-only, persistent through the Certificate index, and uses a different points formula.
+> Do not confuse Legacy Loyalty with Loyalty; Loyalty is certificate-derived, read-only, persistent through the Certificate index, and uses a different points formula.
 
 ---
 
@@ -4064,4 +4064,4 @@ The most important authorization rule is:
 
 And the most important architecture distinction is:
 
-> Legacy Loyalty is an experimental preview service, while Royalty is the newer certificate-derived read-only settlement-points path.
+> Legacy Loyalty is an experimental preview service, while Loyalty is the newer certificate-derived read-only settlement-points path.

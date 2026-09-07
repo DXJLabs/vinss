@@ -305,7 +305,7 @@ It influences:
 Discovery identity
 Rekber identity
 Certificate identity
-Royalty query namespace
+Loyalty query namespace
 activity namespace
 Agent response metadata
 Dispute typed-data chain ID
@@ -820,7 +820,7 @@ Used by:
 CertificateIndexer
 CertificateStore identity
 /activity certificate records
-/royalty/:address
+/loyalty/:address
 ```
 
 ---
@@ -2395,7 +2395,7 @@ LOYALTY_ENABLED=false
 
 Do not enable legacy Loyalty merely because frontend has a points UI.
 
-Royalty is a separate certificate-derived path.
+Loyalty is a separate certificate-derived path.
 
 ---
 

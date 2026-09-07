@@ -50,7 +50,7 @@ The backend also provides public indexed views of Rekber and Settlement Certific
 
 A concise technical description is:
 
-> VINSS backend is a PostgreSQL-backed Starknet indexing and application-service layer. Its core Deal Room discovery path stores and serves public encrypted helper payloads without decryption keys, while separate public-state indexers track Rekber lifecycle and Settlement Certificate events. Auxiliary services provide encrypted presence, encrypted attachments, feedback, global activity, and certificate-derived Royalty views. Optional Agent and Dispute services have separate disclosure and authority boundaries.
+> VINSS backend is a PostgreSQL-backed Starknet indexing and application-service layer. Its core Deal Room discovery path stores and serves public encrypted helper payloads without decryption keys, while separate public-state indexers track Rekber lifecycle and Settlement Certificate events. Auxiliary services provide encrypted presence, encrypted attachments, feedback, global activity, and certificate-derived Loyalty views. Optional Agent and Dispute services have separate disclosure and authority boundaries.
 
 ---
 
@@ -177,7 +177,7 @@ backend/src/
 ├── middleware/
 ├── openapi.ts
 ├── routes/
-├── royalty/
+├── loyalty/
 └── types.ts
 ```
 
@@ -418,7 +418,7 @@ CertificateIndexer
 /discover
 /rekber/events
 /activity
-/royalty/:address
+/loyalty/:address
 /health
 ```
 
@@ -1148,7 +1148,7 @@ A PostgreSQL outage can affect:
 
 /activity
 
-/royalty
+/loyalty
 
 /health status retrieval
 
@@ -1188,7 +1188,7 @@ flowchart LR
     DISC["POST /discover"]
     REK["GET /rekber/events"]
     ACT["GET /activity"]
-    ROY["GET /royalty/:address"]
+    ROY["GET /loyalty/:address"]
     HEALTH["GET /health"]
 
     D --> DISC
@@ -1245,7 +1245,7 @@ into a global presentation-oriented timeline.
 
 ---
 
-# `/royalty/:address`
+# `/loyalty/:address`
 
 Reads CertificateStore-derived recipient statistics.
 
@@ -1342,15 +1342,15 @@ for Rekber lifecycle details.
 
 ---
 
-# Royalty Architecture
+# Loyalty Architecture
 
-Royalty is a backend-derived read model.
+Loyalty is a backend-derived read model.
 
 It is not the old Loyalty service.
 
 ---
 
-# Royalty Source
+# Loyalty Source
 
 Authority input:
 
@@ -1358,11 +1358,11 @@ Authority input:
 indexed SettlementCertificateIssued events
 ```
 
-The client cannot award itself a certificate through the Royalty API.
+The client cannot award itself a certificate through the Loyalty API.
 
 ---
 
-# Royalty Calculation
+# Loyalty Calculation
 
 Current application logic uses:
 
@@ -1378,7 +1378,7 @@ It is not a smart-contract invariant.
 
 ---
 
-# Royalty Trust Split
+# Loyalty Trust Split
 
 ```text
 certificate event
@@ -1390,7 +1390,7 @@ points formula
 
 ---
 
-# Royalty Conversion Boundary
+# Loyalty Conversion Boundary
 
 Current API reports:
 
@@ -1400,7 +1400,7 @@ coming_soon
 
 for conversion.
 
-No token conversion occurs in current Royalty service.
+No token conversion occurs in current Loyalty service.
 
 ---
 
@@ -2566,7 +2566,7 @@ Always-mounted API includes:
 
 /feedback
 
-/royalty/:address
+/loyalty/:address
 
 /presence/*
 
@@ -2622,7 +2622,7 @@ Current runtime has executable paths not yet represented in OpenAPI, including:
 ```text
 /rekber/events
 
-/royalty/:address
+/loyalty/:address
 
 /attachments/:id
 
@@ -3024,7 +3024,7 @@ This should remain body-free.
 | Rekber funded/released/refunded/resolved state | Rekber contract |
 | Settlement Certificate issuance | Certificate contract |
 | Backend index checkpoint | PostgreSQL |
-| Royalty point formula | Backend application logic |
+| Loyalty point formula | Backend application logic |
 | Presence | Backend ephemeral runtime |
 | Attachment ciphertext | Backend PostgreSQL service |
 | Feedback | Backend PostgreSQL application data |
@@ -3170,7 +3170,7 @@ Rekber indexing
 
 Certificate indexing
 
-Royalty
+Loyalty
 
 Activity
 
@@ -3390,7 +3390,7 @@ skill enforcement
 
 policy calculations
 
-Royalty calculations
+Loyalty calculations
 
 request validation
 ```
@@ -3589,12 +3589,12 @@ backend/src/indexer/certificateStore.ts
 
 ---
 
-# Activity / Royalty Source Map
+# Activity / Loyalty Source Map
 
 ```text
 backend/src/routes/activity.ts
-backend/src/royalty/routes.ts
-backend/src/royalty/service.ts
+backend/src/loyalty/routes.ts
+backend/src/loyalty/service.ts
 ```
 
 ---
@@ -3765,9 +3765,9 @@ A dedicated deterministic policy must approve AutoResolve before the resolver ex
 
 ---
 
-# Architecture Decision: Certificate-Derived Royalty
+# Architecture Decision: Certificate-Derived Loyalty
 
-Royalty reads from Certificate index state rather than client-submitted “I completed a deal” events.
+Loyalty reads from Certificate index state rather than client-submitted “I completed a deal” events.
 
 This gives a stronger evidence source than legacy Loyalty.
 
@@ -3901,7 +3901,7 @@ encrypted auxiliary transport/storage
 
 plain application feedback
 
-certificate-derived Royalty
+certificate-derived Loyalty
 
 optional remote Agent
 
