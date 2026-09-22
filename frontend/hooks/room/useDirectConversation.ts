@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import {
   useEffect,
   useMemo,
@@ -656,7 +659,7 @@ export function useDirectConversation({
             );
 
           if (confirmed) {
-            window.localStorage.removeItem(
+            networkStorage.removeItem(
               storageKey,
             );
 
@@ -724,7 +727,7 @@ export function useDirectConversation({
       return next;
     });
 
-    window.localStorage.removeItem(
+    networkStorage.removeItem(
       storageKey,
     );
 
@@ -1906,7 +1909,7 @@ export function useDirectConversation({
     const checkPending = async () => {
       if (stopped) return;
 
-      if (!window.localStorage.getItem(storageKey)) {
+      if (!networkStorage.getItem(storageKey)) {
         setMessagePending(false);
         return;
       }
@@ -2002,7 +2005,7 @@ export function useDirectConversation({
         recovered ||
         equivalentConfirmed
       ) {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
 
@@ -2031,7 +2034,7 @@ export function useDirectConversation({
       if (
         pendingAge > 75_000
       ) {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
 

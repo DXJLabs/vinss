@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import {
   useRef,
   useState,
@@ -131,7 +134,7 @@ export function MessageBubble({
       }
 
       return (
-        window.localStorage.getItem(
+        networkStorage.getItem(
           hiddenStorageKey,
         ) === "1"
       );
@@ -207,7 +210,7 @@ export function MessageBubble({
 
   function deleteLocally() {
     if (hiddenStorageKey) {
-      window.localStorage.setItem(
+      networkStorage.setItem(
         hiddenStorageKey,
         "1",
       );

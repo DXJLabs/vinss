@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -32,7 +35,7 @@ function isLocalRoom(value: unknown): value is LocalRoom {
 function loadRooms(): LocalRoom[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = networkStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(parsed) ? parsed.filter(isLocalRoom) : [];
   } catch {
@@ -41,7 +44,7 @@ function loadRooms(): LocalRoom[] {
 }
 
 function saveRooms(rooms: LocalRoom[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+  networkStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
 }
 
 function formatDate(value: string) {
@@ -198,8 +201,8 @@ export function HomeWorkspace() {
     saveRooms(next);
 
     const keysToRemove: string[] = [];
-    for (let index = 0; index < window.localStorage.length; index += 1) {
-      const key = window.localStorage.key(index);
+    for (let index = 0; index < networkStorage.length; index += 1) {
+      const key = networkStorage.key(index);
       if (
         key &&
         key !== STORAGE_KEY &&
@@ -209,7 +212,7 @@ export function HomeWorkspace() {
         keysToRemove.push(key);
       }
     }
-    for (const key of keysToRemove) window.localStorage.removeItem(key);
+    for (const key of keysToRemove) networkStorage.removeItem(key);
     setRoomToDelete(null);
   }
 

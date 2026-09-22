@@ -94,11 +94,13 @@ export class CertificateEventSource {
   constructor(
     rpcUrl: string,
     private readonly eventPageSize: number,
+    private readonly verifyNetwork: () => Promise<void> = async () => {},
   ) {
     this.provider = new RpcProvider({ nodeUrl: rpcUrl });
   }
 
   async getLatestBlockNumber(): Promise<number> {
+    await this.verifyNetwork();
     return this.provider.getBlockNumber();
   }
 

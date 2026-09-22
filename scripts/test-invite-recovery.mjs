@@ -46,7 +46,7 @@ expectSource(
 
 expectSource(
   invitePage,
-  "window.localStorage.removeItem(",
+  "networkStorage.removeItem(",
   "Invalid recovery state is not cleared",
 );
 

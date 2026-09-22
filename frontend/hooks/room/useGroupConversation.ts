@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import {
   useEffect,
   useRef,
@@ -308,7 +311,7 @@ export function useGroupConversation({
             setPending(true);
 
             // Persist only non-plaintext recovery metadata.
-            window.localStorage.setItem(
+            networkStorage.setItem(
               storageKey,
               JSON.stringify({
                 actionLocator:
@@ -349,7 +352,7 @@ export function useGroupConversation({
           },
         );
 
-      window.localStorage.removeItem(
+      networkStorage.removeItem(
         storageKey,
       );
 
@@ -395,7 +398,7 @@ export function useGroupConversation({
         definitelyFailed &&
         preparedLocator
       ) {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
 
@@ -467,7 +470,7 @@ export function useGroupConversation({
       if (stopped) return;
 
       const raw =
-        window.localStorage.getItem(
+        networkStorage.getItem(
           storageKey,
         );
 
@@ -485,7 +488,7 @@ export function useGroupConversation({
         pendingRecord =
           JSON.parse(raw);
       } catch {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
         setPending(false);
@@ -512,7 +515,7 @@ export function useGroupConversation({
         );
 
       if (recovered) {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
 
@@ -529,7 +532,7 @@ export function useGroupConversation({
           pendingRecord.createdAt >
         60_000
       ) {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           storageKey,
         );
 

@@ -1,0 +1,265 @@
+{
+  "checkedAt": "2026-09-22T00:56:11.276Z",
+  "chainId": "0x534e5f5345504f4c4941",
+  "blockNumber": 15439294,
+  "source": "Existing successful GitHub Actions deployments; Aug 27–28 suite and Aug 18 PrivateEscrowHelper",
+  "compatible": true,
+  "feeQuotesAvailable": true,
+  "contracts": [
+    {
+      "name": "VinssSettlementCertificate",
+      "address": "0x02c9bb5e3cdb939ed2193361c741d1bacf607faa858a2d75aaba3d8d6b6ca333",
+      "classHash": "0x3c6e2b669488fcc501cccbb78b5ac732c1ff689fd38b9c109112585771cb943",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33195071374",
+      "deploymentTransaction": "0x04cc2cb89eeb056bc4f2e5e5d7e8e201776aead899df396bf02d276361a972a9",
+      "deploymentBlock": 14190760,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_escrow_rekber",
+          "expected": "0x016a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c",
+          "actual": "0x16a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "claim",
+        "get_escrow_rekber",
+        "is_claimed",
+        "get_certificate_token_id",
+        "get_certificate",
+        "balance_of",
+        "owner_of",
+        "safe_transfer_from",
+        "transfer_from",
+        "approve",
+        "set_approval_for_all",
+        "get_approved",
+        "is_approved_for_all",
+        "supports_interface",
+        "name",
+        "symbol",
+        "token_uri",
+        "balanceOf",
+        "ownerOf",
+        "safeTransferFrom",
+        "transferFrom",
+        "setApprovalForAll",
+        "getApproved",
+        "isApprovedForAll",
+        "tokenURI"
+      ]
+    },
+    {
+      "name": "VinssEscrowRekber",
+      "address": "0x016a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c",
+      "classHash": "0x7d394495adfd0fbb23da7b968b308c73837e924c196f8cca4911fa483dcd467",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33194846137",
+      "deploymentTransaction": "0x03178e73e393313f6349d03a19a12e91875f74c2b31b334ec209f9cebb3634a4",
+      "deploymentBlock": 14190658,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_privacy_pool",
+          "expected": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "actual": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "matches": true
+        },
+        {
+          "method": "get_revenue_fee_policy",
+          "expected": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "actual": "0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "privacy_invoke",
+        "compute_release_authorization_commitment",
+        "compute_payee_claim_commitment",
+        "compute_refund_commitment",
+        "quote_rekber_fee",
+        "get_privacy_pool",
+        "get_pragma_oracle",
+        "get_revenue_fee_policy",
+        "get_dispute_resolver",
+        "get_external_verifier",
+        "get_fee_policy",
+        "get_supported_tokens",
+        "custody_exists",
+        "get_custody",
+        "get_reserved_amount",
+        "confirm_external_fulfillment",
+        "authorize_dispute_resolution"
+      ]
+    },
+    {
+      "name": "VinssOfferHelper",
+      "address": "0x0007eb5b9518a6dd4c8d10e989b92444507dc704e765d8d5eab976734e5d3585",
+      "classHash": "0x67661408d3cdc0eac571ee53d82c1926618a36822b5de3d24f2e587c39cc449",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052863847",
+      "deploymentTransaction": "0x02604cbae0338df8b36eabffa512c6508ed92d2dad173e397108f83c1b95561d",
+      "deploymentBlock": 14118747,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_privacy_pool",
+          "expected": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "actual": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "matches": true
+        },
+        {
+          "method": "get_fee_policy",
+          "expected": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "actual": "0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "privacy_invoke",
+        "get_privacy_pool",
+        "get_fee_policy",
+        "has_offer_action",
+        "get_offer_action",
+        "get_offer_payload_chunk",
+        "is_offer_payload_committed"
+      ]
+    },
+    {
+      "name": "VinssInvite",
+      "address": "0x01dddf088b93f67a63f6e5fbefae43fbb4de63ce38d389a0bfd5714b6bf93627",
+      "classHash": "0x3ea51af42aaf3790fabd61486698fd8bf43552697c295c96348a81a22ec4464",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052681166",
+      "deploymentTransaction": "0x06c647a685b0f3dd2d60e88b1ff67b8356b62350ca9d16c3cf3f58170b7ba917",
+      "deploymentBlock": 14118658,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_privacy_pool",
+          "expected": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "actual": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "matches": true
+        },
+        {
+          "method": "get_fee_policy",
+          "expected": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "actual": "0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "privacy_invoke",
+        "get_privacy_pool",
+        "get_fee_policy",
+        "get_invite"
+      ]
+    },
+    {
+      "name": "VinssMessageHelper",
+      "address": "0x07255cfbf34f0b0b6233dc2337fc6e77db03405e98186783af81ae5185d936af",
+      "classHash": "0x2ae578dcf95ca7cf41b4fd3a4da3ccb65c0c65c1a3681c540a3474d3c40f41f",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052453901",
+      "deploymentTransaction": "0x07163ad4e0ba934970669347accd09bdfd0ecc70babfdf171972efc0e2c6d889",
+      "deploymentBlock": 14118550,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_privacy_pool",
+          "expected": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "actual": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "matches": true
+        },
+        {
+          "method": "get_fee_policy",
+          "expected": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "actual": "0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "privacy_invoke",
+        "get_privacy_pool",
+        "get_fee_policy",
+        "message_exists",
+        "get_message",
+        "get_payload_chunk",
+        "is_payload_committed"
+      ]
+    },
+    {
+      "name": "VinssFeePolicy",
+      "address": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+      "classHash": "0x6bb363a2c8ca8c47bcb704adeaf5b3b1276dcaf4ae277b5e3897bfd1762a3a4",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052274014",
+      "deploymentTransaction": "0x06e24d0313a93b3bf6323133707f8164d36c6b95a50ae063272fa669603491bc",
+      "deploymentBlock": 14118486,
+      "deploymentSucceeded": true,
+      "bindings": [],
+      "missingFunctions": [],
+      "functions": [
+        "quote_fee",
+        "quote_fee_usd_micros",
+        "get_pricing_admin",
+        "get_pragma_oracle",
+        "get_sponsor_cost_strk_wei",
+        "set_sponsor_cost_strk_wei"
+      ]
+    },
+    {
+      "name": "VinssPrivateEscrowHelper",
+      "address": "0x0697abbd998a74ca9d2f13be16a705b96f72adb949dfd8320f84acd30c973dd9",
+      "classHash": "0xe4995ec4745e151645863b7245fba04fae67fd9c585e89c48dc344c28a3573",
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/32118551273",
+      "deploymentTransaction": "0x005a8a073fa1716c01cde6ddf70d9c38f9f2639aa9222d9659148c66e2c5efc7",
+      "deploymentBlock": 13653843,
+      "deploymentSucceeded": true,
+      "bindings": [
+        {
+          "method": "get_privacy_pool",
+          "expected": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "actual": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+          "matches": true
+        }
+      ],
+      "missingFunctions": [],
+      "functions": [
+        "privacy_invoke",
+        "get_privacy_pool",
+        "has_private_escrow_action",
+        "get_private_escrow_action",
+        "get_private_escrow_payload_chunk",
+        "is_private_escrow_payload_committed"
+      ]
+    }
+  ],
+  "feeQuotes": [
+    {
+      "label": "roomActivation",
+      "amount": "0x47359f9069604622",
+      "positive": true
+    },
+    {
+      "label": "message",
+      "amount": "0x3782dace9d900000",
+      "positive": true
+    },
+    {
+      "label": "offer",
+      "amount": "0x47359f9069604622",
+      "positive": true
+    },
+    {
+      "label": "rekberForOneStrk",
+      "amount": "0x14d1132c353e9c7c3",
+      "positive": true
+    }
+  ],
+  "treasuryRegistration": {
+    "status": "not configured"
+  },
+  "liveAliceBobSettlement": "not run"
+}

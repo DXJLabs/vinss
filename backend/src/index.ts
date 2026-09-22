@@ -1,5 +1,6 @@
 import { createApp } from "./app.js";
 import { config } from "./config.js";
+import { verifyRpcNetwork } from "./network.js";
 import { createDatabase } from "./database.js";
 import {
   CertificateEventSource,
@@ -21,6 +22,8 @@ import {
 import { initializeFeedbackStorage } from "./routes/feedback.js";
 
 async function main(): Promise<void> {
+  // Check chain identity before any database/indexer state is touched.
+  await verifyRpcNetwork(config);
   const database = createDatabase(config);
   const definitions = createIndexerDefinitions(config);
   const store = new DiscoveryStore(database);
@@ -63,6 +66,7 @@ async function main(): Promise<void> {
   const source = new StarknetEventSource(
     config.rpcUrl,
     config.indexer.eventPageSize,
+    () => verifyRpcNetwork(config),
   );
 
   const indexer = new DiscoveryIndexer(config, definitions, source, store);
@@ -70,6 +74,7 @@ async function main(): Promise<void> {
   const rekberSource = new RekberEventSource(
     config.rpcUrl,
     config.indexer.eventPageSize,
+    () => verifyRpcNetwork(config),
   );
 
   const rekberIndexer = new RekberIndexer(config, rekberSource, rekberStore);
@@ -77,6 +82,7 @@ async function main(): Promise<void> {
   const certificateSource = new CertificateEventSource(
     config.rpcUrl,
     config.indexer.eventPageSize,
+    () => verifyRpcNetwork(config),
   );
 
   const certificateIndexer = new CertificateIndexer(

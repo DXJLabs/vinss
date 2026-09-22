@@ -2,6 +2,7 @@ import { num } from "starknet";
 import { toFelt } from "@/lib/privacy/envelope";
 import { CONTRACTS } from "./constants";
 import { getProvider } from "./walletClient";
+import { assertHelperReady } from "./guards";
 
 export const VINSS_FEE_ACTION = {
   roomActivation: 1,
@@ -43,6 +44,7 @@ async function resolveHelperFeePolicy(
   label: string,
 ): Promise<string> {
   const helper = requireAddress(helperAddress, label);
+  await assertHelperReady(helper);
   const cached = feePolicyByHelper.get(helper);
 
   if (cached) {
@@ -79,6 +81,7 @@ async function resolveRekberRevenueFeePolicy(): Promise<string> {
     CONTRACTS.escrowRekber,
     "VINSS Rekber",
   );
+  await assertHelperReady(escrowRekber);
 
   const result = await getProvider().callContract({
     contractAddress: escrowRekber,

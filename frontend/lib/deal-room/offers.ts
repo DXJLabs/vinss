@@ -1,3 +1,5 @@
+import { backendFetch } from "@/lib/starknet/backendFetch";
+import { invokeShieldedTransaction } from "@/lib/starknet/guards";
 /**
  * Offer domain module.
  *
@@ -175,7 +177,7 @@ export async function sendOfferAction(
   }
 
   // STRK20 invokes privacy_invoke itself, so no selector is prepended.
-  const response = await account.strk20InvokeTransaction([
+  const response = await invokeShieldedTransaction(account, [
     {
       type: "withdraw",
       token: CONTRACTS.offerHelperOpenNoteToken,
@@ -332,7 +334,7 @@ export async function discoverOfferActions(
   }>
 > {
   // The backend remains keyless and receives only the record kind.
-  const res = await fetch(`${backendUrl}/discover`, {
+  const res = await backendFetch(`${backendUrl}/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind: "offer" }),

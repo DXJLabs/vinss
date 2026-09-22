@@ -199,6 +199,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const network = parseNetwork(requireEnv(env, "STARKNET_NETWORK"));
   const corsOrigin = env.CORS_ORIGIN?.trim() || "http://localhost:3000";
   const rpcUrl = parseUrl(requireEnv(env, "RPC_URL"), "RPC_URL");
+  const poolAddress = parseAddress(requireEnv(env, "PRIVACY_POOL_ADDRESS"), "PRIVACY_POOL_ADDRESS");
+  const otherPool = network === "sepolia"
+    ? "0x40337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a"
+    : "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91";
+  if (BigInt(poolAddress) === BigInt(otherPool)) {
+    throw new Error("PRIVACY_POOL_ADDRESS belongs to the other Starknet network.");
+  }
 
   if (network === "mainnet") {
     const rpc = new URL(rpcUrl);
@@ -270,10 +277,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ssl: parseBoolean(env.DATABASE_SSL, false),
     },
     contracts: {
-      privacyPool: parseAddress(
-        requireEnv(env, "PRIVACY_POOL_ADDRESS"),
-        "PRIVACY_POOL_ADDRESS",
-      ),
+      privacyPool: poolAddress,
       messageHelper: parseAddress(
         requireEnv(env, "MESSAGE_HELPER_ADDRESS"),
         "MESSAGE_HELPER_ADDRESS",

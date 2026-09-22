@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { NETWORK } from "@/lib/starknet/constants";
 import {
   useEffect,
   useRef,
@@ -105,7 +107,7 @@ export function WalletConnectButton({
 
   const capability = connected
     ? session?.strk20Capable
-      ? "STRK20 · Shielded"
+      ? `STRK20 supported · ${NETWORK}`
       : "STRK20 · NOT SUPPORTED"
     : "NOT CONNECTED";
 
@@ -147,6 +149,9 @@ export function WalletConnectButton({
             </span>
           </div>
         )}
+      {connected && NETWORK === "sepolia" && (
+        <Link href="/shield" className="text-xs text-signal underline">Shield test STRK</Link>
+      )}
     </div>
   );
 }

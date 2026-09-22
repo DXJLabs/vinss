@@ -1,12 +1,10 @@
-// Contract addresses come from env vars only — never hardcode, since Sepolia
-// and mainnet addresses differ and the sprint requires a mainnet redeploy.
-// See STRK20_INTEGRATION_PLAN.md §4 and contracts/README.md for current
-// Sepolia addresses.
+// Each build uses one explicit network profile. Existing mainnet variables
+// remain supported; use env.sepolia.example for the isolated test deployment.
 
 import { num } from "starknet";
+import { assertPoolNetwork, parseNetwork } from "./network";
 
-export const NETWORK = (process.env.NEXT_PUBLIC_STARKNET_NETWORK ??
-  "sepolia") as "sepolia" | "mainnet";
+export const NETWORK = parseNetwork(process.env.NEXT_PUBLIC_STARKNET_NETWORK ?? "sepolia");
 
 // Explorers and deploy output print addresses zero-padded to 64 hex digits
 // (e.g. 0x0173f5b0...), copy-pasted straight into .env.local. The STRK20
@@ -58,7 +56,9 @@ export const CONTRACTS = {
 
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ??
-  "https://free-rpc.nethermind.io/sepolia-juno/v0_7";
+  (NETWORK === "sepolia" ? "https://api.cartridge.gg/x/starknet/sepolia" : "");
+
+assertPoolNetwork(NETWORK, CONTRACTS.privacyPool);
 
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000";

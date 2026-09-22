@@ -1,8 +1,10 @@
 "use client";
 
 import type { ChannelKey } from "@/lib/privacy/envelope";
+import { NETWORK, CONTRACTS } from "@/lib/starknet/constants";
+import { STORAGE_PREFIX } from "@/lib/starknet/networkStorage";
 
-const DB_NAME = "vinss-messaging-keys";
+const DB_NAME = STORAGE_PREFIX + "vinss-messaging-keys";
 const DB_VERSION = 1;
 const STORE_NAME = "identities";
 
@@ -437,7 +439,8 @@ export async function deriveDirectMessageKey(
   const salt = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(
-      `VINSS_ROOM:${roomId}`,
+      NETWORK === "mainnet" ? `VINSS_ROOM:${roomId}` :
+        `VINSS_ROOM:${NETWORK}:${CONTRACTS.privacyPool}:${roomId}`,
     ),
   );
 

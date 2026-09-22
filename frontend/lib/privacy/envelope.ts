@@ -18,6 +18,8 @@
  */
 
 import { hash, num } from "starknet";
+import { CONTRACTS, NETWORK } from "../starknet/constants";
+import { packCiphertext, unpackCiphertext, PACKING_V2 } from "./ciphertextPacking";
 
 export const ENVELOPE_VERSION = 1;
 export const MAX_PAYLOAD_CHUNKS = 64;
@@ -104,16 +106,18 @@ export function toFelt(value: bigint | number | string): string {
  * AES-GCM encrypt a JSON-serializable payload with the channel key, then
  * split the ciphertext into felt-sized (< 2**251) chunks for calldata.
  *
- * This is a reference shape, not a finished crypto implementation — the
- * exact chunking/packing scheme must match whatever the wallet-side ECDH
- * derivation and any indexer decrypt path expect bit-for-bit. Re-verify
- * against the current STRK20 channel-key spec before shipping
- * (references/links.md → "Channels & subchannels",
- * "Actions, phases, proofs").
+ * This is VINSS application encryption, separate from the pool's native note
+ * encryption managed by the wallet. V2 packing preserves all bytes and binds
+ * new ciphertext to the selected network and pool with authenticated data.
  */
 function channelKeyToArrayBuffer(channelKey: ChannelKey): ArrayBuffer {
   const copy = new Uint8Array(channelKey);
   return copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength);
+}
+
+function payloadContext(): Uint8Array<ArrayBuffer> {
+  if (!CONTRACTS.privacyPool) throw new Error("Privacy pool is not configured.");
+  return new TextEncoder().encode(`VINSS_PAYLOAD_V2:${NETWORK}:${BigInt(CONTRACTS.privacyPool).toString(16)}`);
 }
 
 export async function encryptPayload(
@@ -130,21 +134,22 @@ export async function encryptPayload(
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(payload));
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: payloadContext() }, key, plaintext),
   );
 
   const withIv = new Uint8Array(iv.length + ciphertext.length);
   withIv.set(iv, 0);
   withIv.set(ciphertext, iv.length);
 
-  return packBytesIntoFelts(withIv);
+  return packCiphertext(withIv, MAX_PAYLOAD_CHUNKS);
 }
 
 export async function decryptPayload(
   channelKey: ChannelKey,
   chunks: bigint[],
 ): Promise<unknown> {
-  const bytes = unpackFeltsIntoBytes(chunks);
+  const bytes = unpackCiphertext(chunks, MAX_PAYLOAD_CHUNKS);
+  if (bytes.length < 28) throw new Error("Ciphertext is missing its IV or authentication tag.");
   const iv = bytes.slice(0, 12);
   const ciphertext = bytes.slice(12);
   const key = await crypto.subtle.importKey(
@@ -155,41 +160,9 @@ export async function decryptPayload(
     ["decrypt"],
   );
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv, ...(chunks[0] === PACKING_V2 ? { additionalData: payloadContext() } : {}) },
     key,
     ciphertext,
   );
   return JSON.parse(new TextDecoder().decode(plaintext));
-}
-
-const BYTES_PER_FELT = 30; // stay comfortably under the 251-bit felt limit.
-
-function packBytesIntoFelts(bytes: Uint8Array): bigint[] {
-  const chunks: bigint[] = [];
-  for (let i = 0; i < bytes.length; i += BYTES_PER_FELT) {
-    const slice = bytes.slice(i, i + BYTES_PER_FELT);
-    let value = 0n;
-    for (const b of slice) value = (value << 8n) | BigInt(b);
-    chunks.push(value);
-  }
-  if (chunks.length > MAX_PAYLOAD_CHUNKS) {
-    throw new Error(
-      `Payload needs ${chunks.length} chunks, exceeds MAX_PAYLOAD_CHUNKS=${MAX_PAYLOAD_CHUNKS}. Shorten the message or attachment.`,
-    );
-  }
-  return chunks;
-}
-
-function unpackFeltsIntoBytes(chunks: bigint[]): Uint8Array {
-  const out: number[] = [];
-  for (const chunk of chunks) {
-    const bytes: number[] = [];
-    let value = chunk;
-    while (value > 0n) {
-      bytes.unshift(Number(value & 0xffn));
-      value >>= 8n;
-    }
-    out.push(...bytes);
-  }
-  return new Uint8Array(out);
 }

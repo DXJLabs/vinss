@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import Link from "next/link";
 import {
   useParams,
@@ -45,7 +48,7 @@ const CONSUMED_STORAGE_KEY =
 function loadConsumedInviteIds(): string[] {
   try {
     const raw =
-      window.localStorage.getItem(
+      networkStorage.getItem(
         CONSUMED_STORAGE_KEY,
       );
 
@@ -72,7 +75,7 @@ function markInviteConsumed(
     ),
   ].slice(0, 100);
 
-  window.localStorage.setItem(
+  networkStorage.setItem(
     CONSUMED_STORAGE_KEY,
     JSON.stringify(next),
   );
@@ -102,7 +105,7 @@ function loadRecovery(
 ): PendingInviteConsume | null {
   try {
     const raw =
-      window.localStorage.getItem(
+      networkStorage.getItem(
         recoveryKey(invite.inviteId),
       );
 
@@ -118,7 +121,7 @@ function loadRecovery(
         60 * 60 * 1000;
 
     if (!structurallyValid) {
-      window.localStorage.removeItem(
+      networkStorage.removeItem(
         recoveryKey(invite.inviteId),
       );
       return null;
@@ -143,7 +146,7 @@ function saveRecovery(
   invite: InvitePayload,
   walletAddress: string,
 ) {
-  window.localStorage.setItem(
+  networkStorage.setItem(
     recoveryKey(invite.inviteId),
     JSON.stringify({
       inviteId: invite.inviteId,
@@ -155,7 +158,7 @@ function saveRecovery(
 }
 
 function clearRecovery(inviteId: string) {
-  window.localStorage.removeItem(
+  networkStorage.removeItem(
     recoveryKey(inviteId),
   );
 }
@@ -381,7 +384,7 @@ export default function InvitePage() {
         };
 
         const raw =
-          window.localStorage.getItem(
+          networkStorage.getItem(
             ROOM_STORAGE_KEY,
           );
 
@@ -424,7 +427,7 @@ export default function InvitePage() {
           ),
         ];
 
-        window.localStorage.setItem(
+        networkStorage.setItem(
           ROOM_STORAGE_KEY,
           JSON.stringify(next),
         );

@@ -1,3 +1,4 @@
+import { networkStorage } from "@/lib/starknet/networkStorage";
 import {
   generateRoomSecret,
 } from "@/lib/privacy/channelKey";
@@ -44,7 +45,7 @@ export function loadLocalGroups(
 
   try {
     const raw =
-      window.localStorage.getItem(
+      networkStorage.getItem(
         storageKey(roomId),
       );
 
@@ -74,7 +75,7 @@ export function saveLocalGroups(
   roomId: string,
   groups: LocalRoomGroup[],
 ): void {
-  window.localStorage.setItem(
+  networkStorage.setItem(
     storageKey(roomId),
     JSON.stringify(groups),
   );

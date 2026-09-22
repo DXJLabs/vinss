@@ -1,3 +1,4 @@
+import { invokeShieldedTransaction, assertWalletNetwork, assertHelperReady, assertCertificateReady } from "@/lib/starknet/guards";
 /** Rekber custody, release, refund, and Settlement Certificate operations. */
 
 import type { WalletAccountV6 } from "starknet";
@@ -468,7 +469,7 @@ export async function depositEscrow(
   ];
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeShieldedTransaction(account, [
       {
         type: "withdraw",
         token,
@@ -559,7 +560,7 @@ async function invokeSettlement(
    */
   const response =
     chargeRevenue
-      ? await account.strk20InvokeTransaction([
+      ? await invokeShieldedTransaction(account, [
           {
             type: "withdraw",
             token: revenueToken!,
@@ -587,7 +588,7 @@ async function invokeSettlement(
             ],
           },
         ])
-      : await account.strk20InvokeTransaction([
+      : await invokeShieldedTransaction(account, [
           {
             type: "transfer",
             token,
@@ -756,7 +757,7 @@ async function invokeRekberWorkflowAction(
       : 10n;
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeShieldedTransaction(account, [
       {
         type: "withdraw",
         token,
@@ -809,7 +810,7 @@ export async function chargeRekberWorkflowAction(
     await quoteRekberWorkflowFee();
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeShieldedTransaction(account, [
       {
         type: "withdraw",
         token,
@@ -990,6 +991,10 @@ export async function getRekberCustody(
     return null;
   }
 
+  // A legacy Sepolia custody has ten fields; it must never be decoded as the
+  // current payer/payee authorization and dispute struct.
+  await assertHelperReady(CONTRACTS.escrowRekber);
+
   try {
     const result =
       await getProvider().callContract({
@@ -1165,6 +1170,9 @@ export async function claimSettlementCertificate(
   // The certificate is intentionally public ERC-721 evidence. It is claimed
   // directly by the wallet that will own it, rather than through the Privacy
   // Pool, so one counterparty cannot mint the other party's acknowledgement.
+  await assertWalletNetwork(account);
+  await assertCertificateReady();
+  await assertWalletNetwork(account);
   const response = await account.execute({
     contractAddress:
       CONTRACTS.settlementCertificate,

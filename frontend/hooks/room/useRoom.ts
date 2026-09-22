@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import { useEffect, useState } from "react";
 import { deriveChannelKeyFromRoomSecret } from "@/lib/privacy/channelKey";
 
@@ -16,7 +19,7 @@ function loadRoom(roomId: string): LocalRoom | null {
   // Read persisted room state defensively because local storage may contain stale data.
   try {
     // Load the serialized rooms stored only on this device.
-    const raw = window.localStorage.getItem("vinss:local-rooms");
+    const raw = networkStorage.getItem("vinss:local-rooms");
     const rooms = raw ? (JSON.parse(raw) as LocalRoom[]) : [];
     // Return only the room requested by the current route.
     return rooms.find((room) => room.id === roomId) ?? null;

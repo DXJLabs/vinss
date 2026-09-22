@@ -8,6 +8,7 @@ on:
       - "frontend/**"
       - "scripts/test-invite-recovery.mjs"
       - "scripts/test-privacy-boundaries.mjs"
+      - "scripts/test-sepolia-shield.mjs"
       - ".github/workflows/frontend-test.yml"
 
   pull_request:
@@ -15,6 +16,7 @@ on:
       - "frontend/**"
       - "scripts/test-invite-recovery.mjs"
       - "scripts/test-privacy-boundaries.mjs"
+      - "scripts/test-sepolia-shield.mjs"
       - ".github/workflows/frontend-test.yml"
 
 jobs:
@@ -59,6 +61,11 @@ jobs:
         working-directory: .
         run: node scripts/test-privacy-boundaries.mjs
 
+      - name: Sepolia Shield regression
+        id: shield
+        continue-on-error: true
+        run: npm run test:shield
+
       - name: Production build
         id: build
         continue-on-error: true
@@ -71,6 +78,7 @@ jobs:
           TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
           INVITE_RESULT: ${{ steps.invite.outcome }}
           PRIVACY_RESULT: ${{ steps.privacy.outcome }}
+          SHIELD_RESULT: ${{ steps.shield.outcome }}
           BUILD_RESULT: ${{ steps.build.outcome }}
         run: |
           icon() {
@@ -87,6 +95,7 @@ jobs:
             "$TYPESCRIPT_RESULT" \
             "$INVITE_RESULT" \
             "$PRIVACY_RESULT" \
+            "$SHIELD_RESULT" \
             "$BUILD_RESULT"
           do
             if [ "$RESULT" = "success" ]; then
@@ -102,9 +111,10 @@ jobs:
             echo "| TypeScript | $(icon "$TYPESCRIPT_RESULT") |"
             echo "| Invite recovery | $(icon "$INVITE_RESULT") |"
             echo "| Privacy boundaries | $(icon "$PRIVACY_RESULT") |"
+            echo "| Sepolia Shield | $(icon "$SHIELD_RESULT") |"
             echo "| Production build | $(icon "$BUILD_RESULT") |"
             echo ""
-            echo "**Total:** ${PASSED}/4 checks passed"
+            echo "**Total:** ${PASSED}/5 checks passed"
             echo ""
             echo "**Branch:** \`${GITHUB_REF_NAME}\`"
             echo ""
@@ -118,6 +128,7 @@ jobs:
           TYPESCRIPT_RESULT: ${{ steps.typescript.outcome }}
           INVITE_RESULT: ${{ steps.invite.outcome }}
           PRIVACY_RESULT: ${{ steps.privacy.outcome }}
+          SHIELD_RESULT: ${{ steps.shield.outcome }}
           BUILD_RESULT: ${{ steps.build.outcome }}
         run: |
           set -euo pipefail
@@ -125,6 +136,7 @@ jobs:
           if [ "$TYPESCRIPT_RESULT" != "success" ] ||
              [ "$INVITE_RESULT" != "success" ] ||
              [ "$PRIVACY_RESULT" != "success" ] ||
+             [ "$SHIELD_RESULT" != "success" ] ||
              [ "$BUILD_RESULT" != "success" ]; then
             echo "One or more frontend checks failed."
             exit 1

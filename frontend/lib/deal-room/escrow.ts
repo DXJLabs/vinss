@@ -1,3 +1,5 @@
+import { backendFetch } from "@/lib/starknet/backendFetch";
+import { invokeShieldedTransaction } from "@/lib/starknet/guards";
 /** Private Rekber coordination and accepted-Offer settlement mapping. */
 
 import type { WalletAccountV6 } from "starknet";
@@ -89,7 +91,7 @@ async function invokeHelper(
       ? revenueFee
       : 10n;
 
-  return account.strk20InvokeTransaction([
+  return invokeShieldedTransaction(account, [
     {
       type: "withdraw",
       token,
@@ -244,7 +246,7 @@ export async function discoverEscrowActions(
     transactionHash: string;
   }>
 > {
-  const res = await fetch(
+  const res = await backendFetch(
     `${backendUrl}/discover`,
     {
       method: "POST",

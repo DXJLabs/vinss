@@ -1,3 +1,4 @@
+import { backendFetch } from "@/lib/starknet/backendFetch";
 import type { ChannelKey } from "@/lib/privacy/envelope";
 
 export type PresenceKind =
@@ -226,7 +227,7 @@ export async function publishPresence(
     .randomUUID()
     .replace(/-/g, "");
 
-  const response = await fetch(
+  const response = await backendFetch(
     `${backendUrl}/presence/publish`,
     {
       method: "POST",
@@ -257,7 +258,7 @@ export async function pollPresence(
   const channelId =
     await derivePresenceChannelId(pairwiseKey);
 
-  const response = await fetch(
+  const response = await backendFetch(
     `${backendUrl}/presence/poll`,
     {
       method: "POST",

@@ -1,5 +1,8 @@
 "use client";
 
+import { backendFetch } from "@/lib/starknet/backendFetch";
+
+
 import type { AttachmentRef } from "@/types/deal-room";
 
 const encoder = new TextEncoder();
@@ -92,7 +95,7 @@ export async function uploadDirectAttachment(
     plaintext,
   );
 
-  const response = await fetch(`${backendUrl}/attachments/${id}`, {
+  const response = await backendFetch(`${backendUrl}/attachments/${id}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/octet-stream",
@@ -122,7 +125,7 @@ export async function downloadDirectAttachment(
   directKey: Uint8Array,
   attachment: AttachmentRef,
 ): Promise<Blob> {
-  const response = await fetch(`${backendUrl}/attachments/${attachment.id}`, {
+  const response = await backendFetch(`${backendUrl}/attachments/${attachment.id}`, {
     headers: {
       "X-VINSS-Attachment-Token": attachment.accessToken,
     },

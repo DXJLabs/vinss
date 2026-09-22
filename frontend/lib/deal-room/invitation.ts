@@ -1,5 +1,7 @@
+import { invokeShieldedTransaction } from "@/lib/starknet/guards";
 import { hash, RpcProvider, type WalletAccountV6 } from "starknet";
-import { CONTRACTS, RPC_URL } from "../starknet/constants";
+import { CONTRACTS, RPC_URL, NETWORK } from "../starknet/constants";
+import { sameFelt } from "../starknet/network";
 import {
   shortStringToFelt,
   toFelt,
@@ -63,6 +65,8 @@ async function waitForInviteOnchain(
 
 export interface InvitePayload {
   v: 3;
+  network?: "sepolia" | "mainnet";
+  privacyPool?: string;
   inviteId: string;
   scope: InviteScope;
   roomId: string;
@@ -219,7 +223,7 @@ async function invokeInvite(
   // CREATE returns one revenue OpenNoteDeposit and therefore needs the
   // authoritative room-activation quote plus the wallet-generated open note.
   if (quotedFee !== undefined) {
-    return account.strk20InvokeTransaction([
+    return invokeShieldedTransaction(account, [
       {
         type: "withdraw" as const,
         token: CONTRACTS.messageHelperOpenNoteToken,
@@ -230,7 +234,7 @@ async function invokeInvite(
         type: "transfer" as const,
         token: CONTRACTS.messageHelperOpenNoteToken,
         amount: "OPEN" as const,
-        recipient: treasuryAddress,
+        recipient: toFelt(treasuryAddress),
       },
       {
         type: "invoke" as const,
@@ -247,12 +251,12 @@ async function invokeInvite(
 
   // CONSUME has no service-fee output. It still consumes a negligible private
   // note so the containing STRK20 transaction has pool-level replay protection.
-  return account.strk20InvokeTransaction([
+  return invokeShieldedTransaction(account, [
     {
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "0xa",
-      recipient: treasuryAddress,
+      recipient: toFelt(treasuryAddress),
     },
     {
       type: "invoke" as const,
@@ -324,6 +328,8 @@ export async function createInviteToken(
   // Recovery metadata exists before Ready X can background the dapp.
   const payload: InvitePayload = {
     v: INVITE_VERSION,
+    network: NETWORK,
+    privacyPool: CONTRACTS.privacyPool,
     inviteId: randomHex(16),
     scope: input.scope,
     roomId: input.roomId,
@@ -532,6 +538,13 @@ export async function decodeInviteToken(
 
     const payload = raw as Partial<InvitePayload>;
 
+    // Unlabelled historical invites remain mainnet-only. New Sepolia links
+    // carry an authenticated network/pool binding inside the encrypted body.
+    if (payload.network === undefined ? NETWORK !== "mainnet" :
+        payload.network !== NETWORK || !sameFelt(payload.privacyPool ?? "", CONTRACTS.privacyPool)) {
+      return null;
+    }
+
     if (
       payload.v !== INVITE_VERSION ||
       (payload.scope !== "direct" &&
@@ -581,6 +594,7 @@ export async function decodeInviteToken(
   }
 
   try {
+    if (NETWORK !== "mainnet") return null;
     const raw = await decryptPackedInvite(
       token,
       encodedKey,

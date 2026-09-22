@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import {
   useEffect,
   useState,
@@ -282,7 +285,7 @@ export function useRoomInvitation({
 
       try {
         const raw =
-          window.localStorage.getItem(
+          networkStorage.getItem(
             key,
           );
 
@@ -313,12 +316,12 @@ export function useRoomInvitation({
             copied: false,
           };
         } else {
-          window.localStorage.removeItem(
+          networkStorage.removeItem(
             key,
           );
         }
       } catch {
-        window.localStorage.removeItem(
+        networkStorage.removeItem(
           key,
         );
       }
@@ -422,7 +425,7 @@ export function useRoomInvitation({
           : undefined,
       );
 
-    window.localStorage.removeItem(
+    networkStorage.removeItem(
       storageKey,
     );
 
@@ -496,7 +499,7 @@ export function useRoomInvitation({
 
             setNow(Date.now());
 
-            window.localStorage.setItem(
+            networkStorage.setItem(
               storageKey,
               JSON.stringify({
                 link,
@@ -527,7 +530,7 @@ export function useRoomInvitation({
 
       setNow(Date.now());
 
-      window.localStorage.setItem(
+      networkStorage.setItem(
         storageKey,
         JSON.stringify({
           link,
@@ -570,7 +573,7 @@ export function useRoomInvitation({
               },
             );
 
-            window.localStorage.setItem(
+            networkStorage.setItem(
               storageKey,
               JSON.stringify({
                 link:
@@ -592,7 +595,7 @@ export function useRoomInvitation({
 
       clearInvite(scope);
 
-      window.localStorage.removeItem(
+      networkStorage.removeItem(
         storageKey,
       );
 
@@ -651,7 +654,7 @@ export function useRoomInvitation({
             if (state.consumed) {
               clearInvite(scope);
 
-              window.localStorage.removeItem(
+              networkStorage.removeItem(
                 inviteStorageKey(
                   room.id,
                   scope,
@@ -687,7 +690,7 @@ export function useRoomInvitation({
 
               try {
                 const raw =
-                  window.localStorage.getItem(
+                  networkStorage.getItem(
                     key,
                   );
 
@@ -698,7 +701,7 @@ export function useRoomInvitation({
                       ) as StoredInvite)
                     : {};
 
-                window.localStorage.setItem(
+                networkStorage.setItem(
                   key,
                   JSON.stringify({
                     ...saved,

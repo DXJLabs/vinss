@@ -1,6 +1,7 @@
 import { RpcProvider, WalletAccountV6, walletV6 } from "starknet";
 import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard-v6/features";
 import { RPC_URL } from "./constants";
+import { assertWalletNetwork } from "./guards";
 
 const MIN_STRK20_WALLET_API = "0.10.3";
 
@@ -50,6 +51,8 @@ export async function createWalletSession(
     { nodeUrl: RPC_URL },
     wallet,
   );
+
+  await assertWalletNetwork(account);
 
   return {
     account,

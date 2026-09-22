@@ -28,6 +28,7 @@ import { createFeedbackRouter } from "./routes/feedback.js";
 import { presenceRouter } from "./routes/presence.js";
 import { createRekberRouter } from "./routes/rekber.js";
 import { createLoyaltyRouter } from "./loyalty/routes.js";
+import { networkBoundary } from "./network.js";
 
 interface AppDependencies {
   database: Pool;
@@ -53,10 +54,12 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(
     cors({
       origin: dependencies.config.corsOrigin,
+      exposedHeaders: ["X-VINSS-Network", "X-VINSS-Privacy-Pool"],
     }),
   );
 
   app.use(express.json({ limit: "1mb" }));
+  app.use(networkBoundary(dependencies.config));
 
   // Request bodies are intentionally never logged.
   app.use((req: Request, _res: Response, next: NextFunction) => {

@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 import {
   useEffect,
   useMemo,
@@ -83,7 +86,7 @@ export function useRoomParticipants({
         );
 
       const cached = JSON.parse(
-        window.localStorage.getItem(cacheKey) ??
+        networkStorage.getItem(cacheKey) ??
           "[]",
       ) as RoomParticipant[];
 
@@ -325,7 +328,7 @@ export function useRoomParticipants({
               session.account.address,
             );
 
-          window.localStorage.setItem(
+          networkStorage.setItem(
             cacheKey,
             JSON.stringify(next),
           );

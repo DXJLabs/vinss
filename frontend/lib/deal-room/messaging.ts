@@ -1,3 +1,5 @@
+import { backendFetch } from "@/lib/starknet/backendFetch";
+import { invokeShieldedTransaction } from "@/lib/starknet/guards";
 /**
  * Messaging domain module — matches contracts/messaging/messaging_interfaces.cairo and
  * messaging_types.cairo exactly:
@@ -159,7 +161,7 @@ export async function sendMessage(
       type: "transfer" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
       amount: "OPEN" as const,
-      recipient: treasuryAddress,
+      recipient: toFelt(treasuryAddress),
     },
     {
       type: "invoke" as const,
@@ -197,7 +199,7 @@ export async function sendMessage(
 
   let response;
   try {
-    response = await account.strk20InvokeTransaction(debugActions);
+    response = await invokeShieldedTransaction(account, debugActions);
   } catch (err) {
     const msg =
       err instanceof Error
@@ -304,7 +306,7 @@ export async function discoverMessages(
   blockNumber: number;
   transactionHash: string;
 }>> {
-  const res = await fetch(`${backendUrl}/discover`, {
+  const res = await backendFetch(`${backendUrl}/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind: "message" }),

@@ -1,5 +1,8 @@
 "use client";
 
+import { backendFetch } from "@/lib/starknet/backendFetch";
+
+
 import type {
   AttachmentRef,
   DealType,
@@ -168,7 +171,7 @@ async function loadPacket<T>(
     );
 
   const response =
-    await fetch(
+    await backendFetch(
       `${backendUrl}/attachments/${id}`,
       {
         headers: {
@@ -236,7 +239,7 @@ async function savePacket(
     );
 
   const response =
-    await fetch(
+    await backendFetch(
       `${backendUrl}/attachments/${id}`,
       {
         method: "PUT",

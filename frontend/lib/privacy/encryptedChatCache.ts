@@ -1,5 +1,8 @@
 "use client";
 
+import { networkStorage } from "@/lib/starknet/networkStorage";
+
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -151,7 +154,7 @@ export async function saveEncryptedLocalJson<T>(
       value,
     );
 
-  window.localStorage.setItem(
+  networkStorage.setItem(
     storageKey,
     JSON.stringify(record),
   );
@@ -162,7 +165,7 @@ export async function loadEncryptedLocalJson<T>(
   rawKey: Uint8Array,
 ): Promise<T | null> {
   const raw =
-    window.localStorage.getItem(
+    networkStorage.getItem(
       storageKey,
     );
 
