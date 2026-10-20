@@ -5,6 +5,7 @@ on:
       - feat/openmls-starknet
     paths:
       - "wasm/vinss_mls/**"
+      - "frontend/lib/openmls-core/**"
       - ".github/workflows/starknet-openmls.yml"
   workflow_dispatch:
 permissions:
@@ -28,6 +29,10 @@ jobs:
         run: |
           npm ci --prefix frontend
           npm --prefix frontend run typecheck
+      - name: Frontend production build
+        run: npm --prefix frontend run build
+      - name: Existing privacy regression
+        run: node scripts/test-privacy-boundaries.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: vinss-starknet-openmls-wasm
