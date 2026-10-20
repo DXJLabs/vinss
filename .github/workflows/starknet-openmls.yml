@@ -1,0 +1,44 @@
+name: Starknet OpenMLS WASM
+on:
+  push:
+    branches:
+      - feat/openmls-starknet
+    paths:
+      - "wasm/vinss_mls/**"
+      - ".github/workflows/starknet-openmls.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-openmls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked --version 0.14.0
+      - name: Build OpenMLS browser WASM
+        run: |
+          wasm-pack build wasm/vinss_mls --release --target web --out-dir ../../frontend/lib/openmls
+          test -s frontend/lib/openmls/vinss_mls_bg.wasm
+          test -s frontend/lib/openmls/vinss_mls.js
+      - name: Frontend typecheck
+        run: |
+          npm ci --prefix frontend
+          npm --prefix frontend run typecheck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vinss-starknet-openmls-wasm
+          path: frontend/lib/openmls/
+      - name: Publish verified WASM to feature branch
+        if: github.ref == 'refs/heads/feat/openmls-starknet'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f frontend/lib/openmls/
+          if ! git diff --cached --quiet; then
+            git commit -m "build: add generated OpenMLS browser WASM"
+            git push
+          fi
