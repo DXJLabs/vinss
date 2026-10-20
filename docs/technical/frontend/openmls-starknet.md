@@ -54,3 +54,76 @@ this feature branch after Rust compilation succeeds. Keep the generated
 `vinss_mls.js`, `vinss_mls.d.ts`, and `vinss_mls_bg.wasm` together.
 
 No production switch is enabled by this phase.
+
+
+## Decision (20 Oct 2026): MLS ciphertext is on-chain
+
+All MLS application ciphertext AND encrypted transport envelopes carrying
+KeyPackage, Welcome and Commit are submitted as Cairo MessageHelper events /
+contract data on **Starknet**, through the existing \`sendMessage\`
+STRK20 path. This design has **no off-chain ciphertext mailbox**.
+The existing indexer may relay ciphertext bytes for discovery, but it is
+not a canonical message store and must not receive plaintext or MLS secrets.
+
+Added files:
+- \`frontend/lib/openmls-core/starknet-framing.ts\` — binary-safe fragment codec.
+- \`frontend/lib/openmls-core/starknet-onchain-transport.ts\` — wallet-signing
+  adapter through the existing Starknet encrypted message helper.
+- \`tests/openmls-starknet-framing.test.mjs\` — byte preservation, disorder,
+  duplicates, missing parts, corruption, and network isolation.
+
+### Framing protocol
+
+An outgoing MLS packet (KeyPackage, Welcome, Commit, or application
+ciphertext) is split into 384-byte slices. Each slice has a private
+logical packet ID, complete-packet SHA-256, total length and index.
+These fields are inside the **existing client-side AES-GCM envelope**.
+On-chain observers see encrypted calldata and the existing
+MessageHelper routing tags/fee/metadata, **not the plaintext frame JSON**.
+
+The receiver must see every fragment and verify the full SHA-256 before
+the transport considers the packet complete. Incomplete packets are
+reported separately; corrupted or conflicting packets are rejected.
+Each fragment is a separate wallet transaction. An explicit confirmation
+callback is mandatory when more than one transaction is needed.
+
+Hard limits at this stage:
+- Up to 16 KiB per MLS packet and 384 raw bytes per fragment (up to 43 tx).
+- No automatic off-chain fallback.
+- No automatic retry of an incomplete multi-transaction packet, since
+  each retry would incur more privacy-pool and Starknet fees.
+- No claims of atomic delivery for multi-transaction MLS packets.
+- On-chain transaction acceptance does not by itself prove delivery,
+  ordered processing, or peer decryption.
+
+The new feature branch also prevents the older 30-byte-felt encoding
+from silently losing a leading zero byte: outbound AES-GCM encryption
+resamples the random IV if any 30-byte segment would be lossy. Its
+historical ciphertext format is unchanged.
+
+### Not production-ready
+
+The on-chain adapter is **not yet wired** to the React conversation hooks.
+A production integration still requires:
+1. Wallet-signed fresh KeyPackage registration and **independent verification**
+   that the signing wallet is authorized for the claimed MLS installation.
+   The inherited P-256 transport key/HMAC routing tag is not a Starknet
+   signature. Do not treat a claimed \`senderIdentity\` as authority.
+2. Persisted fragment outbox with transaction receipts, retries and
+   deduplication. Resume without creating a fresh MLS commit or losing
+   an epoch after partial submissions. Never mark the MLS state as
+   delivered until receipts and relevant ordering checks succeed.
+3. Integration with the \`BrowserOpenMlsBridge\` / \`OpenMlsMessagingProvider\`,
+   KeyPackage discovery, Welcome/Commit synchronization, direct and
+   group membership changes, and the existing room hooks.
+4. Browser validation with two distinct Starknet accounts and a
+   three-member group; rotate MLS epochs after removal. Confirm
+   local and on-chain state after refresh and offline recovery.
+5. Verification of fragment cost, maximum calldata/pool limits,
+   backend indexing completeness, account permissions, and real Sepolia
+   transaction hashes before considering a Mainnet deployment.
+
+Legacy messages are still handled by ECDH/AES-GCM. New MLS packets must
+be indicated by their explicit \`vinss:mls:v1:\` prefix *inside* the
+encrypted payload, not inferred from old ciphertext. The current port
+is an **isolated engineering branch**, not a production chat upgrade.
