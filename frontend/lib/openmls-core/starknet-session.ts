@@ -13,7 +13,7 @@ import type { GeneratedOpenMlsWasmModule } from "./openmls/wasm-api";
  * accepting any installation-to-Starknet-address binding.
  */
 const loadWasm = createOpenMlsWasmLoader(
-  () => import("@/lib/openmls/vinss_mls.js") as Promise<GeneratedOpenMlsWasmModule>,
+  async () => (await import("@/lib/openmls/vinss_mls.js")) as unknown as GeneratedOpenMlsWasmModule,
 );
 
 export interface StarknetOpenMlsSessionInput {
