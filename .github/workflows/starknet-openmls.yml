@@ -6,6 +6,8 @@ on:
     paths:
       - "wasm/vinss_mls/**"
       - "frontend/lib/openmls-core/**"
+      - "frontend/lib/privacy/envelope.ts"
+      - "tests/openmls-starknet-framing.test.mjs"
       - ".github/workflows/starknet-openmls.yml"
   workflow_dispatch:
 permissions:
@@ -15,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -29,6 +34,8 @@ jobs:
         run: |
           npm ci --prefix frontend
           npm --prefix frontend run typecheck
+      - name: On-chain MLS framing tests
+        run: node --experimental-strip-types --test tests/openmls-starknet-framing.test.mjs
       - name: Frontend production build
         run: npm --prefix frontend run build
       - name: Existing privacy regression

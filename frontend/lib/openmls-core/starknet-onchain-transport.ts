@@ -6,7 +6,7 @@ import { canonicalStarknetAddress } from "@/lib/privacy/participantKeys";
 import type { MessageRoute } from "@/lib/privacy/messageRouting";
 import type { MessagePayload, MessageScope, SendActionResult } from "@/types/deal-room";
 import {
-  frameStarknetMlsPacket, MLS_WIRE_PREFIX,
+  frameStarknetMlsPacket, MLS_WIRE_PREFIX, parseStarknetMlsFrame,
   reassembleStarknetMlsFrames,
   type StarknetMlsPacketKind,
   type StarknetMlsFrameSummary,
@@ -107,8 +107,19 @@ export async function readStarknetMlsOnchain(
     !!record.message.senderIdentity?.address &&
     !!record.message.senderIdentity?.messagingPublicKey
   );
+  // The inner packet sender must match the identity validated by
+  // discoverMessages against the opaque sender routing tag.
+  const consistentFrames = frames.filter((record) => {
+    try {
+      const packet = parseStarknetMlsFrame(record.message.body);
+      return packet !== null &&
+        packet.sender === canonicalStarknetAddress(record.message.senderIdentity!.address);
+    } catch {
+      return false;
+    }
+  });
   const validated = await reassembleStarknetMlsFrames(
-    frames.map((record) => record.message.body),
+    consistentFrames.map((record) => record.message.body),
     { network: ctx.network, roomId: ctx.roomId },
   );
   // Sender installation/KeyPackage must still be verified by an authenticated

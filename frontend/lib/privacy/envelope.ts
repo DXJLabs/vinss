@@ -127,17 +127,31 @@ export async function encryptPayload(
     false,
     ["encrypt"],
   );
-  const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(payload));
-  const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext),
-  );
 
-  const withIv = new Uint8Array(iv.length + ciphertext.length);
-  withIv.set(iv, 0);
-  withIv.set(ciphertext, iv.length);
-
-  return packBytesIntoFelts(withIv);
+  // Legacy calldata stores each 30-byte ciphertext segment as an integer.
+  // A segment starting with 0x00 loses that byte when turned back to bytes.
+  // Preserve the legacy wire format while preventing new lossy sends by
+  // sampling a fresh random AES-GCM IV until no segment starts with 0x00.
+  // This fixes new writes without making historic ciphertext incompatible.
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = new Uint8Array(
+      await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext),
+    );
+    const withIv = new Uint8Array(iv.length + ciphertext.length);
+    withIv.set(iv, 0);
+    withIv.set(ciphertext, iv.length);
+    let wouldLoseBytes = false;
+    for (let start = 0; start < withIv.length; start += BYTES_PER_FELT) {
+      if (withIv[start] === 0) {
+        wouldLoseBytes = true;
+        break;
+      }
+    }
+    if (!wouldLoseBytes) return packBytesIntoFelts(withIv);
+  }
+  throw new Error("Unable to encode AES-GCM ciphertext without data loss");
 }
 
 export async function decryptPayload(
