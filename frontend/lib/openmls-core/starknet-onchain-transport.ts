@@ -64,7 +64,7 @@ export async function sendStarknetMlsOnchain(
   });
   if (frames.length > 1 && !(await options.confirmMultipleTransactions?.(frames.length, options.kind))) {
     throw new Error(
-      \`MLS packet needs \${frames.length} on-chain transactions. Explicit approval required.\`,
+      "MLS packet needs " + frames.length + " on-chain transactions. Explicit approval required.",
     );
   }
   const results: SendActionResult[] = [];
