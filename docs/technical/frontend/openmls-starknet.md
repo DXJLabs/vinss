@@ -60,16 +60,16 @@ No production switch is enabled by this phase.
 
 All MLS application ciphertext AND encrypted transport envelopes carrying
 KeyPackage, Welcome and Commit are submitted as Cairo MessageHelper events /
-contract data on **Starknet**, through the existing \`sendMessage\`
+contract data on **Starknet**, through the existing `sendMessage`
 STRK20 path. This design has **no off-chain ciphertext mailbox**.
 The existing indexer may relay ciphertext bytes for discovery, but it is
 not a canonical message store and must not receive plaintext or MLS secrets.
 
 Added files:
-- \`frontend/lib/openmls-core/starknet-framing.ts\` — binary-safe fragment codec.
-- \`frontend/lib/openmls-core/starknet-onchain-transport.ts\` — wallet-signing
+- `frontend/lib/openmls-core/starknet-framing.ts` — binary-safe fragment codec.
+- `frontend/lib/openmls-core/starknet-onchain-transport.ts` — wallet-signing
   adapter through the existing Starknet encrypted message helper.
-- \`tests/openmls-starknet-framing.test.mjs\` — byte preservation, disorder,
+- `tests/openmls-starknet-framing.test.mjs` — byte preservation, disorder,
   duplicates, missing parts, corruption, and network isolation.
 
 ### Framing protocol
@@ -108,12 +108,12 @@ A production integration still requires:
 1. Wallet-signed fresh KeyPackage registration and **independent verification**
    that the signing wallet is authorized for the claimed MLS installation.
    The inherited P-256 transport key/HMAC routing tag is not a Starknet
-   signature. Do not treat a claimed \`senderIdentity\` as authority.
+   signature. Do not treat a claimed `senderIdentity` as authority.
 2. Persisted fragment outbox with transaction receipts, retries and
    deduplication. Resume without creating a fresh MLS commit or losing
    an epoch after partial submissions. Never mark the MLS state as
    delivered until receipts and relevant ordering checks succeed.
-3. Integration with the \`BrowserOpenMlsBridge\` / \`OpenMlsMessagingProvider\`,
+3. Integration with the `BrowserOpenMlsBridge` / `OpenMlsMessagingProvider`,
    KeyPackage discovery, Welcome/Commit synchronization, direct and
    group membership changes, and the existing room hooks.
 4. Browser validation with two distinct Starknet accounts and a
@@ -124,6 +124,6 @@ A production integration still requires:
    transaction hashes before considering a Mainnet deployment.
 
 Legacy messages are still handled by ECDH/AES-GCM. New MLS packets must
-be indicated by their explicit \`vinss:mls:v1:\` prefix *inside* the
+be indicated by their explicit `vinss:mls:v1:` prefix *inside* the
 encrypted payload, not inferred from old ciphertext. The current port
 is an **isolated engineering branch**, not a production chat upgrade.
