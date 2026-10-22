@@ -2,6 +2,8 @@
 
 `VinssMessageHelper` is the canonical encrypted Message storage helper used by VINSS.
 
+**Cross-layer audit (23 October 2026):** [Message V2 client, STRK20, Cairo and indexer analysis](../frontend/messaging-implementation-audit.md) covers the protocol boundary, commitment scope, on-chain ciphertext and an unresolved frontend byte-packing issue. This review changes no Cairo contracts.
+
 It stores one independently addressable encrypted Message envelope, exposes only opaque routing metadata plus ciphertext, enforces envelope integrity and duplicate protection, and returns one fee-bearing `OpenNoteDeposit` for the configured revenue token.
 
 Executable Cairo source is the source of truth.

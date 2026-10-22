@@ -2,6 +2,8 @@
 
 This document describes the current VINSS frontend wallet, Wallet Standard, `WalletAccountV6`, STRK20, typed-data signing, and public account-execution boundaries.
 
+**Feature-branch addenda (23 October 2026):** [Native Shield/Unshield](./shield-unshield.md) documents `deposit`/`withdraw` action forms and wallet/RPC chain preflight. [Message audit](./messaging-implementation-audit.md) documents client encryption, Message V2 helper calls and risks. Neither page claims a new live Sepolia transaction.
+
 The core authority model is:
 
 ```text
@@ -794,13 +796,15 @@ Current private write primitive:
 account.strk20InvokeTransaction(actions)
 ```
 
-Action bundles use combinations of:
+Message/Offer/Rekber bundles use combinations of:
 
 ```text
 withdraw
 transfer
 invoke
 ```
+
+Separately, `/shield` uses native `deposit` and `/unshield` uses native `withdraw`; see [Shield/Unshield](./shield-unshield.md).
 
 ---
 
@@ -1957,7 +1961,7 @@ before production.
 | Simple version parser | Prerelease/build syntax is not fully semver-aware. |
 | Treasury normalization inconsistent | Message and Invite currently pass raw treasury env. |
 | Stale fee comment | `constants.ts` still refers to 7 STRK Message revenue while runtime uses FeePolicy. |
-| No global chain guard | Wallet/RPC/NETWORK/contracts/backend consistency relies on config and QA. |
+| No global chain guard | The new Shield/Unshield routes verify their wallet and RPC chain IDs before signing, but other app flows still require cross-component configuration and QA. |
 | NETWORK runtime cast | Invalid env text can survive the TypeScript assertion. |
 | Wallet object churn | Mobile recovery depends on rediscovery. |
 | No universal wallet E2E suite | Source integration is not proof for every target wallet/version. |

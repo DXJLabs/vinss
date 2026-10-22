@@ -2,6 +2,8 @@
 
 The VINSS frontend is the privacy-sensitive client and orchestration layer of the Deal Room.
 
+**23 October 2026 feature-branch audit:** [Message V2 implementation and security review](./messaging-implementation-audit.md) · [Native Shield/Unshield technical addendum](./shield-unshield.md). These describe `feat/strk20-unshield-fees` and distinguish source changes from chain verification. Older baseline paragraphs below were originally authored on `main`.
+
 It owns the application state that must remain on the authorized user device, including:
 
 - room and Group access material;
@@ -31,7 +33,7 @@ Repository source is the authority for implementation claims. Test output and de
 
 # Current Frontend Baseline
 
-Current audited source is the `main` branch after the backend documentation cleanup.
+This long-form reference originated on `main` after backend documentation cleanup. Newer `feat/strk20-unshield-fees` work is scoped in the feature-branch audits linked above.
 
 The frontend currently uses:
 
@@ -90,7 +92,8 @@ This README primarily documents implementation structure and known test-source c
 | Room access | Device-local room record and room-secret-derived key | Implemented | Room secret is device-local application secret |
 | Invite V3 | Direct / Group encrypted invite creation, recovery, consume | Implemented | Invite key is URL-fragment capability material |
 | Participant discovery | Encrypted Presence + encrypted room-message fallback | Implemented | Public P-256 key may be cached locally; private key stays IndexedDB |
-| Direct Chat | Pairwise encrypted Message V2 send/discover/reconcile | Implemented | Pairwise key stays client-side |
+| Direct Chat | Pairwise encrypted Message V2 send/discover/reconcile | Implemented; codec risk open | Pairwise key stays client-side; [review packing and diagnostics risks](./messaging-implementation-audit.md) |
+| Shield / Unshield | Native STRK20 deposit/withdraw routes | Implemented, CI-tested; real wallet E2E not confirmed | No VINSS add-on transfer; STRK20 quote belongs to wallet |
 | Group Chat | Group-secret-derived encrypted Message V2 flow | Implemented | Group definition/secret is currently local application state |
 | Direct attachments | Client encrypt/decrypt + backend opaque blob store | Implemented | Backend receives ciphertext and capability token, not content key |
 | Structured Offer | Direct pairwise Offer V2 lifecycle | Implemented | Active room hook is direct/pairwise |
@@ -687,27 +690,9 @@ Deleting encrypted recovery data on the first failed decrypt could destroy other
 
 # Browser Console Privacy Caveat
 
-Current `discoverMessages()` contains a developer log that prints decrypted Message information including:
+In the inspected `feat/strk20-unshield-fees` branch, `discoverMessages()` no longer contains the previously documented decrypted-message console log. The old assertion was stale.
 
-```text
-body
-attachment metadata
-workEvidence metadata
-```
-
-to the browser console.
-
-This does not send the plaintext to VINSS backend.
-
-But it does mean the strict production claim:
-
-```text
-decrypted Message plaintext never enters diagnostics
-```
-
-is not currently true.
-
-Before a strict production privacy posture, remove or gate that decrypted-message console log.
+Do not infer that diagnostics are categorically safe: `sendMessage()` can still log wallet errors and the native action bundle on failure. Targeted Rekber redaction does not guarantee all encrypted action metadata is hidden. See the [Message V2 audit](./messaging-implementation-audit.md).
 
 ---
 

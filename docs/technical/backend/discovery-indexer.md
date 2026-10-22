@@ -2,6 +2,8 @@
 
 This document describes the current VINSS encrypted-action Discovery subsystem.
 
+**Cross-layer reference:** [Message V2 audit](../frontend/messaging-implementation-audit.md) explains how indexed ciphertext is encrypted, routed and decrypted in the client and why `POST /discover` is not a plaintext inbox.
+
 The current implementation is a:
 
 ```text

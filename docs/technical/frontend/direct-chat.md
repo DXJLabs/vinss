@@ -2,6 +2,8 @@
 
 This document describes the current direct two-party private Chat implementation in the VINSS frontend.
 
+**Current code audit (23 October 2026):** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. No OpenMLS integration is claimed.
+
 Direct Chat is a browser-side privacy workflow built from:
 
 ```text
@@ -1551,38 +1553,14 @@ Fresh encrypted participant discovery remains the intended recovery path.
 
 # Browser Console Privacy Caveat
 
-Current `discoverMessages()` contains:
-
-```text
-console.log("[VINSS DECRYPTED MESSAGE]", ...)
-```
-
-including:
-
-```text
-body
-attachment metadata
-workEvidence metadata
-```
-
-after local decrypt.
+The previously documented `console.log("[VINSS DECRYPTED MESSAGE]", ...)` is **not present** in the inspected branch's current `discoverMessages()`; the earlier assertion is stale.
 
 ---
 
 
 ## What This Means
 
-This does not send plaintext to VINSS backend.
-
-But it means a strict claim such as:
-
-```text
-decrypted direct Message content never enters diagnostics
-```
-
-is currently false.
-
-Remove or production-gate that log before making a strict diagnostic privacy claim.
+Normal `/discover` still does not receive application decryption keys. However, `sendMessage()` logs wallet errors and `debugActions` when a private call fails (with targeted Rekber calldata redaction, not blanket redaction of ciphertext/action metadata). This requires a production diagnostics review. Other hooks and dependencies are not proven log-free. See [Message V2 audit](./messaging-implementation-audit.md).
 
 ---
 
@@ -2114,7 +2092,8 @@ Date:
 | Limitation | Current meaning |
 |---|---|
 | No dedicated direct-chat frontend test file | Current automated frontend tests target settlement/protection/dispute rather than direct Chat. |
-| Browser console plaintext log | Decrypted Message body/attachment/work evidence metadata are currently logged after discovery. |
+| Ciphertext felt serialization | Packing drops leading zero bytes per 30-byte chunk; review [Message audit](./messaging-implementation-audit.md) before claiming reliable historical decryption. |
+| Browser diagnostics | Previously cited decrypted-message console log is absent from current `discoverMessages()`; wallet error/action-bundle diagnostics remain and require sanitization. |
 | Participant cache plaintext metadata | Peer wallet/public-key mapping is stored plaintext localStorage. |
 | Room secret localStorage | Room key source remains device-local plaintext capability storage. |
 | Presence is ephemeral | Typing/read state can disappear on backend restart/replica split. |
