@@ -1,0 +1,26 @@
+name: VINSS STRK20 Unshield + Fees
+on:
+  push:
+    branches:
+      - feat/strk20-unshield-fees
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Unshield regression tests
+        run: node --experimental-strip-types --test tests/strk20-unshield.test.mjs
+      - name: Install frontend
+        run: npm ci --prefix frontend
+      - name: Typecheck
+        run: npm --prefix frontend run typecheck
+      - name: Production build
+        run: npm --prefix frontend run build
+      - name: Privacy regression
+        run: node scripts/test-privacy-boundaries.mjs
