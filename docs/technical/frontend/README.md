@@ -2632,7 +2632,7 @@ Therefore explicit mainnet build-env verification is a frontend launch requireme
 Before strong privacy claims:
 
 ```text
-remove/gate decrypted Message console logging
+audit message and wallet debug logs; redact sensitive action metadata
 verify browser/network requests contain no room/channel key
 verify Vercel/browser analytics do not capture private state
 review localStorage secret threat model
@@ -2904,11 +2904,9 @@ Active invite links including fragment key material can be persisted locally for
 
 ---
 
-## Caveat — Decrypted Message console logging
+## Caveat — Wallet transaction diagnostics
 
-Current Message discovery logs decrypted body/attachment/work metadata to browser developer console.
-
-Remove/gate for strict production privacy.
+The prior claim that `discoverMessages()` still logs the decrypted Message body is stale for the audited feature branch. `sendMessage()` logs wallet error metadata and action bundles on private-transaction failures; review/redact these diagnostics before strong production privacy claims. See [Message audit](./messaging-implementation-audit.md).
 
 ---
 
@@ -3173,7 +3171,7 @@ mainnet env template
 [ ] Message/Offer/Private Escrow decrypt locally
 [ ] routing tags remain keyed + locator-specific
 [ ] no stable public conversation identifier added accidentally
-[ ] decrypted console logging reviewed
+[ ] wallet error/action metadata console logging reviewed
 [ ] localStorage secret exposure reviewed
 [ ] Agent automatic context reduced
 [ ] Dispute disclosure explicit
@@ -3459,7 +3457,7 @@ while the P-256 private messaging key is a non-exportable IndexedDB `CryptoKey` 
 The most important current diagnostic caveat is:
 
 ```text
-discoverMessages() still logs decrypted Message data to browser console
+sendMessage() can log wallet error metadata and private-action bundle details on failure
 ```
 
 which should be removed or gated before a strict production privacy claim.
@@ -3605,7 +3603,7 @@ and future frontend documentation should remain anchored to current source plus 
 - Quotes Message FeePolicy.
 - Builds STRK20 action bundle.
 - Discovers candidate ciphertext and decrypts locally.
-- Currently contains decrypted-message browser console logging caveat.
+- The previously documented decrypted-message log is absent; transaction-error diagnostics in `sendMessage()` still need review.
 
 
 ## frontend/lib/deal-room/offers.ts

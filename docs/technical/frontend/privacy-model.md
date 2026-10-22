@@ -1606,48 +1606,21 @@ The accurate claim is narrower:
 
 # Browser Console Caveat
 
-Current `discoverMessages()` logs:
-
-```text
-[VINSS DECRYPTED MESSAGE]
-```
-
-with:
-
-```text
-kind
-body
-attachment
-workEvidence
-```
-
-after local decrypt.
+In the audited `feat/strk20-unshield-fees` source, the older `[VINSS DECRYPTED MESSAGE]` console statement is **not present** in `discoverMessages()`. This earlier privacy-model assertion was stale.
 
 ---
 
 
 ## Impact
 
-This does not transmit Message plaintext to backend Discovery.
-
-But it means:
-
-```text
-decrypted Message plaintext can enter browser developer diagnostics
-```
-
-under the current source.
+The standard backend Discovery path still receives ciphertext, not app decryption keys. Yet `sendMessage()` logs wallet errors and action-bundle metadata on failed STRK20 private submission. These diagnostics may expose private-action metadata or ciphertext in browser logs, and require production review.
 
 ---
 
 
 ## Production Rule
 
-Remove or production-gate decrypted Message console logging before claiming:
-
-```text
-private Message plaintext never enters diagnostics
-```
+Redact wallet-error and action-bundle diagnostics, review other hooks/telemetry, and test the built application before claiming that private Message data never enters diagnostics. See the [Messaging V2 audit](./messaging-implementation-audit.md).
 
 ---
 
@@ -2172,7 +2145,7 @@ Representative privacy failures include:
 pairwise key sent to backend
 roomSecret/groupSecret sent to analytics
 public stable participant field added to helper
-decrypted body logged in production
+sensitive decrypted body or transaction metadata logged in production
 Agent receives full timeline without explicit consent
 Dispute receives unrelated private Chat
 Invite #k copied into telemetry
@@ -2227,7 +2200,7 @@ These are availability/correctness failures, not automatically confidentiality b
 | `PR17` | Normal Agent explicit prompt is plaintext to backend/provider. |
 | `PR18` | Dedicated Dispute explicitly sends selected accepted terms/evidence. |
 | `PR19` | Certificate ownership is public by design. |
-| `PR20` | Browser console currently logs decrypted Message content. |
+| `PR20` | Browser transaction-error diagnostics can expose wallet errors and action metadata; audit required. |
 
 
 # Authorization Invariants
@@ -2407,7 +2380,7 @@ These are availability/correctness failures, not automatically confidentiality b
 
 # Production Privacy Checklist
 
-- [ ] Remove/gate decrypted Message console logging.
+- [ ] Audit wallet failure/action-bundle logs and strip sensitive metadata.
 - [ ] Audit wallet error/debug payload logs.
 - [ ] Audit analytics and error-reporting SDKs.
 - [ ] Enforce strong CSP where practical.
@@ -2497,7 +2470,7 @@ mainnet privacy proof
 
 # Recommended Browser Threat Tests
 
-- Verify decrypted Message console log absent in production build.
+- Verify old decrypted-message log remains absent and wallet action/error diagnostics are redacted in production build.
 - Inspect browser network panel for key/secret leakage.
 - Inspect localStorage for expected plaintext capability inventory.
 - Inspect IndexedDB to confirm private key is non-exportable.
@@ -2610,7 +2583,7 @@ Known privacy caveats:
 
 | Caveat | Current implication |
 |---|---|
-| Browser console Message plaintext | `discoverMessages()` currently logs decrypted body/attachment/workEvidence. |
+| Browser diagnostics | Current `discoverMessages()` lacks the old decrypted-body log; `sendMessage()` wallet failure logs and action metadata still require review. |
 | Plaintext roomSecret | Room capability is stored in localStorage. |
 | Plaintext groupSecret | Group capability is stored in localStorage. |
 | Plaintext Invite bearer link | Creator recovery stores token + fragment key together. |
@@ -2885,7 +2858,7 @@ is a protocol compatibility change.
 
 - Pairwise/room/group keys appear in backend request bodies.
 - Private Message/Offer/Escrow plaintext appears in normal Discovery backend storage.
-- Production console logs decrypted Message body.
+- Production diagnostics expose sensitive transaction actions or decrypted Message data.
 - Analytics captures roomSecret/groupSecret/Rekber preimages.
 - Group-only Invite starts carrying roomSecret unexpectedly.
 - Attachment backend receives encryption key.
@@ -3003,7 +2976,7 @@ The strongest current local-state caveat is:
 
 The strongest current diagnostic caveat is:
 
-> `discoverMessages()` still logs decrypted Message body/attachment/workEvidence data to browser console, so strict production diagnostic-privacy claims are not yet accurate.
+> Current `discoverMessages()` does not contain the obsolete decrypted-body log, but generic `sendMessage()` error/action diagnostics still require sanitization before strict production diagnostic-privacy claims.
 
 The strongest current correctness caveat is:
 

@@ -1935,7 +1935,7 @@ sequenceDiagram
 
 # Production Privacy Checklist
 
-- [ ] Remove/gate `[VINSS DECRYPTED MESSAGE]` console logging.
+- [ ] Confirm the obsolete decrypted-message console log stays absent; review wallet-error/debugActions logs for sensitive metadata.
 - [ ] Review generic wallet error debug output.
 - [ ] Verify no analytics captures Message body/draft.
 - [ ] Verify CSP/XSS posture.
@@ -2395,7 +2395,7 @@ Discovery backend unavailable
 - [ ] Supported Wallet API.
 - [ ] Participant Presence backend reachable.
 - [ ] Message Discovery index healthy/fresh.
-- [ ] Browser console plaintext log reviewed.
+- [ ] Browser wallet-error and action-bundle diagnostics reviewed for sensitive values.
 - [ ] Two-wallet direct decrypt verified.
 - [ ] Ready X timeout recovery exercised.
 - [ ] Encrypted local history reload exercised.
@@ -2446,7 +2446,7 @@ Discovery backend unavailable
 - Keep direct and Group Chat key models separate.
 - Keep Presence separate from immutable Message state.
 - Keep local encrypted history separate from canonical network history.
-- Call out browser console plaintext logging until it is removed/gated.
+- Document the actual wallet-error/action-metadata diagnostics risks without repeating the now-absent decrypted-message log.
 
 
 # Final Direct Chat Diagram
@@ -2514,4 +2514,4 @@ The strongest current local-state statement is:
 
 The most important current privacy caveat is:
 
-> `discoverMessages()` still logs decrypted Message body/attachment/workEvidence metadata to browser console; that should be removed or gated before a strict production diagnostics/privacy claim.
+> The formerly documented decrypted-message console log is absent from the audited `discoverMessages()`; wallet errors and STRK20 action metadata still enter debug diagnostics and need review before strict privacy claims.
