@@ -20,6 +20,8 @@ jobs:
         run: node --test tests/fee-reduction.test.mjs
       - name: On-chain fee transparency tests
         run: node --experimental-strip-types --test tests/strk20-fee-display.test.mjs
+      - name: Shield vs Unshield fee transparency regression
+        run: node --test tests/strk20-shield-unshield-fees.test.mjs
       - name: Install frontend
         run: npm ci --prefix frontend
       - name: Typecheck
