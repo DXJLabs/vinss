@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { walletV6 } from "starknet";
 import { useEffect, useState } from "react";
 import { useWallet } from "@/components/providers/WalletProvider";
@@ -81,10 +82,18 @@ export default function UnshieldPage() {
   return (
     <main className="min-h-screen bg-ink px-4 py-10 text-paper">
       <div className="mx-auto max-w-xl">
-        <Link className="font-display text-xs uppercase tracking-widest text-signal hover:underline" href="/">
-          ← VINSS
-        </Link>
-        <div className="mt-8 border border-wire bg-vault/50 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <Link className="font-display text-xs uppercase tracking-widest text-signal hover:underline" href="/">
+            ← VINSS
+          </Link>
+          <WalletConnectButton showCapability={false} />
+        </div>
+        <nav aria-label="STRK20 balance actions" className="mt-7 flex gap-2 text-xs">
+          <Link href="/shield" className="rounded-lg border border-wire px-4 py-2 text-paper/65 hover:border-signal">Shield</Link>
+          <Link href="/unshield" aria-current="page" className="rounded-lg border border-signal bg-signal/10 px-4 py-2 text-signal">Unshield</Link>
+          <Link href="/fees" className="ml-auto rounded-lg border border-wire px-3 py-2 text-paper/65 hover:border-signal">Fees</Link>
+        </nav>
+        <div className="mt-4 border border-wire bg-vault/50 p-6">
           <p className="font-display text-xs uppercase tracking-[0.18em] text-signal">
             Native STRK20 · {NETWORK}
           </p>
@@ -143,7 +152,7 @@ export default function UnshieldPage() {
             </label>
             {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
             {hash && <p role="status" className="break-all text-xs text-signal">
-              Submitted: <a className="underline" href={
+              Submitted (not yet confirmed): <a className="underline" href={
                 (NETWORK === "mainnet" ? "https://starkscan.co/tx/" : "https://sepolia.starkscan.co/tx/") + hash
               } target="_blank" rel="noreferrer">{hash}</a>
             </p>}
@@ -152,7 +161,7 @@ export default function UnshieldPage() {
               {busy ? "Waiting for wallet…" : "Review Unshield in wallet"}
             </button>
             {!session?.strk20Capable && <p className="text-xs text-paper/50">
-              Connect a compatible STRK20 wallet on the VINSS homepage.
+              Connect a compatible STRK20 wallet using the button above.
             </p>}
           </form>
         </div>

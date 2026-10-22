@@ -201,6 +201,15 @@ export default function HomePage() {
               </button>
             </div>
 
+            <nav aria-label="STRK20 balance actions" className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+              <Link href="/shield" className="rounded-lg border border-signal/50 bg-signal/5 px-4 py-2 text-signal transition hover:bg-signal/15">
+                Shield →
+              </Link>
+              <Link href="/unshield" className="rounded-lg border border-wire px-4 py-2 text-paper/70 transition hover:border-signal hover:text-signal">
+                Unshield →
+              </Link>
+            </nav>
+
             {session && (
               <p className={styles.connectedLine}>
                 <span aria-hidden="true" />

@@ -91,3 +91,23 @@ export function buildUnshieldAction(request: UnshieldRequest): NativeUnshieldAct
     amount: "0x" + parseTokenUnits(request.amount, request.decimals).toString(16),
   };
 }
+
+/** Public ERC-20 balance -> shielded STRK20 balance (wallet manages proving). */
+export interface NativeShieldAction {
+  type: "deposit";
+  token: string;
+  amount: string;
+}
+export interface ShieldRequest {
+  token: string;
+  amount: string;
+  decimals: number;
+}
+/** Deposit principal, never VINSS revenue. Wallet quotes any protocol/network fees. */
+export function buildShieldAction(request: ShieldRequest): NativeShieldAction {
+  return {
+    type: "deposit",
+    token: normalizeStarknetAddress(request.token),
+    amount: "0x" + parseTokenUnits(request.amount, request.decimals).toString(16),
+  };
+}

@@ -140,9 +140,10 @@ export default function FeeTransparencyPage() {
               never replaced by a guessed amount.
             </p>
           </div>
-          <Link href="/unshield" className="mt-7 inline-block font-display text-xs uppercase tracking-wider text-signal hover:underline">
-            Open Unshield →
-          </Link>
+          <nav aria-label="STRK20 transactions" className="mt-7 flex flex-wrap gap-5 font-display text-xs uppercase tracking-wider">
+            <Link href="/shield" className="text-signal hover:underline">Open Shield →</Link>
+            <Link href="/unshield" className="text-signal hover:underline">Open Unshield →</Link>
+          </nav>
         </section>
       </div>
     </main>

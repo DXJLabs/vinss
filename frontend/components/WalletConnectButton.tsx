@@ -139,9 +139,10 @@ export function WalletConnectButton({
       />
 
       {connected && session?.strk20Capable && (
-        <Link className="pr-1 font-display text-[9px] uppercase tracking-wider text-signal/80 hover:text-signal" href="/unshield">
-          Unshield ↗
-        </Link>
+        <nav aria-label="STRK20 actions" className="flex items-center gap-3 pr-1 font-display text-[9px] uppercase tracking-wider">
+          <Link className="text-signal/80 hover:text-signal" href="/shield">Shield ↗</Link>
+          <Link className="text-signal/80 hover:text-signal" href="/unshield">Unshield ↗</Link>
+        </nav>
       )}
 
       {connected &&

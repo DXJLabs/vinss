@@ -43,7 +43,7 @@ const STEPS: Step[] = [
     eyebrow: "Before VINSS · 2 of 2",
     title: "Make sure you have shielded STRK.",
     body:
-      "Still in Ready X, choose STRK, enter the amount you want to shield, review it, and confirm. Keep enough shielded balance for the full deal flow.",
+      "You can open VINSS → Shield to deposit STRK with your connected STRK20 wallet, or use Shield in Ready X. Review the wallet fee quote and keep enough shielded balance for the deal.",
     view: "ready-shield",
   },
   {
