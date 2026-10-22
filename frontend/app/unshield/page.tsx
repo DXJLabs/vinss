@@ -86,6 +86,9 @@ export default function UnshieldPage() {
             The amount and destination will be visible on-chain after withdrawal.
           </p>
 
+          <Link className="mt-4 inline-block text-xs text-signal hover:underline" href="/fees">
+            View active VINSS service fees →
+          </Link>
           <form className="mt-6 space-y-5" onSubmit={submit}>
             <label className="block text-sm text-paper/75">
               Asset
