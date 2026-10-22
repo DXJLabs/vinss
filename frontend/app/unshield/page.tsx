@@ -112,18 +112,22 @@ export default function UnshieldPage() {
             </label>
             <div className="space-y-2 border-t border-wire pt-4 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-paper/60">Amount transferred</span>
+                <span className="text-paper/60">Amount withdrawn (not a fee)</span>
                 <span>{formatted ? formatted + " " + asset : "—"}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-paper/60">VINSS Unshield service fee</span>
+                <span className="text-paper/60">VINSS added service fee</span>
                 <span>0</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-paper/60">Network / wallet charges</span>
+                <span className="text-paper/60">STRK20 / wallet / network charges</span>
                 <span>Review in wallet</span>
               </div>
             </div>
+            <p className="text-xs leading-5 text-paper/55">
+              Shield and Unshield can have different wallet fees. VINSS does not set
+              those protocol or network charges. Review the wallet quote before confirming.
+            </p>
             <label className="flex gap-3 text-xs leading-5 text-paper/65">
               <input type="checkbox" checked={acknowledged}
                 onChange={(e) => setAcknowledged(e.target.checked)} />

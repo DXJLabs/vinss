@@ -120,9 +120,15 @@ export default function FeeTransparencyPage() {
               Its service fee depends on principal, selected asset and the
               active on-chain Rekber contract. Review the precise quote before funding.
             </p>
-            <p><strong className="text-paper">Unshield:</strong> VINSS service
-              fee is zero. The amount unshielded is your transferred principal,
-              not a fee.
+            <p><strong className="text-paper">Shield (public to private):</strong>{" "}
+              Deposits public assets into the STRK20 privacy pool. Shield fees
+              may be higher than Unshield, depending on wallet and protocol operations.
+              Review the wallet quote. VINSS does not control this fee.
+            </p>
+            <p><strong className="text-paper">Unshield (private to public):</strong>{" "}
+              Withdraws protected funds to a public Starknet address. VINSS adds no
+              Unshield service fee, but wallet or network fees may still apply.
+              The withdrawn amount is your principal, not a fee.
             </p>
             <p><strong className="text-paper">Wallet / network charges:</strong>{" "}
               separate from VINSS service fees; confirm them in your wallet.
