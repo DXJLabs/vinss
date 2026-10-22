@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -105,7 +106,7 @@ export function WalletConnectButton({
 
   const capability = connected
     ? session?.strk20Capable
-      ? "STRK20 · Shielded"
+      ? "STRK20 · READY"
       : "STRK20 · NOT SUPPORTED"
     : "NOT CONNECTED";
 
@@ -136,6 +137,12 @@ export function WalletConnectButton({
           hover:text-ink
         "
       />
+
+      {connected && session?.strk20Capable && (
+        <Link className="pr-1 font-display text-[9px] uppercase tracking-wider text-signal/80 hover:text-signal" href="/unshield">
+          Unshield ↗
+        </Link>
+      )}
 
       {connected &&
         showCapability && (

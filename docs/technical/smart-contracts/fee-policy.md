@@ -134,14 +134,16 @@ The base price floors are compile-time constants in `types.cairo`.
 
 | Action | USD micros | Human value |
 |---|---:|---:|
-| Room activation | `250_000` | `$0.25` |
-| Message | `150_000` | `$0.15` |
-| Offer | `250_000` | `$0.25` |
+| Room activation | `50_000` | `$0.05` |
+| Message | `10_000` | `$0.01` |
+| Offer | `50_000` | `$0.05` |
 | Rekber lifecycle reserve | `750_000` | `$0.75` |
 
 These values are **not mutable storage configuration**.
 
 Changing them requires changing the Cairo source and deploying the resulting class/contract according to the project deployment process.
+
+**This branch updates source code only.** The existing Starknet Mainnet and Sepolia deployments keep their former immutable prices until the FeePolicy contract is redeployed, the appropriate helpers are configured to use the new policy, and the complete integration is tested. The sponsor-cost floor can still exceed the USD minimum; user-facing quotes must come from the active on-chain policy. The Rekber 2% pricing, its $0.75 minimum/reserve and its workflow fees are intentionally unchanged. Withdraw/unshield principal amounts are not service fees.
 
 ## Sponsor Multipliers
 
@@ -200,8 +202,8 @@ The contract selects the fixed USD-micro floor for the requested action.
 Example:
 
 ```text
-Message -> 150,000 USD micros
-Offer   -> 250,000 USD micros
+Message -> 10,000 USD micros
+Offer   -> 50,000 USD micros
 ```
 
 ### Step 2 — Convert Public USD Floor to STRK
