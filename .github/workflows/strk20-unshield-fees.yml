@@ -16,6 +16,8 @@ jobs:
           node-version: 24
       - name: Unshield regression tests
         run: node --experimental-strip-types --test tests/strk20-unshield.test.mjs
+      - name: Unshield network guard regression
+        run: node --experimental-strip-types --test tests/strk20-unshield-network.test.mjs
       - name: Fee policy regression
         run: node --test tests/fee-reduction.test.mjs
       - name: On-chain fee transparency tests

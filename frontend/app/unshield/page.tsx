@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { walletV6 } from "starknet";
 import { useEffect, useState } from "react";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { NETWORK, STRK_ADDRESS, USDC_ADDRESS } from "@/lib/starknet/constants";
 import {
-  buildUnshieldAction, formatTokenUnits, parseTokenUnits, normalizeStarknetAddress,
+  assertUnshieldNetwork, buildUnshieldAction, formatTokenUnits, parseTokenUnits, normalizeStarknetAddress,
 } from "@/lib/starknet/unshield";
+import { getProvider } from "@/lib/starknet/walletClient";
 
 type Asset = "STRK" | "USDC";
 const assetConfig = (asset: Asset) => asset === "STRK"
@@ -53,6 +55,12 @@ export default function UnshieldPage() {
       normalizeStarknetAddress(recipient);
       parseTokenUnits(amount, config.decimals);
       setBusy(true);
+      // Verify both wallet write-chain and RPC read-chain immediately before signing.
+      const [walletChainId, rpcChainId] = await Promise.all([
+        walletV6.requestChainId(session.wallet),
+        getProvider().getChainId(),
+      ]);
+      assertUnshieldNetwork(NETWORK, walletChainId, rpcChainId);
       // Native STRK20 action. Never include a VINSS fee transfer.
       const transaction = await session.account.strk20InvokeTransaction([action]);
       setHash(transaction.transaction_hash);

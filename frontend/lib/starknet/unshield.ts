@@ -4,6 +4,37 @@
  */
 const PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 
+/** Never ask a wallet to unshield through an unverified / mismatched network. */
+const CHAIN_IDS: Record<"sepolia" | "mainnet", string> = {
+  sepolia: "0x534e5f5345504f4c4941", // SN_SEPOLIA
+  mainnet: "0x534e5f4d41494e", // SN_MAIN
+};
+
+function matchesChainId(actual: string, expected: string): boolean {
+  try {
+    return BigInt(actual) === BigInt(expected);
+  } catch {
+    return false;
+  }
+}
+
+export function assertUnshieldNetwork(
+  network: string,
+  walletChainId: string,
+  rpcChainId: string,
+): void {
+  if (network !== "sepolia" && network !== "mainnet") {
+    throw new Error("Unsupported Unshield network configuration.");
+  }
+  const expected = CHAIN_IDS[network];
+  if (!matchesChainId(rpcChainId, expected)) {
+    throw new Error(`RPC network does not match configured ${network} network.`);
+  }
+  if (!matchesChainId(walletChainId, expected)) {
+    throw new Error(`Wallet network does not match configured ${network} network. Switch wallet networks before Unshield.`);
+  }
+}
+
 export function normalizeStarknetAddress(address: string): string {
   if (!/^0x[0-9a-fA-F]{1,64}$/.test(address)) {
     throw new Error("Invalid Starknet hex address");
