@@ -87,7 +87,7 @@ fn deploy_policy(
 }
 
 #[test]
-fn usd_price_floor_drives_message_and_offer_at_0025_strk() {
+fn sponsor_floor_is_respected_when_service_prices_are_lower() {
     let (policy_address, _) =
         deploy_policy(25_000, 6, TWO_STRK, 900);
 
@@ -101,19 +101,60 @@ fn usd_price_floor_drives_message_and_offer_at_0025_strk() {
     };
 
     assert(
-        policy.quote_fee(FEE_ACTION_MESSAGE) == SIX_STRK,
+        policy.quote_fee(FEE_ACTION_MESSAGE) == FOUR_STRK,
         'bad message quote',
     );
 
     assert(
-        policy.quote_fee(FEE_ACTION_OFFER) == TEN_STRK,
+        policy.quote_fee(FEE_ACTION_OFFER) == FOUR_STRK,
         'bad offer quote',
     );
 
     assert(
         policy.quote_fee(FEE_ACTION_ROOM_ACTIVATION)
-            == TEN_STRK,
+            == FOUR_STRK,
         'bad room quote',
+    );
+}
+
+
+#[test]
+fn lower_flat_fees_apply_when_sponsor_cost_is_below_public_minimum() {
+    // STRK = $0.025, sponsor = 0.1 STRK/action.
+    // Public floors: room $0.05, message $0.01, offer $0.05.
+    let (policy_address, _) =
+        deploy_policy(25_000, 6, 100_000_000_000_000_000_u128, 900);
+
+    start_cheat_block_timestamp(policy_address, 1000);
+
+    let policy = IVinssFeePolicyDispatcher {
+        contract_address: policy_address,
+    };
+
+    assert(
+        policy.quote_fee(FEE_ACTION_ROOM_ACTIVATION) == TWO_STRK,
+        'room public floor wrong',
+    );
+    assert(
+        policy.quote_fee(FEE_ACTION_MESSAGE) ==
+            400_000_000_000_000_000_u128,
+        'message public floor wrong',
+    );
+    assert(
+        policy.quote_fee(FEE_ACTION_OFFER) == TWO_STRK,
+        'offer public floor wrong',
+    );
+    assert(
+        policy.quote_fee_usd_micros(FEE_ACTION_ROOM_ACTIVATION) == 50_000_u128,
+        'room USD floor wrong',
+    );
+    assert(
+        policy.quote_fee_usd_micros(FEE_ACTION_MESSAGE) == 10_000_u128,
+        'message USD floor wrong',
+    );
+    assert(
+        policy.quote_fee_usd_micros(FEE_ACTION_OFFER) == 50_000_u128,
+        'offer USD floor wrong',
     );
 }
 

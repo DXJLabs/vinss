@@ -16,6 +16,8 @@ jobs:
           node-version: 24
       - name: Unshield regression tests
         run: node --experimental-strip-types --test tests/strk20-unshield.test.mjs
+      - name: Fee policy regression
+        run: node --test tests/fee-reduction.test.mjs
       - name: Install frontend
         run: npm ci --prefix frontend
       - name: Typecheck
@@ -24,3 +26,20 @@ jobs:
         run: npm --prefix frontend run build
       - name: Privacy regression
         run: node scripts/test-privacy-boundaries.mjs
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.20.1
+          cache: false
+      - uses: foundry-rs/setup-snfoundry@v3
+        with:
+          starknet-foundry-version: 0.56.0
+      - run: scarb build
+      - run: snforge test
