@@ -22,6 +22,8 @@ jobs:
         run: node --test tests/fee-reduction.test.mjs
       - name: Sepolia read-only fee audit regression
         run: node --test tests/sepolia-fee-audit.test.mjs
+      - name: Sepolia Unshield receipt regression
+        run: node --test tests/sepolia-unshield-receipt.test.mjs
       - name: On-chain fee transparency tests
         run: node --experimental-strip-types --test tests/strk20-fee-display.test.mjs
       - name: Shield vs Unshield fee transparency regression
