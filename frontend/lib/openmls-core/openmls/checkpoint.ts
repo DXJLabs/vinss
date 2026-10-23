@@ -2,7 +2,7 @@ import type {
   GroupMember,
   GroupSnapshot,
   InstallationId,
-} from "../types.js";
+} from "../types";
 
 export type OpenMlsPendingMembershipChange =
   | {

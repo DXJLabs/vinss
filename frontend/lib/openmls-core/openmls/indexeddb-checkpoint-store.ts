@@ -1,16 +1,16 @@
 import type {
   InstallationId,
-} from "../types.js";
+} from "../types";
 
 import {
   decodeOpenMlsCheckpoint,
   encodeOpenMlsCheckpoint,
-} from "./checkpoint.js";
+} from "./checkpoint";
 
 import type {
   OpenMlsCheckpoint,
   OpenMlsCheckpointStore,
-} from "./checkpoint.js";
+} from "./checkpoint";
 
 const DB_VERSION = 1;
 

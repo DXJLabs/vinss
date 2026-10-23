@@ -3,15 +3,15 @@ import type {
   GroupMember,
   GroupSnapshot,
   MessagingIdentity,
-} from "../types.js";
+} from "../types";
 import type {
   OpenMlsBridge,
   OpenMlsPendingCommitRecovery,
-} from "./bridge.js";
+} from "./bridge";
 import type {
   OpenMlsCheckpointStore,
   OpenMlsPendingOutboundCommit,
-} from "./checkpoint.js";
+} from "./checkpoint";
 
 import type {
   OpenMlsWasmLoader,
@@ -19,7 +19,7 @@ import type {
   WasmGroup,
   WasmIdentity,
   WasmProvider,
-} from "./wasm-api.js";
+} from "./wasm-api";
 
 interface GroupState {
   group: WasmGroup;

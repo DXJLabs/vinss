@@ -3,11 +3,11 @@ import type {
   GroupMember,
   GroupSnapshot,
   MessagingIdentity,
-} from "../types.js";
+} from "../types";
 
 import type {
   OpenMlsPendingOutboundCommit,
-} from "./checkpoint.js";
+} from "./checkpoint";
 
 export interface OpenMlsPendingCommitRecovery
   extends OpenMlsPendingOutboundCommit {

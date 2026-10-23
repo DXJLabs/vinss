@@ -2,7 +2,7 @@ import type {
   GeneratedOpenMlsWasmModule,
   OpenMlsWasmLoader,
   OpenMlsWasmModule,
-} from "./wasm-api.js";
+} from "./wasm-api";
 
 export type GeneratedModuleImporter =
   () => Promise<GeneratedOpenMlsWasmModule>;
