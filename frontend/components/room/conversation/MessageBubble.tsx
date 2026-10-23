@@ -321,7 +321,11 @@ export function MessageBubble({
               <ShieldIcon />
             </span>
 
-            {entry.transactionHash ? (
+            {entry.id.startsWith("mls:") ? (
+              <span className="text-[9px] text-signal/70" title="On-chain MLS ciphertext indexed and locally decrypted">
+                MLS ✓ indexed
+              </span>
+            ) : entry.transactionHash ? (
               <>
                 <button
                   type="button"
@@ -382,7 +386,7 @@ export function MessageBubble({
                 }}
                 className="block w-full px-4 py-3 text-left text-[11px] font-medium text-danger transition hover:bg-danger/[0.08]"
               >
-                Delete from this device
+                Hide in this browser
               </button>
 
               <button

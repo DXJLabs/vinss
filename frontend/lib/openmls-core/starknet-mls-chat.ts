@@ -272,9 +272,18 @@ export class StarknetOpenMlsChat {
       if(packet.kind!=="application"||
          canonicalStarknetAddress(packet.sender)!==this.peerAddress||
          this.seenPackets.has(packet.packetId))continue;
-      const {plaintext}=await this.bridge.decryptApplicationMessage({
-        conversationId,ciphertext:packet.bytes,
-      });
+      let plaintext:Uint8Array;
+      try {
+        ({plaintext}=await this.bridge.decryptApplicationMessage({
+          conversationId,ciphertext:packet.bytes,
+        }));
+      } catch {
+        // Reloading an MLS checkpoint may surface already-consumed packets.
+        // One undecryptable/replayed old packet must not block newer ones.
+        // Do NOT mark a failed packet consumed: it might become readable
+        // after missing handshake/epoch recovery.
+        continue;
+      }
       const message=jsonFromBytes<MlsPlaintextMessage>(plaintext);
       if(message.version!==1||message.type!=="message"||
          canonicalStarknetAddress(message.from)!==this.peerAddress||
