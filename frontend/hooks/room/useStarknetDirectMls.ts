@@ -19,6 +19,8 @@ export interface MlsDirectControls {
   readonly busy:boolean;
   readonly ready:boolean;
   readonly error:string|null;
+  /** Persisted upgrade guard: never silently send a legacy message after MLS opt-in. */
+  requiresMls():boolean;
   activate():Promise<void>;
   sync():Promise<void>;
   invite():Promise<void>;
@@ -50,6 +52,12 @@ async function conversationId(
   const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",input));
   return "vinss-mls-" + Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("").slice(0,48);
 }
+function requiredKey(roomId:string|null,wallet:string|undefined,peer:string|null):string|null {
+  if(!roomId || !wallet || !peer)return null;
+  return [
+    "vinss:mls-required:v1:",roomId,normalizeId(wallet),normalizeId(peer)
+  ].join(":");
+}
 function installationId(roomId:string,chainId:string,wallet:string):string {
   // Public per-device label only. Cryptographic private state lives in
   // the encrypted IndexedDB OpenMLS checkpoint, never localStorage.
@@ -78,6 +86,11 @@ export function useStarknetDirectMls({
   const generation=useRef(0);
   const inboxRef=useRef(onInbox);
   inboxRef.current=onInbox;
+  const requiresMls=():boolean=>{
+    if(typeof window==="undefined")return false;
+    const key=requiredKey(roomId,account?.address,peerAddress);
+    return Boolean(key && window.localStorage.getItem(key)==="1");
+  };
 
   const identityKey=[
     roomId ?? "",account?.address ?? "",peerAddress ?? "",peerPublicKey ?? "",
@@ -137,6 +150,22 @@ export function useStarknetDirectMls({
     return {chat,cid};
   },[identityKey,wallet,selfAliases.join("|")]);
 
+  useEffect(()=>{
+    if(!requiresMls())return;
+    let cancelled=false;
+    setStatus("initializing");
+    void init().then(async ({chat,cid})=>{
+      const ready=await chat.isReady(cid);
+      if(!cancelled)setStatus(ready?"MLS_READY":"waiting-welcome");
+    }).catch(()=>{
+      if(!cancelled){
+        setStatus("error");
+        setError("OpenMLS checkpoint could not be restored; legacy send is blocked.");
+      }
+    });
+    return()=>{cancelled=true;};
+  },[identityKey,init]);
+
   const confirmMultiple=useCallback(async(count:number,kind:string):Promise<boolean>=>{
     return window.confirm(
       "OpenMLS "+kind+" needs "+count+
@@ -172,6 +201,11 @@ export function useStarknetDirectMls({
     if(busy)return;
     setBusy(true);setError(null);setStatus("initializing");
     try{
+      const protectionKey=requiredKey(roomId,account?.address,peerAddress);
+      if(!protectionKey)throw new Error("MLS conversation scope unavailable.");
+      // Persist lock BEFORE any wallet prompt, preventing silent legacy
+      // downgrade even if the wallet app is backgrounded or the page reloads.
+      window.localStorage.setItem(protectionKey,"1");
       const {chat}=await init();
       await chat.publishKeyPackage(
         (kind,bytes)=>chat.confirmIndexed(kind,bytes),
@@ -232,5 +266,5 @@ export function useStarknetDirectMls({
     return()=>{stopped=true;clearInterval(timer);};
   },[status,identityKey]);
 
-  return {status,busy,ready:status==="MLS_READY",error,activate,sync,invite,send};
+  return {status,busy,ready:status==="MLS_READY",error,requiresMls,activate,sync,invite,send};
 }

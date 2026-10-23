@@ -843,6 +843,14 @@ export function useDirectConversation({
 
     const body = draft.trim();
 
+    // The MLS consent is persistent per pair. A reload, failed wallet
+    // callback or incomplete Welcome must NEVER downgrade a new message
+    // to the legacy ECDH encryption path without explicit migration.
+    if (mlsDirect.requiresMls() && !mlsDirect.ready) {
+      setError("OpenMLS secure session is not ready. Sync MLS and confirm the peer's Welcome first.");
+      return;
+    }
+
     // After both wallets complete MLS onboarding, new text uses the
     // authenticated MLS epoch. Historical ECDH messages remain readable.
     if (mlsDirect.ready) {
