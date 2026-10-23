@@ -43,3 +43,16 @@ test("after MLS activation a wallet reload cannot silently downgrade new text to
  assert.match(direct,/mlsDirect\.requiresMls\(\)/);
  assert.match(direct,/OpenMLS.*not ready|secure session.*not ready|Sync MLS/i);
 });
+
+test("indexed MLS ciphertext shows confirmation rather than endless pending; hidden means hidden",()=>{
+ const bubble=src("frontend/components/room/conversation/MessageBubble.tsx");
+ assert.match(bubble,/entry\.id\.startsWith\("mls:"\)/);
+ assert.match(bubble,/MLS.*indexed|On.chain MLS|MLS.*confirmed/i);
+ assert.match(bubble,/Hide (?:in|from) this (?:browser|view)/);
+ assert.doesNotMatch(bubble,/>Delete from this device</);
+});
+test("a legacy MLS replay cannot block newer encrypted messages in the packet scan",()=>{
+ const service=src("frontend/lib/openmls-core/starknet-mls-chat.ts");
+ assert.match(service,/decryptApplicationMessage/);
+ assert.match(service,/catch\s*\{[\s\S]*continue/);
+});
