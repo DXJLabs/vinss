@@ -22,6 +22,8 @@ jobs:
         run: node --experimental-strip-types --test tests/messaging-codec-transport.test.mjs tests/messaging-production-wiring.test.mjs
       - name: OpenMLS native Direct and Group integration regression
         run: node --test tests/openmls-production-integration.test.mjs
+      - name: Pairwise Direct local-cache regression
+        run: node --experimental-strip-types --test tests/openmls-local-cache.test.mjs
       - name: Frontend typecheck
         run: npm --prefix frontend run typecheck
       - name: Frontend production build
