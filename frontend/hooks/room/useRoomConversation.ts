@@ -209,6 +209,7 @@ export function useRoomConversation({
 
   return {
     entries,
+    mlsDirect:direct.mlsDirect,
     setEntries,
     draft:
       usingGroup

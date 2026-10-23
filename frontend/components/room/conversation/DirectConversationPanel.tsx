@@ -53,6 +53,7 @@ import type {
 } from "@/lib/privacy/rekberEvidenceChannel";
 
 interface DirectConversationPanelProps {
+  mlsDirect: import("@/hooks/room/useStarknetDirectMls").MlsDirectControls;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
   escrowActions: DiscoveredEscrowAction[];
@@ -121,6 +122,7 @@ interface DirectConversationPanelProps {
  */
 export function DirectConversationPanel({
   entries,
+  mlsDirect,
   offerEntries,
   escrowActions,
   walletAddress,
@@ -2073,6 +2075,41 @@ export function DirectConversationPanel({
             </button>
           </div>
         )}
+
+        <div className="mb-2 rounded-xl border border-wire/55 bg-black/15 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-display text-[9px] uppercase tracking-widest text-paper/70">
+              OpenMLS · {mlsDirect.status === "MLS_READY" ? "Secure epoch active" : "Optional secure upgrade"}
+            </span>
+            {mlsDirect.status === "MLS_READY" && (
+              <span className="text-[9px] text-signal">MLS_READY</span>
+            )}
+          </div>
+          <p className="mt-1 text-[10px] leading-4 text-paper/40">
+            MLS key changes are signed by your wallet; ciphertext uses native STRK20.
+            Each handshake fragment is a separate paid transaction. Existing messages stay accessible.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" disabled={busy || mlsDirect.busy || !connected || !channelReady}
+              onClick={() => void mlsDirect.activate()}
+              className="rounded-md border border-signal/35 px-3 py-2 font-display text-[9px] text-signal disabled:opacity-40">
+              Publish signed KeyPackage
+            </button>
+            <button type="button" disabled={busy || mlsDirect.busy || !connected || !channelReady}
+              onClick={() => void mlsDirect.sync()}
+              className="rounded-md border border-wire px-3 py-2 font-display text-[9px] text-paper/65 disabled:opacity-40">
+              Sync MLS
+            </button>
+            {mlsDirect.status === "peer-ready" && (
+              <button type="button" disabled={busy || mlsDirect.busy}
+                onClick={() => void mlsDirect.invite()}
+                className="rounded-md border border-signal/35 px-3 py-2 font-display text-[9px] text-signal disabled:opacity-40">
+                Invite peer into MLS
+              </button>
+            )}
+          </div>
+          {mlsDirect.error && <p className="mt-2 text-[10px] text-danger">{mlsDirect.error}</p>}
+        </div>
 
         <div className="mb-2 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-wire/55 bg-black/15 px-3 py-2">

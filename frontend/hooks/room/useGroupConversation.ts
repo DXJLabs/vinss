@@ -136,7 +136,8 @@ export function useGroupConversation({
                 "group") ===
                 "group" &&
               item.message.groupId ===
-                group.id,
+                group.id &&
+              item.message.kind !== "system_note",
           )
           .map((item) => ({
             id: `group:${group.id}:${locatorHex(

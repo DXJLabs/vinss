@@ -108,6 +108,7 @@ export default function DealRoomPage() {
   const {
     entries,
     setEntries,
+    mlsDirect,
     draft,
     setDraft,
     chatEndRef,
@@ -655,6 +656,7 @@ export default function DealRoomPage() {
         tab !== "loyalty" && (
         <ConversationPanel
           roomId={room?.id ?? params.roomId}
+          mlsDirect={mlsDirect}
           entries={entries}
           offerEntries={offerEntries}
           escrowActions={escrowActions}

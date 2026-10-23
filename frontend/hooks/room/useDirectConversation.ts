@@ -1,4 +1,5 @@
 "use client";
+import { useStarknetDirectMls, type MlsDirectControls } from "@/hooks/room/useStarknetDirectMls";
 
 import {
   useEffect,
@@ -88,6 +89,7 @@ interface UseDirectConversationOptions {
 }
 
 interface UseDirectConversationResult {
+  mlsDirect: MlsDirectControls;
   entries: ConversationEntry[];
   draft: string;
   setDraft: Dispatch<SetStateAction<string>>;
@@ -218,6 +220,38 @@ export function useDirectConversation({
     ],
   );
 
+  const mlsDirect = useStarknetDirectMls({
+    roomId,
+    account: session?.account ?? null,
+    identity: messagingIdentity,
+    peerAddress: selectedPeer?.address ?? null,
+    peerPublicKey: selectedPeer?.publicKey ?? null,
+    selfAliases: selfRoutingIdentities,
+    onInbox(messages) {
+      setEntries((previous) => {
+        const byId = new Map(previous.map(entry => [entry.id,entry]));
+        for(const item of messages){
+          const locator = item.packetId.replace(/^0x/,"").toLowerCase();
+          if(!/^[0-9a-f]+$/.test(locator))continue;
+          const id = "mls:" + locator;
+          byId.set(id,{
+            id,kind:"message",summary:item.message.body,
+            transactionHash:"",
+            actionLocator:"0x"+locator,
+            sentAt:new Date(item.message.sentAt).toISOString(),
+            scope:"direct",senderAddress:item.sender,
+            recipientAddress:session?.account.address,
+          });
+        }
+        const next=[...byId.values()].sort((a,b)=>
+          new Date(a.sentAt).getTime()-new Date(b.sentAt).getTime()
+        );
+        void persistHistory(next);
+        return next;
+      });
+    },
+  });
+
   async function resolveDirectKey():
     Promise<Uint8Array | null> {
     if (
@@ -317,6 +351,12 @@ export function useDirectConversation({
       const incoming: ConversationEntry[] =
         discovered
           .filter((item) => {
+            if (item.message.kind !== "system_note") {
+              // Regular legacy chat and attachments only. MLS control packets
+              // are handled by the OpenMLS runtime, not rendered as messages.
+            } else {
+              return false;
+            }
             if (
               item.message.scope !== "direct"
             ) {
@@ -777,6 +817,41 @@ export function useDirectConversation({
     if (!storageKey) return;
 
     const body = draft.trim();
+
+    // After both wallets complete MLS onboarding, new text uses the
+    // authenticated MLS epoch. Historical ECDH messages remain readable.
+    if (mlsDirect.ready) {
+      setBusy(true);
+      setError(null);
+      try {
+        const sent = await mlsDirect.send(body);
+        setEntries((previous) => {
+          const next = [
+            ...previous,
+            {
+              id: "mls:" + sent.actionLocator,
+              kind: "message" as const,
+              summary: sent.body,
+              transactionHash: sent.transactionHash,
+              actionLocator: "0x" + sent.actionLocator,
+              sentAt: sent.sentAt,
+              scope: "direct" as const,
+              senderAddress: session.account.address,
+              recipientAddress: selectedPeer.address,
+            },
+          ];
+          void persistHistory(next);
+          return next;
+        });
+        setDraft("");
+      } catch {
+        setError("OpenMLS delivery not yet confirmed. Check secure-session status before sending again.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const sentAt = new Date().toISOString();
 
     const route: MessageRoute = {
@@ -2341,6 +2416,7 @@ export function useDirectConversation({
 
   return {
     entries,
+    mlsDirect,
     draft,
     setDraft,
     chatEndRef,

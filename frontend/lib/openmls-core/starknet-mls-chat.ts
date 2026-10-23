@@ -242,7 +242,7 @@ export class StarknetOpenMlsChat {
   }
   async isReady(conversationId:string):Promise<boolean> {
     try {const group=await this.bridge.getGroupSnapshot(conversationId);
-      return group.epoch>=0n && group.members.length>0;
+      return group.epoch > 0n;
     }catch{return false;}
   }
   async sendText(conversationId:string,body:string,
