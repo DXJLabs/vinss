@@ -32,6 +32,8 @@ jobs:
         run: node --test tests/strk20-shield-unshield-fees.test.mjs
       - name: Install frontend
         run: npm ci --prefix frontend
+      - name: Messaging codec and multichain adapter regression
+        run: node --experimental-strip-types --test tests/messaging-codec-transport.test.mjs
       - name: Typecheck
         run: npm --prefix frontend run typecheck
       - name: Production build
