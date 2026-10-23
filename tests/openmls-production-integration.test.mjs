@@ -32,3 +32,14 @@ test("Group legacy messages and MLS control frames cannot be rendered as decrypt
  const group=src("frontend/hooks/room/useGroupConversation.ts");
  assert.match(group,/item\.message\.kind\s*!==?\s*["']system_note["']/);
 });
+
+test("after MLS activation a wallet reload cannot silently downgrade new text to legacy crypto",()=>{
+ const hook=src("frontend/hooks/room/useStarknetDirectMls.ts");
+ const direct=src("frontend/hooks/room/useDirectConversation.ts");
+ assert.match(hook,/vinss:mls-required:v1:/);
+ assert.match(hook,/requiresMls/);
+ assert.match(hook,/localStorage\.setItem\(/);
+ assert.match(hook,/await chat\.isReady\(cid\)/);
+ assert.match(direct,/mlsDirect\.requiresMls\(\)/);
+ assert.match(direct,/OpenMLS.*not ready|secure session.*not ready|Sync MLS/i);
+});
