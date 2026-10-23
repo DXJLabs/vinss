@@ -196,6 +196,18 @@ export function useDirectConversation({
     });
   };
 
+  const walletIdentity = session?.account.address ?? "";
+  // A tab change must never briefly show the previous peer's decrypted
+  // timeline. Wallet changes also clear drafts rather than reusing the
+  // previous wallet's unsent plaintext.
+  useEffect(() => {
+    setEntries([]);
+    setMessagePending(false);
+  }, [roomId, peerKey, walletIdentity]);
+  useEffect(() => {
+    setDrafts({});
+  }, [roomId, walletIdentity]);
+
   const selectedPeer = useMemo(
     () =>
       peerAddress
@@ -508,13 +520,23 @@ export function useDirectConversation({
     }
 
     return (
-      `vinss:direct-history:v2:${roomId}:` +
+      `vinss:direct-history:v3:${roomId}:` +
       `${canonicalStarknetAddress(
         session.account.address,
       )}:` +
       canonicalStarknetAddress(
         selectedPeer.address,
       )
+    );
+  }
+
+  /** v2 room-secret history is read only for authenticated migration to v3. */
+  function legacyRoomHistoryStorageKey(): string | null {
+    if(!roomId || !session || !selectedPeer)return null;
+    return (
+      "vinss:direct-history:v2:" + roomId + ":" +
+      canonicalStarknetAddress(session.account.address) + ":" +
+      canonicalStarknetAddress(selectedPeer.address)
     );
   }
 
@@ -545,8 +567,10 @@ export function useDirectConversation({
     const storageKey =
       historyStorageKey();
 
+    // V3 history uses the pairwise P-256 ECDH key, never the room
+    // secret that is stored in plaintext localStorage for legacy rooms.
     const historyKey =
-      channelKey;
+      await resolveDirectKey();
 
     if (
       !storageKey ||
@@ -2186,56 +2210,30 @@ export function useDirectConversation({
         return;
       }
 
-      const stable =
-        await loadEncryptedLocalJson<{
-          version: 1;
-          savedAt: number;
-          entries:
-            ConversationEntry[];
-        }>(
-          stableStorageKey,
-          channelKey,
-        );
-
-      if (cancelled) {
-        return;
-      }
-
-      let legacyEntries:
-        ConversationEntry[] = [];
-
-      const legacyStorageKey =
-        legacyHistoryStorageKey();
-
-      const directKey =
-        await resolveDirectKey();
-
-      if (
-        legacyStorageKey &&
-        directKey &&
-        !cancelled
-      ) {
-        const legacy =
-          await loadEncryptedLocalJson<{
-            version: 1;
-            savedAt: number;
-            entries:
-              ConversationEntry[];
-          }>(
-            legacyStorageKey,
-            directKey,
-          );
-
-        legacyEntries =
-          legacy?.entries ?? [];
-      }
-
-      if (cancelled) {
-        return;
-      }
-
+      const directKey = await resolveDirectKey();
+      if(!directKey || cancelled)return;
+      const stable = await loadEncryptedLocalJson<{
+        version:1;savedAt:number;entries:ConversationEntry[];
+      }>(stableStorageKey,directKey);
+      if(cancelled)return;
+      const legacyStorageKey = legacyHistoryStorageKey();
+      const legacyRoomStorageKey = legacyRoomHistoryStorageKey();
+      const legacy = legacyStorageKey
+        ? await loadEncryptedLocalJson<{
+            version:1;savedAt:number;entries:ConversationEntry[];
+          }>(legacyStorageKey,directKey)
+        : null;
+      // v2 is vulnerable to browser-local roomSecret extraction. Only read
+      // while migrating, then discard after v3 has been durably encrypted.
+      const legacyRoom = legacyRoomStorageKey
+        ? await loadEncryptedLocalJson<{
+            version:1;savedAt:number;entries:ConversationEntry[];
+          }>(legacyRoomStorageKey,channelKey)
+        : null;
+      if(cancelled)return;
       const cachedEntries = [
-        ...legacyEntries,
+        ...(legacy?.entries ?? []),
+        ...(legacyRoom?.entries ?? []),
         ...(stable?.entries ?? []),
       ];
 
@@ -2288,7 +2286,13 @@ export function useDirectConversation({
                 ).getTime(),
             );
 
-        void persistHistory(next);
+        void persistHistory(next).then(() => {
+          // Never erase a v2 history snapshot on a decrypt/write failure.
+          // V1 is retained until an explicit device migration/cleanup.
+          if (legacyRoom?.entries?.length && legacyRoomStorageKey) {
+            window.localStorage.removeItem(legacyRoomStorageKey);
+          }
+        });
 
         return next;
       });
