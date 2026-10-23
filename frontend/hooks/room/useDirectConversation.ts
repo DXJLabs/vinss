@@ -223,6 +223,7 @@ export function useDirectConversation({
   const mlsDirect = useStarknetDirectMls({
     roomId,
     account: session?.account ?? null,
+    wallet: session?.wallet ?? null,
     identity: messagingIdentity,
     peerAddress: selectedPeer?.address ?? null,
     peerPublicKey: selectedPeer?.publicKey ?? null,

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WalletAccountV6 } from "starknet";
+import { walletV6, type WalletAccountV6 } from "starknet";
+import { getProvider, type VinssWalletSession } from "@/lib/starknet/walletClient";
 import { BACKEND_URL } from "@/lib/starknet/constants";
 import { canonicalStarknetAddress } from "@/lib/privacy/participantKeys";
 import type { MessagingIdentity } from "@/lib/privacy/participantKeys";
@@ -28,6 +29,7 @@ export interface MlsDirectControls {
 export interface UseStarknetDirectMlsInput {
   roomId:string|null;
   account:WalletAccountV6|null;
+  wallet:VinssWalletSession["wallet"]|null;
   identity:MessagingIdentity|null;
   peerAddress:string|null;
   peerPublicKey:string|null;
@@ -66,7 +68,7 @@ function safeMsg(err:unknown):string {
     : "OpenMLS operation could not be confirmed. Check the secure-session status before retrying.";
 }
 export function useStarknetDirectMls({
- roomId,account,identity,peerAddress,peerPublicKey,selfAliases,onInbox,
+ roomId,account,wallet,identity,peerAddress,peerPublicKey,selfAliases,onInbox,
 }:UseStarknetDirectMlsInput):MlsDirectControls {
   const [status,setStatus]=useState<MlsDirectStatus>("inactive");
   const [busy,setBusy]=useState(false);
@@ -92,14 +94,20 @@ export function useStarknetDirectMls({
   const init=useCallback(async ():Promise<{
     chat:StarknetOpenMlsChat;cid:string;
   }>=>{
-    if(!account || !identity || !roomId || !peerAddress || !peerPublicKey)
+    if(!account || !wallet || !identity || !roomId || !peerAddress || !peerPublicKey)
       throw new Error("MLS Direct needs an active wallet and selected participant.");
     if(controller.current && conversation.current)
       return {chat:controller.current,cid:conversation.current};
     const token=generation.current;
     const own=normalizeId(account.address),peer=normalizeId(peerAddress);
     if(!peer || own===peer)throw new Error("MLS Direct peer identity is invalid.");
-    const chainId=await account.getChainId();
+    const [chainId, rpcChainId] = await Promise.all([
+      walletV6.requestChainId(wallet),
+      getProvider().getChainId(),
+    ]);
+    if(BigInt(chainId)!==BigInt(rpcChainId)) {
+      throw new Error("MLS wallet and configured Starknet RPC are on different chains.");
+    }
     const iid=installationId(roomId,chainId,own);
     const key=await deriveDirectMessageKey(roomId,identity.privateKey,peerPublicKey);
     const candidateIds=[own,account.address,...selfAliases,peer,peerAddress];
@@ -127,7 +135,7 @@ export function useStarknetDirectMls({
     controller.current=chat;
     conversation.current=cid;
     return {chat,cid};
-  },[identityKey,selfAliases.join("|")]);
+  },[identityKey,wallet,selfAliases.join("|")]);
 
   const confirmMultiple=useCallback(async(count:number,kind:string):Promise<boolean>=>{
     return window.confirm(
