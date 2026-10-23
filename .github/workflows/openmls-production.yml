@@ -1,0 +1,44 @@
+name: VINSS OpenMLS production safety
+on:
+  push:
+    branches: [feat/vinss-openmls-production]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix frontend
+      - name: OpenMLS wallet attestation tests
+        run: node --experimental-strip-types --test tests/openmls-keypackage-identity.test.mjs
+      - name: OpenMLS framing regression
+        run: node --experimental-strip-types --test tests/openmls-starknet-framing.test.mjs
+      - name: Messaging codec and transport regressions
+        run: node --experimental-strip-types --test tests/messaging-codec-transport.test.mjs tests/messaging-production-wiring.test.mjs
+      - name: Frontend typecheck
+        run: npm --prefix frontend run typecheck
+      - name: Frontend production build
+        run: npm --prefix frontend run build
+      - name: Privacy boundaries
+        run: node scripts/test-privacy-boundaries.mjs
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.20.1
+          cache: false
+      - uses: foundry-rs/setup-snfoundry@v3
+        with:
+          starknet-foundry-version: 0.56.0
+      - run: scarb build
+      - run: snforge test
