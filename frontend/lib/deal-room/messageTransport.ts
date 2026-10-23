@@ -40,6 +40,6 @@ export class MessageTransportRouter<S=unknown,R=unknown,D=unknown,V=unknown> {
     if(!t)throw new Error("Message transport not configured: "+id);
     return t;
   }
-  send(id:string,input:S):Promise<R> { return this.get(id).send(input); }
-  discover(id:string,input?:D):Promise<V> { return this.get(id).discover(input as D); }
+  async send(id:string,input:S):Promise<R> { return this.get(id).send(input); }
+  async discover(id:string,input?:D):Promise<V> { return this.get(id).discover(input as D); }
 }
