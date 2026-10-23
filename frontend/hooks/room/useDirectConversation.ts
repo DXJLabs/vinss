@@ -14,7 +14,7 @@ import { BACKEND_URL } from "@/lib/starknet/constants";
 import {
   discoverMessages,
   sendMessage,
-} from "@/lib/deal-room/messaging";
+} from "@/lib/deal-room/messageGateway";
 import {
   canonicalStarknetAddress,
   deriveDirectMessageKey,

@@ -199,84 +199,17 @@ export async function sendMessage(
   try {
     response = await account.strk20InvokeTransaction(debugActions);
   } catch (err) {
-    const msg =
-      err instanceof Error
-        ? err.message
-        : String(err);
-
-    const sensitiveLifecycle =
-      additionalInvokes.some(
-        (invoke) =>
-          invoke.contract ===
-          CONTRACTS.escrowRekber,
-      );
-
-    const extra: Record<string, unknown> = {};
-    if (
-      !sensitiveLifecycle &&
-      err &&
-      typeof err === "object"
-    ) {
-      for (const key of Object.getOwnPropertyNames(err)) {
-        if (key === "message" || key === "stack") continue;
-        extra[key] = (err as Record<string, unknown>)[key];
-      }
-    }
-
-    const rawError =
-      sensitiveLifecycle
-        ? JSON.stringify({
-            redacted:
-              "VINSS_REKBER_LIFECYCLE",
-          })
-        : JSON.stringify(
-      err,
-      (_key, value) => {
-        if (typeof value === "bigint") return value.toString();
-
-        if (value instanceof Error) {
-          return Object.fromEntries(
-            Object.getOwnPropertyNames(value).map((key) => [
-              key,
-              (value as unknown as Record<string, unknown>)[key],
-            ]),
-          );
-        }
-
-        return value;
-      },
-      2,
-    );
-
-    const safeDebugActions =
-      debugActions.map((action) =>
-        action.type === "invoke" &&
-        action.contract ===
-          CONTRACTS.escrowRekber
-          ? {
-              ...action,
-              calldata: [
-                "[REDACTED_REKBER_CALLDATA]",
-              ],
-            }
-          : action,
-      );
-
-    console.error("[VINSS MESSAGING] strk20InvokeTransaction failed", {
-      message: msg,
-      ...extra,
-      rawError,
-      debugActions:
-        safeDebugActions,
+    // Wallet errors may contain raw ciphertext, calldata or secret metadata.
+    // Classify without serializing, rethrowing or printing the raw exception.
+    const description = err instanceof Error ? err.message : "";
+    const declined = /reject|declin|cancel|denied/i.test(description);
+    console.warn("[VINSS MESSAGING] wallet callback uncertain", {
+      category: declined ? "WALLET_DECLINED" : "WALLET_OUTCOME_UNKNOWN",
     });
-
     throw new Error(
-      `${msg}` +
-        (Object.keys(extra).length
-          ? ` | WALLET_ERROR_DETAIL=${JSON.stringify(extra)}`
-          : "") +
-        ` | DEBUG_PAYLOAD=${JSON.stringify(safeDebugActions)}` +
-        ` | RAW_ERROR=${rawError}`,
+      declined
+        ? "Wallet declined the message request. Check message recovery before retrying."
+        : "Wallet message outcome is unknown. Check message recovery before retrying.",
     );
   }
 

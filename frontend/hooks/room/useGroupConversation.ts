@@ -17,7 +17,7 @@ import {
 import {
   discoverMessages,
   sendMessage,
-} from "@/lib/deal-room/messaging";
+} from "@/lib/deal-room/messageGateway";
 import type {
   MessagingIdentity,
 } from "@/lib/privacy/participantKeys";

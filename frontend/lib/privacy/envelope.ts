@@ -18,6 +18,7 @@
  */
 
 import { hash, num } from "starknet";
+import { packEncryptedBytes, recoverEncryptedByteCandidates } from "./feltCodec";
 
 export const ENVELOPE_VERSION = 1;
 export const MAX_PAYLOAD_CHUNKS = 64;
@@ -137,59 +138,27 @@ export async function encryptPayload(
   withIv.set(iv, 0);
   withIv.set(ciphertext, iv.length);
 
-  return packBytesIntoFelts(withIv);
+  return packEncryptedBytes(withIv, MAX_PAYLOAD_CHUNKS);
 }
 
 export async function decryptPayload(
   channelKey: ChannelKey,
   chunks: bigint[],
 ): Promise<unknown> {
-  const bytes = unpackFeltsIntoBytes(chunks);
-  const iv = bytes.slice(0, 12);
-  const ciphertext = bytes.slice(12);
+  const candidates = recoverEncryptedByteCandidates(chunks);
   const key = await crypto.subtle.importKey(
-    "raw",
-    channelKeyToArrayBuffer(channelKey),
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"],
+    "raw", channelKeyToArrayBuffer(channelKey), { name: "AES-GCM" }, false, ["decrypt"],
   );
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    ciphertext,
-  );
-  return JSON.parse(new TextDecoder().decode(plaintext));
-}
-
-const BYTES_PER_FELT = 30; // stay comfortably under the 251-bit felt limit.
-
-function packBytesIntoFelts(bytes: Uint8Array): bigint[] {
-  const chunks: bigint[] = [];
-  for (let i = 0; i < bytes.length; i += BYTES_PER_FELT) {
-    const slice = bytes.slice(i, i + BYTES_PER_FELT);
-    let value = 0n;
-    for (const b of slice) value = (value << 8n) | BigInt(b);
-    chunks.push(value);
-  }
-  if (chunks.length > MAX_PAYLOAD_CHUNKS) {
-    throw new Error(
-      `Payload needs ${chunks.length} chunks, exceeds MAX_PAYLOAD_CHUNKS=${MAX_PAYLOAD_CHUNKS}. Shorten the message or attachment.`,
-    );
-  }
-  return chunks;
-}
-
-function unpackFeltsIntoBytes(chunks: bigint[]): Uint8Array {
-  const out: number[] = [];
-  for (const chunk of chunks) {
-    const bytes: number[] = [];
-    let value = chunk;
-    while (value > 0n) {
-      bytes.unshift(Number(value & 0xffn));
-      value >>= 8n;
+  for (const bytes of candidates) {
+    if (bytes.length < 28) continue;
+    try {
+      const value = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: bytes.slice(0,12) }, key, bytes.slice(12),
+      );
+      return JSON.parse(new TextDecoder().decode(value));
+    } catch {
+      // Only an authenticated legacy candidate may be accepted.
     }
-    out.push(...bytes);
   }
-  return new Uint8Array(out);
+  throw new Error("Ciphertext authentication failed; check channel key or legacy encoding.");
 }
