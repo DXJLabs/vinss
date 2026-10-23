@@ -34,6 +34,8 @@ jobs:
         run: npm ci --prefix frontend
       - name: Messaging codec and multichain adapter regression
         run: node --experimental-strip-types --test tests/messaging-codec-transport.test.mjs
+      - name: Messaging production wiring regression
+        run: node --test tests/messaging-production-wiring.test.mjs
       - name: Typecheck
         run: npm --prefix frontend run typecheck
       - name: Production build

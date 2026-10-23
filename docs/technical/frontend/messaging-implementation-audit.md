@@ -112,17 +112,25 @@ A mobile wallet timeout **after** preparation is ambiguous; direct hook retains 
 
 Routing hides reusable *application* identifiers from ordinary helper storage, but not every traffic relationship, transaction amount, fee, time, or counterparty signal.
 
-## 8. Audit findings (not resolved by this documentation change)
+## 8. Audit findings and remediation status (updated 23 October 2026)
 
-### P1: potential lossy felt packing (requires codec migration plan)
+### P1: historic lossy felt packing — fixed in source, chain regression pending
 
-`envelope.ts` packs arbitrary bytes into 30-byte felt slices using bigint conversion and later reconstructs only the nonzero significant bytes, **without preserving the original length of each slice**. A leading zero is lost:
-`[0x00,0x01,0x02] → felt 0x0102 → [0x01,0x02]`.
-This can corrupt an IV/ciphertext/tag sequence and cause an AES-GCM decrypt failure even after a transaction succeeds. **Source bug reproduced for a leading-zero vector**, but prevalence in actual chain messages has not been measured. Do not claim lossless encoding. Add property-based round-trip tests (leading/multiple zero bytes, 30/31/60-byte boundaries), use an unambiguous codec version, and test legacy record compatibility **before** changing any live V2 representation.
+Before `fab9b65`, `envelope.ts` encoded 30-byte slices as bare bigints, discarding leading zero bytes. For example `[0x00,0x01,0x02] → 0x0102 → [0x01,0x02]`.
 
-### P1: transaction-error diagnostics exposure
+**Current source:** `frontend/lib/privacy/feltCodec.ts` uses a versioned **inner codec marker**, explicit byte length and a sentinel per packed 30-byte chunk, preserving zero-leading and all-zero chunks. Legacy encrypted records have no version/length; the decoder restores every full 30-byte chunk and considers at most 30 final-block lengths. `decryptPayload()` selects a legacy candidate **only if AES-GCM authentication succeeds**. The Cairo **outer Message V2 header, commitment, fee quote and contract ABI remain unchanged**.
 
-`messaging.ts` on wallet failure logs `debugActions` and raw wallet error fields. It redacts one recognized Rekber calldata path but **not every ciphertext/action metadata field**. Debug payloads and telemetry need production sanitization. Current `discoverMessages()` **does not** contain the older documentation's `console.log("[VINSS DECRYPTED MESSAGE]", ...)` statement; that allegation is stale for this branch. Do not infer from its absence that all other hooks and extensions are log-free.
+[Unit tests](https://github.com/DXJLabs/vinss/blob/feat/strk20-unshield-fees/tests/messaging-codec-transport.test.mjs) exercise leading-zero, all-zero, chunk-boundary and legacy-authentication vectors. **Still needed:** real previously indexed on-chain ciphertext samples, two-wallet Alice/Bob browser E2E, and old/new Offer/Private Escrow cross-compatibility validation.
+
+### P1: wallet error diagnostics — sanitized for Message submission
+
+Previously `messaging.ts` logged raw wallet error metadata, `debugActions` and JSON-serialized exceptions. The Message exception path now emits only a static failure class (`WALLET_DECLINED` or `WALLET_OUTCOME_UNKNOWN`) with generic user-facing text. It **does not print or rethrow raw wallet exceptions/ciphertext**. The existing direct-chat pending recovery still reconciles a prepared action by locator rather than treating an ambiguous callback as a failed transaction.
+
+**Still needed:** audit other domain modules, wallet extensions and telemetry. `discoverMessages()` does not contain the older alleged decrypted-body console log.
+
+### Multichain gateway — Starknet first, fail-closed
+
+[Multichain Messaging Transport](./multichain-messaging.md) introduces chain-qualified message delivery, but **only native Starknet STRK20 is registered today**. Canton/EVM connectors, identity bindings and cross-chain receipt correlation remain future integrations.
 
 ### P2: remaining privacy and operational work
 
