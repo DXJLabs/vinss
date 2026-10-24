@@ -1,3 +1,6 @@
+import { contractsForAccount } from "@/lib/starknet/railConfig";
+import { prepareActionLocator } from "@/lib/starknet/actionLocator";
+import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
 /** Private Rekber coordination and accepted-Offer settlement mapping. */
 
 import type { WalletAccountV6 } from "starknet";
@@ -66,7 +69,9 @@ async function invokeHelper(
   contractAddress: string,
   calldata: string[],
   revenueFee: bigint,
+  locatorNonce?: string,
 ): Promise<{ transaction_hash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   const token =
     CONTRACTS.messageHelperOpenNoteToken;
   const rawTreasury =
@@ -89,7 +94,7 @@ async function invokeHelper(
       ? revenueFee
       : 10n;
 
-  return account.strk20InvokeTransaction([
+  return invokeVinssActions(account, [
     {
       type: "withdraw",
       token,
@@ -106,7 +111,7 @@ async function invokeHelper(
         ...calldata,
       ],
     },
-  ]);
+  ], { locatorNonce });
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +140,7 @@ export async function sendEscrowCoordinationAction(
     prepared: PreparedEscrowSend,
   ) => void | Promise<void>,
 ): Promise<SendActionResult> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.privateEscrowHelper) {
     throw new Error(
       "NEXT_PUBLIC_PRIVATE_ESCROW_HELPER_ADDRESS is not set — see .env.local.example.",
@@ -149,8 +155,7 @@ export async function sendEscrowCoordinationAction(
     route?.recipientIdentity ??
     GROUP_RECIPIENT_IDENTITY;
 
-  const actionLocator =
-    generateActionLocator(encryptionKey);
+  const { actionLocator, locatorNonce } = prepareActionLocator(account, encryptionKey);
 
   const [senderTag, recipientTag] =
     await Promise.all([
@@ -182,13 +187,6 @@ export async function sendEscrowCoordinationAction(
       ciphertextChunks,
     );
 
-  if (onPrepared) {
-    await onPrepared({
-      actionLocator,
-      payloadCommitment,
-    });
-  }
-
   const calldata = [
     PRIVATE_ESCROW_ENVELOPE_VERSION,
     actionLocator,
@@ -211,14 +209,23 @@ export async function sendEscrowCoordinationAction(
     payload.kind === "create" ||
     payload.kind === "accept" ||
     payload.kind === "dispute"
-      ? await quoteRekberWorkflowFee()
+      ? await quoteRekberWorkflowFee(account)
       : 0n;
+
+  await preflightVinssActions(account);
+  if (onPrepared) {
+    await onPrepared({
+      actionLocator,
+      payloadCommitment,
+    });
+  }
 
   const response = await invokeHelper(
     account,
     CONTRACTS.privateEscrowHelper,
     calldata,
     revenueFee,
+    locatorNonce,
   );
 
   return {

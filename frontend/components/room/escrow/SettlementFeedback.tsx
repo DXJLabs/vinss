@@ -1,4 +1,5 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useState,
@@ -7,11 +8,11 @@ import type {
   DealType,
 } from "@/types/deal-room";
 import {
-  BACKEND_URL,
   NETWORK,
 } from "@/lib/starknet/constants";
 
 interface SettlementFeedbackProps {
+  account?: object;
   outcome:
     | "released"
     | "refunded";
@@ -30,10 +31,12 @@ type FeedbackStatus =
   | "dismissed";
 
 export function SettlementFeedback({
+  account,
   outcome,
   role,
   dealType,
 }: SettlementFeedbackProps) {
+  const BACKEND_URL = backendForAccount(account);
   const [rating, setRating] =
     useState(0);
 

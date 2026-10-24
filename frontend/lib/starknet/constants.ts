@@ -80,3 +80,21 @@ export const STRK_ADDRESS = normalizeAddress(
 export const USDC_ADDRESS = normalizeAddress(
   process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "",
 );
+
+// A public rail deployment uses independent helper instances pinned to its adapter.
+// Empty values disable Unshield; never silently reuse Shield contracts.
+export const PUBLIC_CONTRACTS = {
+  invite: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_INVITE_ADDRESS ?? ""),
+  messageHelper: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_MESSAGE_HELPER_ADDRESS ?? ""),
+  offerHelper: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_OFFER_HELPER_ADDRESS ?? ""),
+  privateEscrowHelper: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_ESCROW_HELPER_ADDRESS ?? ""),
+  escrowRekber: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_REKBER_ADDRESS ?? ""),
+  settlementCertificate: normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_CERTIFICATE_ADDRESS ?? ""),
+  privacyPool: "",
+  messageHelperOpenNoteToken: STRK_ADDRESS,
+  offerHelperOpenNoteToken: STRK_ADDRESS,
+};
+export const PUBLIC_RAIL_ADDRESS = normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_ADAPTER_ADDRESS ?? "");
+export const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_UNSHIELD_BACKEND_URL ?? "";
+
+export const PUBLIC_FEE_POLICY_ADDRESS = normalizeAddress(process.env.NEXT_PUBLIC_UNSHIELD_FEE_POLICY_ADDRESS ?? "");

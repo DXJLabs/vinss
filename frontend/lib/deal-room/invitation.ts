@@ -1,3 +1,8 @@
+import { contractsForAccount } from "@/lib/starknet/railConfig";
+import { parseTransactionMode, transactionModeOf, type TransactionMode } from "@/lib/starknet/transactionMode";
+import { consumePublicInvite, computePublicInviteCapability } from "@/lib/starknet/publicInvite";
+import { PUBLIC_RAIL_ADDRESS } from "@/lib/starknet/constants";
+import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
 import { hash, RpcProvider, type WalletAccountV6 } from "starknet";
 import { CONTRACTS, RPC_URL } from "../starknet/constants";
 import {
@@ -34,11 +39,13 @@ const inviteReadProvider = new RpcProvider({
 async function waitForInviteOnchain(
   commitment: bigint,
   attempts = 8,
+  account?: WalletAccountV6,
 ): Promise<boolean> {
+  const CONTRACTS = contractsForAccount(account);
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const result = await inviteReadProvider.callContract({
-        contractAddress: CONTRACTS.invite,
+        contractAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : CONTRACTS.invite,
         entrypoint: "get_invite",
         calldata: [toFelt(commitment)],
       });
@@ -63,6 +70,9 @@ async function waitForInviteOnchain(
 
 export interface InvitePayload {
   v: 3;
+  transactionMode?: TransactionMode;
+  publicRailAddress?: string;
+  publicInviteCommitment?: string;
   inviteId: string;
   scope: InviteScope;
   roomId: string;
@@ -192,7 +202,9 @@ async function invokeInvite(
   account: WalletAccountV6,
   inviteCalldata: Array<bigint | number | string>,
   quotedFee?: bigint,
+  inviteClaimKey?: string,
 ): Promise<{ transaction_hash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
@@ -219,7 +231,7 @@ async function invokeInvite(
   // CREATE returns one revenue OpenNoteDeposit and therefore needs the
   // authoritative room-activation quote plus the wallet-generated open note.
   if (quotedFee !== undefined) {
-    return account.strk20InvokeTransaction([
+    return invokeVinssActions(account, [
       {
         type: "withdraw" as const,
         token: CONTRACTS.messageHelperOpenNoteToken,
@@ -242,12 +254,12 @@ async function invokeInvite(
           "${openNoteIds[0]}",
         ],
       },
-    ]);
+    ], { inviteClaimKey });
   }
 
   // CONSUME has no service-fee output. It still consumes a negligible private
   // note so the containing STRK20 transaction has pool-level replay protection.
-  return account.strk20InvokeTransaction([
+  return invokeVinssActions(account, [
     {
       type: "withdraw" as const,
       token: CONTRACTS.messageHelperOpenNoteToken,
@@ -278,6 +290,7 @@ export async function createInviteToken(
     invite: EncryptedInviteToken,
   ) => void | Promise<void>,
 ): Promise<EncryptedInviteToken> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
@@ -315,14 +328,18 @@ export async function createInviteToken(
     onchainSecret = 1n;
   }
 
-  const commitment =
-    computeInviteCommitment(onchainSecret);
+  const publicCapability = transactionModeOf(account) === "unshield"
+    ? computePublicInviteCapability(toFelt(onchainSecret), account.address) : null;
+  const commitment = publicCapability ? BigInt(publicCapability.commitment) : computeInviteCommitment(onchainSecret);
 
   const expiresAtSeconds =
     Math.floor(Date.parse(expiresAt) / 1000);
 
   // Recovery metadata exists before Ready X can background the dapp.
   const payload: InvitePayload = {
+    publicInviteCommitment: publicCapability?.commitment,
+    transactionMode: transactionModeOf(account),
+    publicRailAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : undefined,
     v: INVITE_VERSION,
     inviteId: randomHex(16),
     scope: input.scope,
@@ -392,19 +409,21 @@ export async function createInviteToken(
     commitment: toFelt(commitment),
   };
 
+  await preflightVinssActions(account);
   if (onPrepared) {
     await onPrepared(invite);
   }
 
   try {
     const quotedFee =
-      await quoteRoomActivationFee();
+      await quoteRoomActivationFee(account);
 
     // CREATE = [0, commitment, expires_at, quoted_fee, open_note_id].
     await invokeInvite(
       account,
       [0, commitment, expiresAtSeconds],
       quotedFee,
+      publicCapability?.claimPublicKey,
     );
   } catch (err) {
     const message =
@@ -425,7 +444,7 @@ export async function createInviteToken(
     );
 
     const exists =
-      await waitForInviteOnchain(commitment);
+      await waitForInviteOnchain(commitment, 8, account);
 
     if (!exists) {
       throw err;
@@ -443,6 +462,7 @@ export async function createInviteToken(
     await waitForInviteOnchain(
       commitment,
       20,
+      account,
     );
 
   if (!confirmed) {
@@ -575,6 +595,12 @@ export async function decodeInviteToken(
       }
     }
 
+    parseTransactionMode(payload.transactionMode);
+    if (payload.transactionMode === "unshield") {
+      if (!payload.publicRailAddress || !payload.publicInviteCommitment || !payload.inviterAddress) return null;
+      const capability = computePublicInviteCapability(payload.onchainSecret!, payload.inviterAddress);
+      if (BigInt(capability.commitment) !== BigInt(payload.publicInviteCommitment)) return null;
+    }
     return payload as InvitePayload;
   } catch {
     // Existing V2 links remain consumable during the migration.
@@ -624,7 +650,9 @@ export interface InviteOnchainState {
 
 export async function getInviteOnchainState(
   commitment: string | bigint,
+  account?: WalletAccountV6,
 ): Promise<InviteOnchainState> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
@@ -632,7 +660,7 @@ export async function getInviteOnchainState(
   }
 
   const result = await inviteReadProvider.callContract({
-    contractAddress: CONTRACTS.invite,
+    contractAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : CONTRACTS.invite,
     entrypoint: "get_invite",
     calldata: [toFelt(commitment)],
   });
@@ -647,26 +675,31 @@ export async function getInviteOnchainState(
 
 export async function getInviteOnchainStateForSecret(
   onchainSecret: string,
+  account?: WalletAccountV6,
+  publicCommitment?: string,
 ): Promise<InviteOnchainState> {
+  if (transactionModeOf(account) === "unshield" && !publicCommitment) throw new Error("Missing public invite commitment.");
   return getInviteOnchainState(
-    computeInviteCommitment(onchainSecret),
+    transactionModeOf(account) === "unshield" ? publicCommitment! : computeInviteCommitment(onchainSecret),
+    account,
   );
 }
 
 export async function consumeInviteOnchain(
   account: WalletAccountV6,
   onchainSecret: string,
+  publicCommitment?: string,
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
     );
   }
 
-  const response = await invokeInvite(
-    account,
-    [1, onchainSecret],
-  );
+  const response = transactionModeOf(account) === "unshield"
+    ? await consumePublicInvite(account, onchainSecret, publicCommitment ?? "")
+    : await invokeInvite(account, [1, onchainSecret]);
 
   return {
     transactionHash: response.transaction_hash,

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
 import {
   deriveGroupKeyFromSecret,
@@ -44,6 +44,7 @@ export function useRoomGroups({
   active,
   setError,
 }: UseRoomGroupsOptions) {
+  const BACKEND_URL = backendForAccount(session?.account);
   const [groups, setGroups] =
     useState<LocalRoomGroup[]>([]);
 
@@ -69,7 +70,7 @@ export function useRoomGroups({
     setGroups(
       loadLocalGroups(roomId),
     );
-  }, [roomId]);
+  }, [BACKEND_URL,roomId]);
 
   const selectedGroup =
     useMemo(
@@ -116,7 +117,7 @@ export function useRoomGroups({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [BACKEND_URL,
     selectedGroup?.id,
     selectedGroup?.groupSecret,
   ]);
@@ -384,7 +385,7 @@ export function useRoomGroups({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,

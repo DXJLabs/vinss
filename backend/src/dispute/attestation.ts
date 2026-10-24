@@ -85,7 +85,7 @@ export function buildDisputeAttestationTypedData(
       role,
     );
 
-  return {
+  const data: TypedData = {
     types: {
       StarknetDomain:
         DOMAIN_TYPES,
@@ -142,6 +142,15 @@ export function buildDisputeAttestationTypedData(
         "AutoSplit",
     },
   };
+  if (config.contracts.publicRailAdapter) {
+    data.types.DisputeAttestation!.push(
+      { name: "Public Rail", type: "ContractAddress" },
+      { name: "Custody Contract", type: "ContractAddress" },
+    );
+    (data.message as Record<string, unknown>)["Public Rail"] = num.toHex(config.contracts.publicRailAdapter);
+    (data.message as Record<string, unknown>)["Custody Contract"] = num.toHex(config.contracts.escrowRekber);
+  }
+  return data;
 }
 
 export interface DisputeAttestations {

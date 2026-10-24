@@ -1,4 +1,5 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useEffect,
@@ -8,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+
 import { discoverMessages } from "@/lib/deal-room/messaging";
 import {
   pollPresence,
@@ -54,6 +55,7 @@ export function useRoomParticipants({
   channelKey,
   active,
 }: UseRoomParticipantsOptions): UseRoomParticipantsResult {
+  const BACKEND_URL = backendForAccount(session?.account);
   const [participants, setParticipants] =
     useState<RoomParticipant[]>([]);
 
@@ -125,7 +127,7 @@ export function useRoomParticipants({
     return () => {
       cancelled = true;
     };
-  }, [roomId, session?.account.address]);
+  }, [BACKEND_URL, roomId, session?.account.address]);
 
   async function refreshParticipants(
     silent = true,
@@ -402,7 +404,7 @@ export function useRoomParticipants({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [BACKEND_URL,
     roomId,
     channelKey,
     session?.account.address,
@@ -463,7 +465,7 @@ export function useRoomParticipants({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     channelKey,
@@ -487,7 +489,7 @@ export function useRoomParticipants({
       }
 
       return [...unique.values()];
-    }, [
+    }, [BACKEND_URL,
       session?.account.address,
       selfRoutingIdentities.join("|"),
     ]);

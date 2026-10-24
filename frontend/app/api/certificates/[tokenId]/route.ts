@@ -22,6 +22,9 @@ export async function GET(
     );
   }
 
+  const rail = request.nextUrl.searchParams.get("rail") ?? "shield";
+  if (rail !== "shield" && rail !== "unshield") return NextResponse.json({ error: "Invalid certificate rail." }, { status: 400 });
+  const railQuery = `?rail=${rail}`;
   const origin = request.nextUrl.origin;
 
   return NextResponse.json(
@@ -29,10 +32,11 @@ export async function GET(
       name: `VINSS Settlement Certificate #${tokenId}`,
       description:
         "Optional public evidence self-claimed by one party after a VINSS Escrow Rekber release on Starknet. It is that wallet's acknowledgement of the public settlement record, not proof of hidden-note ownership by itself. Private messages, Offer terms, deal notes, secrets, asset and amount are omitted; public chain records may still be correlated.",
-      image: `${origin}/api/certificates/${tokenId}/image`,
-      external_url: `${origin}/certificate/${tokenId}`,
+      image: `${origin}/api/certificates/${tokenId}/image${railQuery}`,
+      external_url: `${origin}/certificate/${tokenId}${railQuery}`,
       attributes: [
         { trait_type: "Protocol", value: "VINSS" },
+        { trait_type: "Execution Rail", value: rail },
         { trait_type: "Evidence", value: "Rekber release" },
         { trait_type: "Network", value: NETWORK },
         { trait_type: "Privacy", value: "Private terms omitted" },

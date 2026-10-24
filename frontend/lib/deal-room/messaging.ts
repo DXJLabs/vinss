@@ -1,3 +1,6 @@
+import { contractsForAccount } from "@/lib/starknet/railConfig";
+import { prepareActionLocator } from "@/lib/starknet/actionLocator";
+import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
 /**
  * Messaging domain module — matches contracts/messaging/messaging_interfaces.cairo and
  * messaging_types.cairo exactly:
@@ -59,6 +62,7 @@ export async function sendMessage(
   buildAdditionalInvokes?:
     AdditionalPrivacyInvokeBuilder,
 ): Promise<SendActionResult> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.messageHelper) {
     throw new Error(
       "NEXT_PUBLIC_MESSAGE_HELPER_ADDRESS is not set — see .env.local.example.",
@@ -75,7 +79,7 @@ export async function sendMessage(
   const recipientIdentity =
     route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
 
-  const actionLocator = generateActionLocator(encryptionKey);
+  const { actionLocator, locatorNonce } = prepareActionLocator(account, encryptionKey);
 
   const [senderTag, recipientTag] = await Promise.all([
     deriveMessageRoutingTag(
@@ -137,7 +141,7 @@ export async function sendMessage(
   // Fetch the authoritative minimum immediately before Ready X builds
   // the private transaction. The helper accepts this quote (or a higher one)
   // and validates it against its immutable FeePolicy reference.
-  const quotedFee = await quoteMessageFee();
+  const quotedFee = await quoteMessageFee(account);
 
   const treasuryAddress =
     process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
@@ -188,6 +192,7 @@ export async function sendMessage(
    * Otherwise a FeePolicy/config failure can create a ghost pending
    * message even though Ready X was never invoked.
    */
+  await preflightVinssActions(account);
   if (onPrepared) {
     await onPrepared({
       actionLocator,
@@ -197,7 +202,7 @@ export async function sendMessage(
 
   let response;
   try {
-    response = await account.strk20InvokeTransaction(debugActions);
+    response = await invokeVinssActions(account, debugActions, { locatorNonce });
   } catch (err) {
     // Wallet errors may contain raw ciphertext, calldata or secret metadata.
     // Classify without serializing, rethrowing or printing the raw exception.

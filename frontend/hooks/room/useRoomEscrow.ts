@@ -1,4 +1,5 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useEffect,
@@ -28,7 +29,6 @@ import type {
   MessageRoute,
 } from "@/lib/privacy/messageRouting";
 import {
-  BACKEND_URL,
 } from "@/lib/starknet/constants";
 
 export interface DiscoveredEscrowAction {
@@ -61,6 +61,7 @@ export function useRoomEscrow({
   participants,
   active,
 }: UseRoomEscrowOptions) {
+  const BACKEND_URL = backendForAccount(session?.account);
   const [
     messagingIdentity,
     setMessagingIdentity,
@@ -122,7 +123,7 @@ export function useRoomEscrow({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [BACKEND_URL,
     roomId,
     session?.account.address,
   ]);
@@ -416,7 +417,7 @@ export function useRoomEscrow({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,

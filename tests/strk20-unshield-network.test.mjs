@@ -24,10 +24,10 @@ test("blocks unverified or unsupported chain IDs, including invalid config", () 
   assert.throws(() => assertUnshieldNetwork("devnet", SEPOLIA, SEPOLIA));
 });
 
-test("public mode preflights wallet and RPC before ordinary account execution", () => {
-  const source = readFileSync(new URL("../frontend/components/room/escrow/PublicTransferPanel.tsx", import.meta.url), "utf8");
-  assert.match(source, /walletV6\.requestChainId\(session\.wallet\)/);
-  assert.match(source, /getProvider\(\)\.getChainId\(\)/);
-  assert.ok(source.indexOf("assertUnshieldNetwork(") < source.indexOf("session.account.execute(call)"));
-  assert.doesNotMatch(source, /strk20InvokeTransaction\(/);
+test("public mode preflights wallet, RPC and deployed adapter before ordinary execution", () => {
+  const ui = readFileSync(new URL("../frontend/lib/starknet/vinssExecution.ts", import.meta.url), "utf8");
+  assert.match(ui, /walletV6.requestChainId\(wallet\)/);
+  assert.match(ui, /assertUnshieldNetwork\(NETWORK, walletChain, rpcChain\)/);
+  assert.match(ui, /get_configuration/);
+  assert.ok(ui.indexOf("await assertPublicRailReady(account)") < ui.indexOf("return account.execute(calls)"));
 });

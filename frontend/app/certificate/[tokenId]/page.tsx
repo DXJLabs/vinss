@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { createRailContext, parseTransactionMode } from "@/lib/starknet/transactionMode";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -44,6 +45,12 @@ export default function CertificatePage() {
   const params =
     useParams<{ tokenId: string }>();
 
+  const searchParams = useSearchParams();
+  const rawRail = searchParams.get("rail") ?? "shield";
+  const rail = rawRail === "shield" || rawRail === "unshield" ? rawRail : null;
+  const railContext = useMemo(() => rail ? createRailContext(parseTransactionMode(rail)) : null, [rail]);
+  const railQuery = rail === "unshield" ? "?rail=unshield" : "?rail=shield";
+
   const tokenId = useMemo(
     () => params.tokenId ?? "",
     [params.tokenId],
@@ -63,6 +70,7 @@ export default function CertificatePage() {
     >("loading");
 
   useEffect(() => {
+    if (!railContext) { setStatus("missing"); return; }
     let cancelled = false;
 
     setStatus("loading");
@@ -73,6 +81,7 @@ export default function CertificatePage() {
         const next =
           await getSettlementCertificate(
             BigInt(tokenId),
+            railContext,
           );
 
         if (cancelled) return;
@@ -90,6 +99,7 @@ export default function CertificatePage() {
           await getRekberProof(
             next.custodyCommitment,
             "released",
+            railContext,
           );
 
         if (!cancelled) {
@@ -105,7 +115,7 @@ export default function CertificatePage() {
     return () => {
       cancelled = true;
     };
-  }, [tokenId]);
+  }, [tokenId, railContext]);
 
   return (
     <main className="min-h-screen overflow-hidden bg-ink text-paper">
@@ -180,7 +190,7 @@ export default function CertificatePage() {
                 <div className="absolute inset-4 rounded-[2rem] bg-signal/20 blur-[45px]" />
 
                 <img
-                  src={`/api/certificates/${tokenId}/image?v=2`}
+                  src={`/api/certificates/${tokenId}/image${railQuery}&v=2`}
                   alt={`VINSS Settlement Certificate #${tokenId}`}
                   className="relative w-full rounded-[22px] border border-signal/25 bg-vault shadow-[0_28px_80px_rgba(0,0,0,0.55)]"
                   style={{
@@ -226,7 +236,7 @@ export default function CertificatePage() {
               )}
 
               <a
-                href={`/api/certificates/${tokenId}`}
+                href={`/api/certificates/${tokenId}${railQuery}`}
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-2xl border border-wire/70 bg-paper/[0.025] p-4 transition hover:border-signal/30 hover:bg-signal/[0.035]"

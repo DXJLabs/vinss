@@ -222,6 +222,9 @@ export interface DisputeAgentPartyPacket {
 }
 
 export interface EscrowActionPayload {
+  transactionMode?: "shield" | "unshield";
+  publicRailAddress?: string;
+  publicRekberAddress?: string;
   kind: EscrowActionKind;
 
   // Pairwise encryption provides confidentiality, while these SNIP-12 fields

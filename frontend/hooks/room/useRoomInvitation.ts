@@ -553,7 +553,7 @@ export function useRoomInvitation({
           const state =
             await getInviteOnchainState(
               preparedCommitment,
-            );
+             session?.account,);
 
           if (state.exists) {
             updateInvite(
@@ -639,7 +639,7 @@ export function useRoomInvitation({
             const state =
               await getInviteOnchainState(
                 invite.commitment,
-              );
+               session?.account,);
 
             if (
               cancelled ||

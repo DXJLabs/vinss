@@ -9,9 +9,7 @@ import {
   StarkIdentity,
 } from "@/components/StarkIdentity";
 
-import {
-  BACKEND_URL,
-} from "@/lib/starknet/constants";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 interface LoyaltyState {
   network: string;
@@ -36,10 +34,13 @@ interface LoyaltyState {
 }
 
 export function LoyaltyPanel({
+  account,
   address,
 }: {
+  account?: object;
   address?: string | null;
 }) {
+  const BACKEND_URL = backendForAccount(account);
   const [data, setData] =
     useState<LoyaltyState | null>(
       null,
@@ -126,7 +127,7 @@ export function LoyaltyPanel({
         onVisible,
       );
     };
-  }, [address]);
+  }, [address, BACKEND_URL]);
 
   if (!address) {
     return (

@@ -1,4 +1,5 @@
 "use client";
+import type { WalletAccountV6 } from "starknet";
 
 import {
   useEffect,
@@ -358,9 +359,11 @@ export function EscrowAgreedAmount({
 }
 
 export function EscrowPriceBreakdown({
+  account,
   amount,
   asset,
 }: {
+  account?: WalletAccountV6;
   amount: string;
   asset: string;
 }) {
@@ -414,6 +417,7 @@ export function EscrowPriceBreakdown({
     void quoteRekberFee(
       settlementAsset.address,
       principalBaseUnits,
+      account,
     )
       .then((quote) => {
         if (!cancelled) {
@@ -434,7 +438,7 @@ export function EscrowPriceBreakdown({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [account,
     amount,
     settlementAsset?.address,
     settlementAsset?.decimals,

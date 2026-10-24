@@ -1,0 +1,19 @@
+# Full Deal Room Unshield
+
+User requirement: VINSS existing is Shield/STRK20. Add ordinary Starknet execution for the same invite, onchain encrypted messaging, offers and real Rekber lifecycle. Default Shield, existing ciphertext format and Rekber 2%/floor/reserve must be preserved. A direct ERC20 payment form does not implement this requirement.
+
+Chosen engineering approach: a separate immutable public adapter controlling new instances of the existing helper/Rekber contracts, with their privacy_pool set to that adapter. Original Shield deployments and authorization checks are unchanged. The adapter accepts normal account.execute calls and public ERC20 allowances, invokes only configured helpers, drains exact returned allowances to treasury/bound escrow recipients, and uses narrow typed endpoints. New deployments are required; the UI must fail closed when unconfigured. No claims of live transactions or deployment without evidence.
+
+Alternatives considered: loosening existing pool guards would expose privileged settlement/ciphertext operations and is rejected; an entirely rewritten public escrow would duplicate the tested economic state machine and is rejected. Reusing instances behind a strictly authorized public adapter preserves existing custody rules while exposing ordinary wallet funding and payout.
+
+Messages and offers remain encrypted before transaction construction and ciphertext is stored in helpers/onchain. Public account addresses, amounts, fee transfers, timing and escrow roles are visible on this rail. This reduced metadata privacy must be stated plainly; never render plaintext terms in calldata.
+
+Invitation consumption uses a per-invite Stark signing capability whose secret stays inside the encrypted link. Creation binds the key to creator/chain/adapter; consumption signs a caller/chain/adapter-bound digest and records the exact consumer. Public locators similarly bind caller/chain/adapter/nonce before helper forwarding, preventing copied-locator squatting. Old invite payloads default to Shield. New encrypted payloads carry transactionMode; joining and recovery use that exact rail. Normal account nonce replay applies to public execution; no STRK20 dust withdrawal is needed.
+
+Public Rekber deposits atomically transfer exact principal+unchanged quoted fee from caller. Bind custody to caller payer and explicitly selected payee. Enforce role checks for every public lifecycle action, and fixed payout recipient per role/action. Existing helpers continue verifying capability commitments, review/revision windows, dispute resolution and reserves. No arbitrary target invocation/output recipient; all returned token amounts are verified and transferred atomically.
+
+Mode belongs to the room, persisted and carried in encrypted invites. Do not relabel a shield-funded custody as public. Legacy rooms/entries stay Shield unless explicitly selected before initiating a public workflow. A public-mode session dispatches every relevant action via the public gateway, never via wallet STRK20; read paths and quote caches use the selected deployment. Discovery must include configured public helper events without merging checkpoint identities.
+
+A separate onchain public FeePolicy wrapper returns lower quotes for actions 1/2/3 and preserves Rekber action 4. Rekber itself uses unchanged original revenue policy and oracle configuration. Source changes do not update live deployments.
+
+Verification: negative adapter authorization/recipient/amount/allowance/replay tests; exact wallet call runtime tests across all routes; ciphertext codec/privacy tests; invite rail roundtrip and recovery; account/network preflight; frontend/backend typechecks and builds; Cairo compile/test when compiler available. Missing deployment configuration disables Unshield with actionable text rather than silently falling back.

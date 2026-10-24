@@ -1,4 +1,7 @@
 "use client";
+import { accountForMode, parseTransactionMode, transactionModeOf, type TransactionMode } from "@/lib/starknet/transactionMode";
+import { publicInviteConsumedBy } from "@/lib/starknet/publicInvite";
+import { PUBLIC_RAIL_ADDRESS } from "@/lib/starknet/constants";
 
 import Link from "next/link";
 import {
@@ -34,6 +37,7 @@ interface LocalRoom {
   roomSecret: string;
   createdAt: string;
   joinedVia?: InviteScope;
+  transactionMode?: TransactionMode;
 }
 
 const ROOM_STORAGE_KEY =
@@ -162,6 +166,8 @@ function clearRecovery(inviteId: string) {
 
 async function waitConsumed(
   onchainSecret: string,
+  account: InviteConsumeAccount,
+  publicCommitment?: string,
   attempts = 10,
 ) {
   for (let i = 0; i < attempts; i++) {
@@ -169,10 +175,12 @@ async function waitConsumed(
       const state =
         await getInviteOnchainStateForSecret(
           onchainSecret,
+          account,
+          publicCommitment,
         );
 
       if (state.exists && state.consumed) {
-        return true;
+        return transactionModeOf(account) === "unshield" ? publicInviteConsumedBy(publicCommitment ?? "", account.address) : true;
       }
     } catch {}
 
@@ -190,6 +198,17 @@ async function ensureInviteConsumed(
   account: InviteConsumeAccount,
   invite: InvitePayload,
 ) {
+  const mode = parseTransactionMode(invite.transactionMode);
+  if (mode === "unshield" && (!invite.publicRailAddress || BigInt(invite.publicRailAddress) !== BigInt(PUBLIC_RAIL_ADDRESS || "0"))) {
+    throw new Error("This Unshield invitation belongs to a different or unconfigured public deployment.");
+  }
+  const storedRooms = JSON.parse(window.localStorage.getItem(ROOM_STORAGE_KEY) ?? "[]") as LocalRoom[];
+  const existing = storedRooms.find(room => room.id === invite.roomId);
+  const lockedMode = window.localStorage.getItem(`vinss:rail-lock:${invite.roomId}`);
+  if ((lockedMode && lockedMode !== mode) || (existing && parseTransactionMode(existing.transactionMode) !== mode)) {
+    throw new Error("This device already has this room on another transaction rail. Its existing deals cannot be switched by an invitation.");
+  }
+  account = accountForMode(account, mode, invite.roomId);
   const pending =
     loadRecovery(
       invite,
@@ -203,6 +222,8 @@ async function ensureInviteConsumed(
       const candidate =
         await getInviteOnchainStateForSecret(
           invite.onchainSecret,
+          account,
+          invite.publicInviteCommitment,
         );
 
       if (candidate.exists) {
@@ -223,6 +244,10 @@ async function ensureInviteConsumed(
   }
 
   if (state.consumed) {
+    if (mode === "unshield") {
+      if (await publicInviteConsumedBy(invite.publicInviteCommitment ?? "", account.address)) return;
+      throw new Error("INVITE_ALREADY_CONSUMED_BY_ANOTHER_WALLET");
+    }
     if (pending) return;
 
     throw new Error(
@@ -241,11 +266,14 @@ async function ensureInviteConsumed(
     await consumeInviteOnchain(
       account,
       invite.onchainSecret,
+      invite.publicInviteCommitment,
     );
   } catch (error) {
     if (
       await waitConsumed(
         invite.onchainSecret,
+        account,
+        invite.publicInviteCommitment,
       )
     ) {
       return;
@@ -378,8 +406,10 @@ export default function InvitePage() {
             new Date().toISOString(),
           joinedVia:
             invite.scope,
+          transactionMode: parseTransactionMode(invite.transactionMode),
         };
 
+        window.localStorage.setItem(`vinss:rail-lock:${invite.roomId}`, parseTransactionMode(invite.transactionMode));
         const raw =
           window.localStorage.getItem(
             ROOM_STORAGE_KEY,

@@ -22,6 +22,7 @@ import {
   storeDisputeAttestation,
 } from "../dispute/attestationStore.js";
 import {
+  assertDisputeBindingDeployment,
   sanitizeDisputeRekberBinding,
   verifyDisputeRekberBinding,
 } from "../dispute/binding.js";
@@ -148,6 +149,8 @@ export function createDisputeRouter(
             body.binding,
           );
 
+        assertDisputeBindingDeployment(config, binding);
+
         const custody =
           await readAndVerifyDisputeCustody(
             config,
@@ -228,6 +231,8 @@ export function createDisputeRouter(
           sanitizeDisputeRekberBinding(
             body.binding,
           );
+
+        assertDisputeBindingDeployment(config, binding);
 
         const role =
           sanitizeRole(
@@ -333,6 +338,8 @@ export function createDisputeRouter(
           sanitizeDisputeRekberBinding(
             body.binding,
           );
+
+        assertDisputeBindingDeployment(config, binding);
 
         /*
          * Status polling is also the safe migration path for attestations
@@ -474,6 +481,8 @@ export function createDisputeRouter(
           sanitizeDisputeRekberBinding(
             body.binding,
           );
+
+        assertDisputeBindingDeployment(config, binding);
 
         /*
          * Re-read every authority at evaluation/execution time.

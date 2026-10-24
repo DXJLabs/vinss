@@ -3,16 +3,16 @@
  * Registration does not create a bridge or deploy a contract.
  */
 export type MessageChainFamily = "starknet" | "canton" | "evm";
-export type MessageTransportRail = "strk20" | "daml" | "contract";
+export type MessageTransportRail = "strk20" | "public" | "daml" | "contract";
 export function makeMessageTransportId(
   family: MessageChainFamily,
   chain: string,
   rail: MessageTransportRail,
 ): string {
   if (!["starknet","canton","evm"].includes(family) ||
-      !["strk20","daml","contract"].includes(rail) ||
+      !["strk20","public","daml","contract"].includes(rail) ||
       !/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$/.test(chain)) throw new Error("Invalid message transport identity.");
-  if ((family === "starknet" && rail !== "strk20") ||
+  if ((family === "starknet" && rail !== "strk20" && rail !== "public") ||
       (family === "canton" && rail !== "daml") ||
       (family === "evm" && rail !== "contract")) throw new Error("Invalid chain transport rail.");
   return family + ":" + chain.toLowerCase() + ":" + rail;
@@ -25,7 +25,7 @@ export interface MessageTransport<S, R, D, V> {
 export class MessageTransportRouter<S=unknown,R=unknown,D=unknown,V=unknown> {
   private readonly transports = new Map<string, MessageTransport<S,R,D,V>>();
   register(t: MessageTransport<S,R,D,V>): void {
-    if (typeof t.id !== "string" || !/^(starknet|canton|evm):[a-z0-9][a-z0-9_-]{1,63}:(strk20|daml|contract)$/.test(t.id)) {
+    if (typeof t.id !== "string" || !/^(starknet|canton|evm):[a-z0-9][a-z0-9_-]{1,63}:(strk20|public|daml|contract)$/.test(t.id)) {
       throw new Error("Invalid message transport identity.");
     }
     const [family,chain,rail] = t.id.split(":");

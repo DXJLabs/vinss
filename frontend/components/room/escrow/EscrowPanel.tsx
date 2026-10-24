@@ -1,4 +1,6 @@
 "use client";
+import { transactionModeOf } from "@/lib/starknet/transactionMode";
+import { contractsForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useEffect,
@@ -60,6 +62,8 @@ import {
   REKBER_COORDINATION_VERSION,
   signRekberAcceptance,
   signRekberSetup,
+  assertRekberRail,
+  rekberRailFields,
   verifyRekberAcceptance,
   verifyRekberSetup,
 } from "@/lib/deal-room/rekberAuthorization";
@@ -277,7 +281,7 @@ export function EscrowPanel({
       } catch {
         return null;
       }
-    }, [
+    }, [session?.account,
       accepted,
       acceptedOffer?.actionLocator,
     ]);
@@ -311,7 +315,7 @@ export function EscrowPanel({
     }
 
     return "";
-  }, [
+  }, [session?.account,
     accepted?.senderAddress,
     accepted?.recipientAddress,
     walletAddress,
@@ -338,7 +342,7 @@ export function EscrowPanel({
           canonicalLocator(entry.actionLocator) === rootLocator,
       ) ?? null
     );
-  }, [
+  }, [session?.account,
     accepted?.rootOfferLocator,
     offerEntries,
   ]);
@@ -582,7 +586,7 @@ export function EscrowPanel({
         timer,
       );
     };
-  }, [
+  }, [session?.account,
     refundAfter,
     custodyState?.consumed,
   ]);
@@ -634,7 +638,7 @@ export function EscrowPanel({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [session?.account,
     accepted,
     createAction,
     acceptAction,
@@ -769,7 +773,14 @@ export function EscrowPanel({
       };
     }
 
-    const matches =
+    const publicPartiesMatch = transactionModeOf(session?.account) !== "unshield" || (
+      Boolean(custodyState.payerAddress && custodyState.payeeAddress) &&
+      sameStarknetAddress(custodyState.payerAddress!, agreedPayerAddress) &&
+      sameStarknetAddress(custodyState.payeeAddress!, agreedPayeeAddress)
+    );
+    try { if (session) { assertRekberRail(session.account, createAction); assertRekberRail(session.account, acceptAction); } }
+    catch { return { verified: false, reason: "The Rekber agreement uses another transaction rail or deployment." }; }
+    const matches = publicPartiesMatch &&
       custodyState.releaseAuthorizationCommitment ===
         expected.releaseAuthorizationCommitment &&
       custodyState.payeeClaimCommitment ===
@@ -835,13 +846,13 @@ export function EscrowPanel({
           reason:
             "The on-chain token, amount, timeout, or settlement commitments do not match the encrypted agreement.",
         };
-  }, [
+  }, [session?.account,
     custodyState,
     accepted,
     createAction,
     acceptAction,
     refundAfter,
-    coordinationAuthorized,
+    coordinationAuthorized, session?.account, agreedPayerAddress, agreedPayeeAddress,
   ]);
   const custodyMismatch = Boolean(
     custodyState &&
@@ -916,11 +927,11 @@ export function EscrowPanel({
         )
       : "0";
   const rekberConfigured = Boolean(
-    CONTRACTS.escrowRekber,
+    contractsForAccount(session?.account).escrowRekber,
   );
   const certificateConfigured =
     Boolean(
-      CONTRACTS.settlementCertificate,
+      contractsForAccount(session?.account).settlementCertificate,
     );
   const certificateTokenId =
     custodyCommitment && role
@@ -1004,7 +1015,7 @@ export function EscrowPanel({
 
       finishRekberAction(action);
     }
-  }, [
+  }, [session?.account,
     discoveredCreate
       ?.transactionHash,
     discoveredAccept
@@ -1043,7 +1054,7 @@ export function EscrowPanel({
       null;
     setPendingRekberAction(null);
     coordinationLockRef.current = false;
-  }, [
+  }, [session?.account,
     acceptedOffer?.actionLocator,
     walletAddress,
   ]);
@@ -1061,7 +1072,7 @@ export function EscrowPanel({
     if (fromCreate) {
       setCustodyCommitment(fromCreate);
     }
-  }, [
+  }, [session?.account,
     acceptedOffer?.actionLocator,
     accepted,
     discoveredCreate?.actionLocator,
@@ -1121,7 +1132,7 @@ export function EscrowPanel({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [session?.account,
     roomId,
     session?.account.address,
     channelKey,
@@ -1143,7 +1154,7 @@ export function EscrowPanel({
       const next =
         await getRekberCustody(
           custodyCommitment,
-        );
+         session?.account,);
 
       if (cancelled) return;
       setCustodyState(next);
@@ -1153,7 +1164,7 @@ export function EscrowPanel({
           await getRekberProof(
             custodyCommitment,
             "funded",
-          );
+           session?.account,);
 
         if (
           !cancelled &&
@@ -1176,7 +1187,7 @@ export function EscrowPanel({
           await getRekberProof(
             custodyCommitment,
             outcome,
-          );
+           session?.account,);
 
         if (
           !cancelled &&
@@ -1199,7 +1210,7 @@ export function EscrowPanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [session?.account,
     custodyCommitment,
     rekberConfigured,
   ]);
@@ -1223,7 +1234,7 @@ export function EscrowPanel({
           await isSettlementCertificateClaimed(
             custodyCommitment,
             role,
-          );
+           session?.account,);
 
         if (!cancelled) {
           setCertificateClaimed(
@@ -1245,7 +1256,7 @@ export function EscrowPanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [session?.account,
     released,
     custodyCommitment,
     role,
@@ -1372,6 +1383,7 @@ export function EscrowPanel({
         };
 
         const unsignedPayload: EscrowActionPayload = {
+          ...rekberRailFields(session.account),
           kind: "create",
           coordinationVersion:
             REKBER_COORDINATION_VERSION,
@@ -1627,6 +1639,7 @@ export function EscrowPanel({
         };
 
         const unsignedPayload: EscrowActionPayload = {
+          ...rekberRailFields(session.account),
           kind: "accept",
           coordinationVersion:
             REKBER_COORDINATION_VERSION,
@@ -1908,6 +1921,8 @@ export function EscrowPanel({
         );
       }
 
+      assertRekberRail(session.account, createAction);
+      assertRekberRail(session.account, acceptAction);
       const amount =
         parseSettlementAmount(
           accepted.amount,
@@ -1947,6 +1962,7 @@ export function EscrowPanel({
             token:
               settlementAsset.address,
             amount,
+            payeeAddress: agreedPayeeAddress,
           },
         );
 
@@ -2590,7 +2606,7 @@ export function EscrowPanel({
                 </p>
               </div>
 
-              <EscrowPriceBreakdown
+              <EscrowPriceBreakdown account={session?.account}
                 amount={accepted.amount}
                 asset={accepted.asset}
               />
@@ -2927,7 +2943,7 @@ export function EscrowPanel({
                     </details>
                     {role === "payee" && (
                       <p className="mt-2 text-[9px] leading-relaxed text-amber/70">
-                        Confirm the payment appears in your private wallet balance before claiming your certificate.
+                        Confirm the payment appears in your wallet balance before claiming your certificate.
                       </p>
                     )}
                   </div>
@@ -2949,7 +2965,7 @@ export function EscrowPanel({
                       <span className="flex items-center gap-3">
                         {certificateTokenId && (
                           <a
-                            href={`/certificate/${certificateTokenId.toString()}`}
+                            href={`/certificate/${certificateTokenId.toString()}?rail=${transactionModeOf(session?.account)}`}
                             className="text-[9px] text-signal"
                           >
                             Certificate ↗
@@ -3005,7 +3021,7 @@ export function EscrowPanel({
             )}
 
             {!resolved && (
-              <SettlementFeedback
+              <SettlementFeedback account={session?.account}
                 outcome={
                   released
                     ? "released"

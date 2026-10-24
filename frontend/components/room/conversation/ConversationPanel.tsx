@@ -1,4 +1,5 @@
 "use client";
+import type { WalletAccountV6 } from "starknet";
 
 import type {
   MutableRefObject,
@@ -41,6 +42,7 @@ export type {
 } from "@/components/room/conversation/types";
 
 interface ConversationPanelProps {
+  account?: WalletAccountV6;
   roomId: string;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
@@ -120,6 +122,7 @@ interface ConversationPanelProps {
 }
 
 export function ConversationPanel({
+  account,
   roomId,
   entries,
   offerEntries,
@@ -255,7 +258,7 @@ export function ConversationPanel({
           }
         />
       ) : (
-        <DirectConversationPanel
+        <DirectConversationPanel account={account}
           entries={entries}
           offerEntries={
             offerEntries

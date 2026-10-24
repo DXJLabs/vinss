@@ -1,9 +1,11 @@
+import type { WalletAccountV6 } from "starknet";
 import {
   getRekberCustody,
   type RekberCustodyState,
 } from "@/lib/deal-room/settlement";
 
 interface WaitForFulfillmentConfirmationInput {
+  account?: WalletAccountV6;
   custodyCommitment: bigint;
   evidenceCommitment: bigint;
   previousRoundsRemaining: number;
@@ -20,6 +22,7 @@ interface WaitForFulfillmentConfirmationInput {
  * Starknet has already accepted the transaction.
  */
 export async function waitForFulfillmentConfirmation({
+  account,
   custodyCommitment,
   evidenceCommitment,
   previousRoundsRemaining,
@@ -36,7 +39,7 @@ export async function waitForFulfillmentConfirmation({
       const state =
         await getRekberCustody(
           custodyCommitment,
-        );
+         account,);
 
       const confirmed =
         Boolean(state) &&

@@ -9,6 +9,9 @@ import {
 
 import {
   BACKEND_URL,
+  PUBLIC_BACKEND_URL,
+  PUBLIC_RAIL_ADDRESS,
+  PUBLIC_CONTRACTS,
 } from "@/lib/starknet/constants";
 import {
   sameStarknetAddress,
@@ -118,8 +121,14 @@ export interface DisputeAgentResult {
  * Minimal proof that the Payer/Payee are the wallets that signed the original
  * Rekber Agreement. No private Rekber secret/preimage is disclosed.
  */
+interface DisputeRailBinding {
+  transactionMode?: "shield" | "unshield";
+  publicRailAddress?: string;
+  publicRekberAddress?: string;
+}
+
 export interface DisputeRekberBinding {
-  setup: {
+  setup: DisputeRailBinding & {
     custodyCommitment: string;
     dealOfferLocator: string;
     dealTermsCommitment: string;
@@ -134,7 +143,7 @@ export interface DisputeRekberBinding {
     fulfillmentDeadline: string;
     signature: string[];
   };
-  acceptance: {
+  acceptance: DisputeRailBinding & {
     custodyCommitment: string;
     dealOfferLocator: string;
     dealTermsCommitment: string;
@@ -163,6 +172,37 @@ function bindingField(
   return value;
 }
 
+function bindingRailFields(action: DisputeRailBinding): DisputeRailBinding {
+  if (action.transactionMode === undefined || action.transactionMode === "shield") {
+    if (action.publicRailAddress !== undefined || action.publicRekberAddress !== undefined) {
+      throw new Error("Shield Rekber binding cannot contain public deployment fields.");
+    }
+    return action.transactionMode === "shield" ? { transactionMode: "shield" } : {};
+  }
+  if (action.transactionMode !== "unshield") throw new Error("Unsupported Rekber transaction mode.");
+  const publicRailAddress = bindingField(action.publicRailAddress, "public rail");
+  const publicRekberAddress = bindingField(action.publicRekberAddress, "public custody contract");
+  if (!PUBLIC_RAIL_ADDRESS || !PUBLIC_CONTRACTS.escrowRekber ||
+      BigInt(publicRailAddress) !== BigInt(PUBLIC_RAIL_ADDRESS) ||
+      BigInt(publicRekberAddress) !== BigInt(PUBLIC_CONTRACTS.escrowRekber)) {
+    throw new Error("Rekber arbitration binding belongs to another public deployment.");
+  }
+  return { transactionMode: "unshield", publicRailAddress, publicRekberAddress };
+}
+
+function disputeBackend(binding: DisputeRekberBinding): string {
+  const setup = bindingRailFields(binding.setup);
+  const acceptance = bindingRailFields(binding.acceptance);
+  if ((setup.transactionMode ?? "shield") !== (acceptance.transactionMode ?? "shield") ||
+      setup.publicRailAddress !== acceptance.publicRailAddress ||
+      setup.publicRekberAddress !== acceptance.publicRekberAddress) {
+    throw new Error("Rekber approvals use different transaction rails.");
+  }
+  if (setup.transactionMode !== "unshield") return BACKEND_URL;
+  if (!PUBLIC_BACKEND_URL) throw new Error("Unshield arbitration backend is not configured.");
+  return PUBLIC_BACKEND_URL.replace(/\/$/, "");
+}
+
 export function buildDisputeRekberBinding(
   setup: EscrowActionPayload,
   acceptance: EscrowActionPayload,
@@ -180,8 +220,17 @@ export function buildDisputeRekberBinding(
     );
   }
 
+  const setupRail = bindingRailFields(setup);
+  const acceptanceRail = bindingRailFields(acceptance);
+  if ((setupRail.transactionMode ?? "shield") !== (acceptanceRail.transactionMode ?? "shield") ||
+      setupRail.publicRailAddress !== acceptanceRail.publicRailAddress ||
+      setupRail.publicRekberAddress !== acceptanceRail.publicRekberAddress) {
+    throw new Error("Rekber approvals use different transaction rails.");
+  }
+
   return {
     setup: {
+      ...setupRail,
       custodyCommitment:
         bindingField(setup.custodyCommitment, "setup custody"),
       dealOfferLocator:
@@ -210,6 +259,7 @@ export function buildDisputeRekberBinding(
         setup.coordinationSignature,
     },
     acceptance: {
+      ...acceptanceRail,
       custodyCommitment:
         bindingField(acceptance.custodyCommitment, "acceptance custody"),
       dealOfferLocator:
@@ -478,7 +528,7 @@ export function findLatestDisputeAgentSignature<
 
 async function postJson<T>(
   path: string,
-  body: unknown,
+  body: { binding: DisputeRekberBinding; [key: string]: unknown },
   timeoutMs = 0,
 ): Promise<T> {
   const controller =
@@ -499,7 +549,7 @@ async function postJson<T>(
   try {
     response =
       await fetch(
-        `${BACKEND_URL}${path}`,
+        `${disputeBackend(body.binding)}${path}`,
         {
           method: "POST",
           headers: {

@@ -7,13 +7,16 @@ import {
 } from "next/navigation";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { WalletConnectButton } from "@/components/WalletConnectButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useWallet } from "@/components/providers/WalletProvider";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+import { accountForMode } from "@/lib/starknet/transactionMode";
+import { publicRailConfigurationError } from "@/lib/starknet/railConfig";
+import { useRoomTransactionMode } from "@/hooks/room/useRoomTransactionMode";
 import {
   AgentPanel,
   type AgentContextKind,
@@ -26,8 +29,6 @@ import {
 } from "@/components/room/conversation/ConversationPanel";
 import { OfferPanel } from "@/components/room/offer/OfferPanel";
 import { EscrowPanel } from "@/components/room/escrow/EscrowPanel";
-import { PublicTransferPanel, usePublicTransferTracking } from "@/components/room/escrow/PublicTransferPanel";
-import type { TransactionMode } from "@/lib/starknet/publicTransfer";
 import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomTabs, type RoomTab } from "@/components/room/RoomTabs";
@@ -75,11 +76,12 @@ export default function DealRoomPage() {
 
   const showAccessDetails =
     inviteScope !== null;
-  const { session } = useWallet();
+  const { session: connectedSession } = useWallet();
+  const { mode: transactionMode, hydrated: modeHydrated, locked: modeLocked, changeMode, modeError } = useRoomTransactionMode(params.roomId);
+  const session = useMemo(() => connectedSession && modeHydrated && !modeError ? {
+    ...connectedSession, account: accountForMode(connectedSession.account, transactionMode, params.roomId),
+  } : null, [connectedSession, transactionMode, params.roomId, modeHydrated, modeError]);
   const [tab, setTab] = useState<RoomTab>("timeline");
-  const publicTransferTracking = usePublicTransferTracking();
-  // The original private STRK20 Rekber implementation remains the default.
-  const [paymentMode, setPaymentMode] = useState<TransactionMode>("shield");
   const {
     room,
     channelKey,
@@ -531,6 +533,25 @@ export default function DealRoomPage() {
         roomId={params.roomId}
       />
 
+      {room && modeHydrated && <section aria-label="Room transaction mode" className="mb-4 rounded-xl border border-wire p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <span className="col-span-2 text-xs text-paper/65">Transaction mode</span>
+          {(["shield", "unshield"] as const).map(mode => <button key={mode} type="button"
+            aria-pressed={transactionMode === mode}
+            disabled={Boolean(modeError) || busy || modeLocked || offerEntries.length > 0 || escrowActions.length > 0 || entries.some(entry => Boolean(entry.transactionHash)) || (mode === "unshield" && Boolean(publicRailConfigurationError()))}
+            onClick={() => { try { changeMode(mode); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cannot change room mode."); } }}
+            className="min-h-12 rounded-lg border border-wire px-3 py-2 text-xs text-paper aria-pressed:border-signal aria-pressed:text-signal disabled:opacity-50">
+            {mode === "shield" ? "Shield · STRK20" : "Unshield · Public"}
+          </button>)}
+        </div>
+        <p className="mt-2 text-xs leading-5 text-paper/55">
+          Messages and offers stay encrypted onchain in both modes. Unshield exposes the wallet, token amounts and transaction metadata. Rekber remains escrow.
+        </p>
+        {modeError && <p role="alert" className="mt-2 text-xs text-danger">{modeError}</p>}
+        {modeLocked && <p className="mt-1 text-xs text-paper/45">This room's onchain mode is fixed to protect its existing deals.</p>}
+        {publicRailConfigurationError() && <p className="mt-1 text-xs text-paper/45">Unshield requires its public contracts and discovery service to be deployed and configured.</p>}
+      </section>}
+
       {roomHydrated && !room && (
         <p className="mb-6 border border-danger/40 px-4 py-3 text-xs text-danger">
           This room is not available on this device. Create or join the room
@@ -658,7 +679,7 @@ export default function DealRoomPage() {
       {!showAccessDetails &&
         tab !== "activity" &&
         tab !== "loyalty" && (
-        <ConversationPanel
+        <ConversationPanel account={session?.account}
           roomId={room?.id ?? params.roomId}
           entries={entries}
           offerEntries={offerEntries}
@@ -864,12 +885,12 @@ export default function DealRoomPage() {
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/90">
-                    {paymentMode === "shield" ? "Rekber Escrow" : "Public payment"}
+                    Rekber Escrow
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/32">
-                    {paymentMode === "shield"
-                      ? "Private STRK20 agreement and Rekber workflow."
-                      : "Ordinary public Starknet transfer. No escrow protection."}
+                    {transactionMode === "shield"
+                      ? "STRK20 funding and settlement."
+                      : "Public wallet funding and settlement. Rekber rules still apply."}
                   </p>
                 </div>
 
@@ -887,23 +908,6 @@ export default function DealRoomPage() {
               </header>
 
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
-                <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-vault/60 p-1 ring-1 ring-wire/60" role="group" aria-label="Payment mode">
-                  <button type="button" aria-pressed={paymentMode === "shield"}
-                    className={paymentMode === "shield"
-                      ? "rounded-lg bg-signal/15 px-3 py-2.5 text-xs font-medium text-signal ring-1 ring-signal/30"
-                      : "rounded-lg px-3 py-2.5 text-xs text-paper/55 hover:text-paper"}
-                    onClick={() => setPaymentMode("shield")}>
-                    Shield · STRK20
-                  </button>
-                  <button type="button" aria-pressed={paymentMode === "unshield"}
-                    className={paymentMode === "unshield"
-                      ? "rounded-lg bg-signal/15 px-3 py-2.5 text-xs font-medium text-signal ring-1 ring-signal/30"
-                      : "rounded-lg px-3 py-2.5 text-xs text-paper/55 hover:text-paper"}
-                    onClick={() => setPaymentMode("unshield")}>
-                    Unshield · Public
-                  </button>
-                </div>
-                {paymentMode === "shield" ? (
                   <EscrowPanel
                   roomId={
                     room?.id ?? params.roomId
@@ -926,9 +930,6 @@ export default function DealRoomPage() {
                     sendDirectEscrowCoordination
                   }
                   />
-                ) : (
-                  <PublicTransferPanel session={session} tracking={publicTransferTracking} />
-                )}
               </div>
             </section>
           </div>
@@ -946,7 +947,7 @@ export default function DealRoomPage() {
 
       {!showAccessDetails &&
         tab === "loyalty" && (
-          <LoyaltyPanel
+          <LoyaltyPanel account={session?.account}
             address={
               session?.account.address
             }

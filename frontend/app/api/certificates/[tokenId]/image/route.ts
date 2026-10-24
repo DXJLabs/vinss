@@ -1,3 +1,4 @@
+import { createRailContext } from "@/lib/starknet/transactionMode";
 import {
   getSettlementCertificate,
 } from "@/lib/deal-room/settlement";
@@ -72,7 +73,7 @@ function networkLabel(): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ) {
   const { tokenId } = await context.params;
@@ -89,9 +90,12 @@ export async function GET(
     );
   }
 
+  const rail = new URL(request.url).searchParams.get("rail") ?? "shield";
+  if (rail !== "shield" && rail !== "unshield") return new Response("Invalid certificate rail.", { status: 400 });
   const record =
     await getSettlementCertificate(
       BigInt(tokenId),
+      createRailContext(rail),
     );
 
   if (!record) {

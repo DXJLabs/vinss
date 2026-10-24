@@ -1,4 +1,5 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useEffect,
@@ -12,7 +13,6 @@ import type {
   VinssWalletSession,
 } from "@/lib/starknet/walletClient";
 import {
-  BACKEND_URL,
 } from "@/lib/starknet/constants";
 import {
   discoverMessages,
@@ -80,6 +80,7 @@ export function useGroupConversation({
   setBusy,
   setError,
 }: UseGroupConversationOptions): UseGroupConversationResult {
+  const BACKEND_URL = backendForAccount(session?.account);
   const [entries, setEntries] =
     useState<ConversationEntry[]>([]);
 
@@ -103,7 +104,7 @@ export function useGroupConversation({
     setDraft("");
     setPending(false);
     pendingBodyRef.current = null;
-  }, [group?.id]);
+  }, [BACKEND_URL, group?.id]);
 
   async function refreshGroup(
     silent = false,
@@ -579,7 +580,7 @@ export function useGroupConversation({
         timer,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     group?.id,
@@ -663,7 +664,7 @@ export function useGroupConversation({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     group?.id,
@@ -694,7 +695,7 @@ export function useGroupConversation({
         timer,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     entries.length,
     active,
   ]);

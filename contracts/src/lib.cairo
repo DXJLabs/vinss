@@ -29,6 +29,7 @@ pub mod utils { pub mod constants; pub mod errors; pub mod hashing; pub mod time
 #[cfg(test)]
 pub mod test_mocks {
     pub mod mock_erc20;
+    pub mod mock_public_helper;
     pub mod mock_fee_policy;
     pub mod mock_pragma;
 }
@@ -67,4 +68,10 @@ pub mod invite {
     pub mod invite_events;
     pub mod invite_interfaces;
     pub mod vinss_invite;
+}
+
+pub mod public_rail {
+    pub mod interfaces;
+    pub mod public_fee_policy;
+    pub mod vinss_public_rail;
 }

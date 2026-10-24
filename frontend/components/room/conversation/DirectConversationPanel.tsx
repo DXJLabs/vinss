@@ -1,4 +1,5 @@
 "use client";
+import type { WalletAccountV6 } from "starknet";
 
 import {
   useEffect,
@@ -53,6 +54,7 @@ import type {
 } from "@/lib/privacy/rekberEvidenceChannel";
 
 interface DirectConversationPanelProps {
+  account?: WalletAccountV6;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
   escrowActions: DiscoveredEscrowAction[];
@@ -120,6 +122,7 @@ interface DirectConversationPanelProps {
  * useDirectConversation; this component should stay interaction-focused.
  */
 export function DirectConversationPanel({
+  account,
   entries,
   offerEntries,
   escrowActions,
@@ -338,7 +341,7 @@ export function DirectConversationPanel({
         const state =
           await getRekberCustody(
             BigInt(currentCustody),
-          );
+           account,);
 
         if (!stopped) {
           setCurrentRekberState(
@@ -362,7 +365,7 @@ export function DirectConversationPanel({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [currentCustody]);
+  }, [account,currentCustody]);
 
   useEffect(() => {
     const evidenceCommitment =
@@ -439,7 +442,7 @@ export function DirectConversationPanel({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [account,
     currentCustody,
     currentRekberState
       ?.fulfillmentSubmitted,
@@ -815,7 +818,7 @@ export function DirectConversationPanel({
                 BigInt(
                   item.custodyCommitment,
                 ),
-              ),
+               account,),
             );
 
             if (
@@ -901,7 +904,7 @@ export function DirectConversationPanel({
         onVisible,
       );
     };
-  }, [
+  }, [account,
     peerAddress,
     preparedCustodyFingerprint,
   ]);
@@ -952,7 +955,7 @@ export function DirectConversationPanel({
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [peerAddress]);
+  }, [account,peerAddress]);
 
   const updateScrollIntent = () => {
     const node = scrollBoxRef.current;
@@ -988,7 +991,7 @@ export function DirectConversationPanel({
 
   useEffect(() => {
     resizeMessageInput();
-  }, [draft]);
+  }, [account,draft]);
 
   async function sendComposerMessage() {
     if (!draft.trim() || busy) return;
@@ -2049,7 +2052,7 @@ export function DirectConversationPanel({
                             .offerAction!
                             .custodyCommitment!,
                         ),
-                      );
+                       account,);
 
                     setCurrentRekberState(
                       next,

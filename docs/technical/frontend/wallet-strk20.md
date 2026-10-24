@@ -804,7 +804,7 @@ transfer
 invoke
 ```
 
-Separately, `/shield` uses native `deposit` and `/unshield` uses native `withdraw`; see [Shield/Unshield](./shield-unshield.md).
+Native STRK20 `deposit`/`withdraw` primitives remain separate from VINSS transaction modes. Deal Room Unshield uses ordinary account execution for encrypted messages/offers and real Rekber; see [Shield/Unshield](./shield-unshield.md).
 
 ---
 
@@ -1961,7 +1961,7 @@ before production.
 | Simple version parser | Prerelease/build syntax is not fully semver-aware. |
 | Treasury normalization inconsistent | Message and Invite currently pass raw treasury env. |
 | Stale fee comment | `constants.ts` still refers to 7 STRK Message revenue while runtime uses FeePolicy. |
-| No global chain guard | The new Shield/Unshield routes verify their wallet and RPC chain IDs before signing, but other app flows still require cross-component configuration and QA. |
+| No global chain guard | The public execution gateway verifies wallet/RPC chain IDs and adapter deployment before signing. Shield retains its existing STRK20 path; full live-wallet QA remains required. |
 | NETWORK runtime cast | Invalid env text can survive the TypeScript assertion. |
 | Wallet object churn | Mobile recovery depends on rediscovery. |
 | No universal wallet E2E suite | Source integration is not proof for every target wallet/version. |

@@ -1,8 +1,9 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import { useEffect, useRef, useState } from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+
 import {
   acceptOffer,
   counterOffer,
@@ -124,6 +125,7 @@ export function useRoomOffers({
   setBusy,
   setError,
 }: UseRoomOffersOptions) {
+  const BACKEND_URL = backendForAccount(session?.account);
   // Offer entries are intentionally separate from generic message state.
   const [offerEntries, setOfferEntries] = useState<ConversationEntry[]>([]);
 
@@ -212,7 +214,7 @@ export function useRoomOffers({
   useEffect(() => {
     matchedOfferRoutesRef.current.clear();
     sentOfferReadReceiptsRef.current.clear();
-  }, [roomId, session?.account.address]);
+  }, [BACKEND_URL, roomId, session?.account.address]);
 
   useEffect(() => {
     // Direct Offers cannot derive a pairwise key without room and wallet identity.
@@ -241,7 +243,7 @@ export function useRoomOffers({
     return () => {
       cancelled = true;
     };
-  }, [roomId, session?.account.address]);
+  }, [BACKEND_URL, roomId, session?.account.address]);
 
   useEffect(() => {
     if (
@@ -295,7 +297,7 @@ export function useRoomOffers({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [BACKEND_URL,
     roomId,
     session?.account.address,
     channelKey,
@@ -1571,7 +1573,7 @@ export function useRoomOffers({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,
@@ -1635,7 +1637,7 @@ export function useRoomOffers({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,

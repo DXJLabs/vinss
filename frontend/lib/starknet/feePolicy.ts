@@ -1,6 +1,7 @@
 import { num } from "starknet";
 import { toFelt } from "@/lib/privacy/envelope";
-import { CONTRACTS } from "./constants";
+import type { WalletAccountV6 } from "starknet";
+import { contractsForAccount } from "./railConfig";
 import { getProvider } from "./walletClient";
 
 export const VINSS_FEE_ACTION = {
@@ -12,7 +13,7 @@ export const VINSS_FEE_ACTION = {
 
 const feePolicyByHelper = new Map<string, string>();
 
-let rekberRevenueFeePolicy: string | null = null;
+const rekberRevenueFeePolicy = new Map<string, string>();
 
 function requireAddress(
   address: string,
@@ -70,10 +71,10 @@ async function resolveHelperFeePolicy(
  * Do not use get_fee_policy here: Rekber's get_fee_policy returns oracle
  * configuration, unlike Message/Offer helpers which return an address.
  */
-async function resolveRekberRevenueFeePolicy(): Promise<string> {
-  if (rekberRevenueFeePolicy) {
-    return rekberRevenueFeePolicy;
-  }
+async function resolveRekberRevenueFeePolicy(account?: object): Promise<string> {
+  const CONTRACTS = contractsForAccount(account);
+  const cached = rekberRevenueFeePolicy.get(CONTRACTS.escrowRekber);
+  if (cached) return cached;
 
   const escrowRekber = requireAddress(
     CONTRACTS.escrowRekber,
@@ -96,7 +97,7 @@ async function resolveRekberRevenueFeePolicy(): Promise<string> {
     );
   }
 
-  rekberRevenueFeePolicy = feePolicy;
+  rekberRevenueFeePolicy.set(escrowRekber, feePolicy);
   return feePolicy;
 }
 
@@ -123,7 +124,8 @@ async function quoteFlatFee(
  * Room activation is charged only when an Invite is created. Invite consume
  * remains a replay-protected, non-revenue action in the current contract.
  */
-export function quoteRoomActivationFee(): Promise<bigint> {
+export function quoteRoomActivationFee(account?: object): Promise<bigint> {
+  const CONTRACTS = contractsForAccount(account);
   return quoteFlatFee(
     CONTRACTS.invite,
     VINSS_FEE_ACTION.roomActivation,
@@ -131,7 +133,8 @@ export function quoteRoomActivationFee(): Promise<bigint> {
   );
 }
 
-export function quoteMessageFee(): Promise<bigint> {
+export function quoteMessageFee(account?: object): Promise<bigint> {
+  const CONTRACTS = contractsForAccount(account);
   return quoteFlatFee(
     CONTRACTS.messageHelper,
     VINSS_FEE_ACTION.message,
@@ -139,7 +142,8 @@ export function quoteMessageFee(): Promise<bigint> {
   );
 }
 
-export function quoteOfferFee(): Promise<bigint> {
+export function quoteOfferFee(account?: object): Promise<bigint> {
+  const CONTRACTS = contractsForAccount(account);
   return quoteFlatFee(
     CONTRACTS.offerHelper,
     VINSS_FEE_ACTION.offer,
@@ -152,7 +156,7 @@ export function quoteOfferFee(): Promise<bigint> {
  * actions. Read the canonical Rekber action quote from FeePolicy instead
  * of hardcoding a STRK amount in the frontend.
  */
-export async function quoteRekberWorkflowFee(): Promise<bigint> {
+export async function quoteRekberWorkflowFee(account?: object): Promise<bigint> {
   /*
    * Agreement and Submit Work are the two VINSS workflow revenue actions.
    *
@@ -162,7 +166,7 @@ export async function quoteRekberWorkflowFee(): Promise<bigint> {
    *
    * Funding keeps using quoteRekberFee(), including its 2% / reserve floor.
    */
-  await resolveRekberRevenueFeePolicy();
+  await resolveRekberRevenueFeePolicy(account);
 
   return 1n * 10n ** 18n;
 }
@@ -176,7 +180,9 @@ export async function quoteRekberWorkflowFee(): Promise<bigint> {
 export async function quoteRekberFee(
   token: string,
   principal: bigint,
+  account?: object,
 ): Promise<bigint> {
+  const CONTRACTS = contractsForAccount(account);
   const escrowRekber = requireAddress(
     CONTRACTS.escrowRekber,
     "VINSS Rekber",

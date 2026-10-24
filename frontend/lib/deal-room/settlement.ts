@@ -1,3 +1,7 @@
+import { transactionModeOf } from "@/lib/starknet/transactionMode";
+import { PUBLIC_RAIL_ADDRESS } from "@/lib/starknet/constants";
+import { contractsForAccount } from "@/lib/starknet/railConfig";
+import { invokeVinssActions } from "@/lib/starknet/vinssExecution";
 /** Rekber custody, release, refund, and Settlement Certificate operations. */
 
 import type { WalletAccountV6 } from "starknet";
@@ -60,6 +64,8 @@ export interface PayeeSettlementSecrets {
 }
 
 export interface RekberCustodyState {
+  payerAddress?: string;
+  payeeAddress?: string;
   custodyCommitment: bigint;
   releaseAuthorizationCommitment: bigint;
   payeeClaimCommitment: bigint;
@@ -369,7 +375,8 @@ export function computeCertificateTokenId(
   );
 }
 
-function requireRekberAddress(): string {
+function requireRekberAddress(account?: WalletAccountV6): string {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.escrowRekber) {
     throw new Error(
       "Rekber is not configured for this network.",
@@ -401,10 +408,12 @@ export async function depositEscrow(
     revisionRounds: number;
     token: string;
     amount: bigint;
+    payeeAddress?: string;
   },
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   const escrow =
-    requireRekberAddress();
+    requireRekberAddress(account);
   const rawTreasury =
     process.env
       .NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
@@ -426,6 +435,7 @@ export async function depositEscrow(
     await quoteRekberFee(
       token,
       params.amount,
+      account,
     );
 
   const payload = [
@@ -468,7 +478,7 @@ export async function depositEscrow(
   ];
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeVinssActions(account, [
       {
         type: "withdraw",
         token,
@@ -491,7 +501,7 @@ export async function depositEscrow(
           ...payload,
         ],
       },
-    ]);
+    ], { payee: params.payeeAddress });
 
   return {
     transactionHash:
@@ -504,6 +514,7 @@ async function invokeSettlement(
   payload: string[],
   chargeRevenue = false,
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   const custodyValue = payload[1];
 
   if (!custodyValue) {
@@ -519,6 +530,7 @@ async function invokeSettlement(
   const custody =
     await getRekberCustody(
       custodyCommitment,
+      account,
     );
 
   if (!custody) {
@@ -559,12 +571,12 @@ async function invokeSettlement(
    */
   const response =
     chargeRevenue
-      ? await account.strk20InvokeTransaction([
+      ? await invokeVinssActions(account, [
           {
             type: "withdraw",
             token: revenueToken!,
             amount: toFelt(
-              await quoteRekberWorkflowFee(),
+              await quoteRekberWorkflowFee(account),
             ),
             recipient:
               num.toHex(rawTreasury!),
@@ -580,14 +592,14 @@ async function invokeSettlement(
           {
             type: "invoke",
             contract:
-              requireRekberAddress(),
+              requireRekberAddress(account),
             calldata: [
               toFelt(calldata.length),
               ...calldata,
             ],
           },
         ])
-      : await account.strk20InvokeTransaction([
+      : await invokeVinssActions(account, [
           {
             type: "transfer",
             token,
@@ -599,7 +611,7 @@ async function invokeSettlement(
           {
             type: "invoke",
             contract:
-              requireRekberAddress(),
+              requireRekberAddress(account),
             calldata: [
               toFelt(calldata.length),
               ...calldata,
@@ -655,6 +667,7 @@ function buildRekberStateInvoke(
   custodyCommitment: bigint,
   secret: bigint,
   evidenceCommitment: bigint,
+  account?: WalletAccountV6,
 ): RekberStateInvoke {
   if (
     custodyCommitment === 0n ||
@@ -667,7 +680,7 @@ function buildRekberStateInvoke(
   }
 
   return {
-    contract: requireRekberAddress(),
+    contract: requireRekberAddress(account),
     calldata: [
       toFelt(action),
       toFelt(custodyCommitment),
@@ -683,12 +696,14 @@ export function buildSubmitFulfillmentInvoke(
     chainSecret: bigint;
     evidenceCommitment: bigint;
   },
+  account?: WalletAccountV6,
 ): RekberStateInvoke {
   return buildRekberStateInvoke(
     4,
     params.custodyCommitment,
     params.chainSecret,
     params.evidenceCommitment,
+    account,
   );
 }
 
@@ -698,12 +713,14 @@ export function buildConfirmFulfillmentInvoke(
     confirmationSecret: bigint;
     evidenceCommitment: bigint;
   },
+  account?: WalletAccountV6,
 ): RekberStateInvoke {
   return buildRekberStateInvoke(
     5,
     params.custodyCommitment,
     params.confirmationSecret,
     params.evidenceCommitment,
+    account,
   );
 }
 
@@ -713,12 +730,14 @@ export function buildRequestRevisionInvoke(
     chainSecret: bigint;
     reasonCommitment: bigint;
   },
+  account?: WalletAccountV6,
 ): RekberStateInvoke {
   return buildRekberStateInvoke(
     7,
     params.custodyCommitment,
     params.chainSecret,
     params.reasonCommitment,
+    account,
   );
 }
 
@@ -727,6 +746,7 @@ async function invokeRekberWorkflowAction(
   payload: Array<bigint | number | string>,
   chargeRevenue = false,
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   const token =
     CONTRACTS.messageHelperOpenNoteToken;
   const rawTreasury =
@@ -752,11 +772,11 @@ async function invokeRekberWorkflowAction(
 
   const spendAmount =
     chargeRevenue
-      ? await quoteRekberWorkflowFee()
+      ? await quoteRekberWorkflowFee(account)
       : 10n;
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeVinssActions(account, [
       {
         type: "withdraw",
         token,
@@ -769,7 +789,7 @@ async function invokeRekberWorkflowAction(
       {
         type: "invoke",
         contract:
-          requireRekberAddress(),
+          requireRekberAddress(account),
         calldata: [
           toFelt(calldata.length),
           ...calldata,
@@ -793,6 +813,7 @@ async function invokeRekberWorkflowAction(
 export async function chargeRekberWorkflowAction(
   account: WalletAccountV6,
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   const token =
     CONTRACTS.messageHelperOpenNoteToken;
   const rawTreasury =
@@ -806,10 +827,10 @@ export async function chargeRekberWorkflowAction(
   }
 
   const fee =
-    await quoteRekberWorkflowFee();
+    await quoteRekberWorkflowFee(account);
 
   const response =
-    await account.strk20InvokeTransaction([
+    await invokeVinssActions(account, [
       {
         type: "withdraw",
         token,
@@ -985,7 +1006,9 @@ export async function claimRekberResolution(
 
 export async function getRekberCustody(
   custodyCommitment: bigint,
+  account?: object,
 ): Promise<RekberCustodyState | null> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.escrowRekber) {
     return null;
   }
@@ -1001,7 +1024,14 @@ export async function getRekberCustody(
         ],
       });
 
+    let parties: string[] = [];
+    if (transactionModeOf(account) === "unshield") {
+      parties = await getProvider().callContract({ contractAddress: PUBLIC_RAIL_ADDRESS,
+        entrypoint: "get_custody_parties", calldata: [toFelt(custodyCommitment)] });
+      if (!BigInt(parties[0] ?? "0") || !BigInt(parties[1] ?? "0")) return null;
+    }
     return {
+      payerAddress: parties[0], payeeAddress: parties[1],
       custodyCommitment:
         BigInt(result[0] ?? "0"),
       releaseAuthorizationCommitment:
@@ -1089,7 +1119,9 @@ export async function getRekberCustody(
 export async function getRekberProof(
   custodyCommitment: bigint,
   kind: RekberProof["kind"],
+  account?: object,
 ): Promise<RekberProof | null> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.escrowRekber) {
     return null;
   }
@@ -1156,6 +1188,7 @@ export async function claimSettlementCertificate(
     certificateSecret: bigint;
   },
 ): Promise<{ transactionHash: string }> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.settlementCertificate) {
     throw new Error(
       "Settlement Certificate is not configured for this network.",
@@ -1187,7 +1220,9 @@ export async function claimSettlementCertificate(
 export async function isSettlementCertificateClaimed(
   custodyCommitment: bigint,
   role: SettlementRole,
+  account?: object,
 ): Promise<boolean> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.settlementCertificate) {
     return false;
   }
@@ -1210,7 +1245,9 @@ export async function isSettlementCertificateClaimed(
 
 export async function getSettlementCertificate(
   tokenId: bigint,
+  account?: object,
 ): Promise<SettlementCertificateRecord | null> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.settlementCertificate) {
     return null;
   }

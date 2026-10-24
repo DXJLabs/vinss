@@ -25,7 +25,13 @@ const DOMAIN_TYPES = [
   { name: "revision", type: "shortstring" },
 ];
 
-interface SetupBinding {
+interface RailBinding {
+  transactionMode?: "shield" | "unshield";
+  publicRailAddress?: string;
+  publicRekberAddress?: string;
+}
+
+interface SetupBinding extends RailBinding {
   custodyCommitment: string;
   dealOfferLocator: string;
   dealTermsCommitment: string;
@@ -41,7 +47,7 @@ interface SetupBinding {
   signature: string[];
 }
 
-interface AcceptanceBinding {
+interface AcceptanceBinding extends RailBinding {
   custodyCommitment: string;
   dealOfferLocator: string;
   dealTermsCommitment: string;
@@ -125,6 +131,62 @@ function signature(
   });
 }
 
+function parseRail(v: Record<string, unknown>): RailBinding {
+  if (v.transactionMode === undefined || v.transactionMode === "shield") {
+    if (v.publicRailAddress !== undefined || v.publicRekberAddress !== undefined) {
+      throw new Error("Shield Rekber binding cannot contain public deployment fields.");
+    }
+    return v.transactionMode === "shield" ? { transactionMode: "shield" } : {};
+  }
+  if (v.transactionMode !== "unshield") throw new Error("Unsupported Rekber transaction mode.");
+  const parseAddress = (value: unknown, label: string) => {
+    const raw = text(value, label);
+    if (!/^0x[0-9a-fA-F]+$/.test(raw) || BigInt(raw) <= 0n || BigInt(raw) >= 1n << 251n) {
+      throw new Error(`${label} is not a valid Starknet address.`);
+    }
+    return num.toHex(raw);
+  };
+  return {
+    transactionMode: "unshield",
+    publicRailAddress: parseAddress(v.publicRailAddress, "public rail"),
+    publicRekberAddress: parseAddress(v.publicRekberAddress, "public custody contract"),
+  };
+}
+
+function assertMatchingRails(binding: DisputeRekberBinding): void {
+  const setup = parseRail(binding.setup as unknown as Record<string, unknown>);
+  const acceptance = parseRail(binding.acceptance as unknown as Record<string, unknown>);
+  if ((setup.transactionMode ?? "shield") !== (acceptance.transactionMode ?? "shield") ||
+      setup.publicRailAddress !== acceptance.publicRailAddress ||
+      setup.publicRekberAddress !== acceptance.publicRekberAddress) {
+    throw new Error("Rekber approvals use different transaction rails.");
+  }
+}
+
+/** The configured Rekber is the actual custody source on this backend. */
+export function assertDisputeBindingDeployment(config: AppConfig, binding: DisputeRekberBinding): void {
+  assertMatchingRails(binding);
+  const setup = binding.setup;
+  if (setup.transactionMode === "unshield") {
+    if (!config.contracts.publicRailAdapter) throw new Error("Public arbitration is not configured on this backend.");
+    if (!sameFelt(setup.publicRailAddress!, config.contracts.publicRailAdapter) ||
+        !sameFelt(setup.publicRekberAddress!, config.contracts.escrowRekber)) {
+      throw new Error("Rekber binding does not match this public deployment.");
+    }
+  } else if (config.contracts.publicRailAdapter) {
+    throw new Error("Shield arbitration cannot use a public backend custody contract.");
+  }
+}
+
+function bindTypedRail(data: TypedData, binding: RailBinding): TypedData {
+  if (binding.transactionMode === "unshield") {
+    data.types[data.primaryType]!.push({ name: "Public Rail", type: "ContractAddress" }, { name: "Custody Contract", type: "ContractAddress" });
+    (data.message as Record<string, unknown>)["Public Rail"] = num.toHex(binding.publicRailAddress!);
+    (data.message as Record<string, unknown>)["Custody Contract"] = num.toHex(binding.publicRekberAddress!);
+  }
+  return data;
+}
+
 function parseSetup(
   value: unknown,
 ): SetupBinding {
@@ -135,6 +197,7 @@ function parseSetup(
     );
 
   return {
+    ...parseRail(v),
     custodyCommitment:
       text(v.custodyCommitment, "setup custody"),
     dealOfferLocator:
@@ -174,6 +237,7 @@ function parseAcceptance(
     );
 
   return {
+    ...parseRail(v),
     custodyCommitment:
       text(v.custodyCommitment, "acceptance custody"),
     dealOfferLocator:
@@ -201,6 +265,28 @@ function parseAcceptance(
   };
 }
 
+const FELT_PRIME = 2n ** 251n + 17n * 2n ** 192n + 1n;
+
+function assertSignedFieldRanges(binding: SetupBinding | AcceptanceBinding): void {
+  for (const [key, value] of Object.entries(binding)) {
+    if (key === "transactionMode" || key === "publicRailAddress" || key === "publicRekberAddress") continue;
+    if (key === "signature") {
+      if ((value as string[]).some(item => BigInt(item) >= FELT_PRIME)) throw new Error("Rekber signature contains an invalid felt.");
+      continue;
+    }
+    const raw = value as string;
+    const locator = key === "dealOfferLocator";
+    if (!(locator ? /^(0x)?[0-9a-fA-F]+$/ : /^(0x[0-9a-fA-F]+|[0-9]+)$/).test(raw)) {
+      throw new Error(`Rekber ${key} is not a valid felt.`);
+    }
+    const numeric = BigInt(locator ? `0x${raw.replace(/^0x/, "")}` : raw);
+    const limit = key === "fulfillmentDeadline" ? 1n << 128n : FELT_PRIME;
+    if (numeric >= limit || ((key === "payerAddress" || key === "payeeAddress") && numeric === 0n)) {
+      throw new Error(`Rekber ${key} is outside its allowed range.`);
+    }
+  }
+}
+
 export function sanitizeDisputeRekberBinding(
   value: unknown,
 ): DisputeRekberBinding {
@@ -210,7 +296,7 @@ export function sanitizeDisputeRekberBinding(
       "Rekber arbitration binding",
     );
 
-  return {
+  const binding = {
     setup:
       parseSetup(v.setup),
     acceptance:
@@ -218,6 +304,10 @@ export function sanitizeDisputeRekberBinding(
         v.acceptance,
       ),
   };
+  assertMatchingRails(binding);
+  assertSignedFieldRanges(binding.setup);
+  assertSignedFieldRanges(binding.acceptance);
+  return binding;
 }
 
 function sameFelt(
@@ -269,11 +359,11 @@ function domain(
   };
 }
 
-function setupTypedData(
+export function setupTypedData(
   config: AppConfig,
   setup: SetupBinding,
 ): TypedData {
-  return {
+  const data: TypedData = {
     types: {
       StarknetDomain:
         DOMAIN_TYPES,
@@ -365,14 +455,15 @@ function setupTypedData(
         ),
     },
   };
+  return bindTypedRail(data, setup);
 }
 
-function acceptanceTypedData(
+export function acceptanceTypedData(
   config: AppConfig,
   setup: SetupBinding,
   acceptance: AcceptanceBinding,
 ): TypedData {
-  return {
+  const data: TypedData = {
     types: {
       StarknetDomain:
         DOMAIN_TYPES,
@@ -499,6 +590,8 @@ function acceptanceTypedData(
         ),
     },
   };
+  assertMatchingRails({ setup, acceptance });
+  return bindTypedRail(data, acceptance);
 }
 
 /*
@@ -512,6 +605,7 @@ export async function verifyDisputeRekberBinding(
   custody: VerifiedRekberCustody,
   binding: DisputeRekberBinding,
 ): Promise<void> {
+  assertDisputeBindingDeployment(config, binding);
   const setup =
     binding.setup;
   const acceptance =

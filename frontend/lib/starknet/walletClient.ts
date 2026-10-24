@@ -1,6 +1,7 @@
 import { RpcProvider, WalletAccountV6, walletV6 } from "starknet";
 import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard-v6/features";
 import { RPC_URL } from "./constants";
+import { bindAccountWallet } from "./transactionMode";
 
 const MIN_STRK20_WALLET_API = "0.10.3";
 
@@ -51,6 +52,7 @@ export async function createWalletSession(
     wallet,
   );
 
+  bindAccountWallet(account, wallet);
   return {
     account,
     address: account.address,

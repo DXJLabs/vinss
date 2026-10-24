@@ -1,3 +1,5 @@
+import { transactionModeOf, parseTransactionMode } from "@/lib/starknet/transactionMode";
+import { PUBLIC_RAIL_ADDRESS, PUBLIC_CONTRACTS } from "@/lib/starknet/constants";
 /**
  * Wallet-authenticated Rekber coordination.
  *
@@ -172,6 +174,35 @@ export async function computeDealTermsCommitment(
   return value.toString();
 }
 
+export function assertRekberRail(account: WalletAccountV6, action: EscrowActionPayload): void {
+  if (parseTransactionMode(action.transactionMode) !== transactionModeOf(account)) throw new Error("Rekber agreement belongs to another transaction mode.");
+  if (transactionModeOf(account) === "unshield" && (
+    !action.publicRailAddress || !action.publicRekberAddress ||
+    num.toHex(action.publicRailAddress) !== num.toHex(PUBLIC_RAIL_ADDRESS) ||
+    num.toHex(action.publicRekberAddress) !== num.toHex(PUBLIC_CONTRACTS.escrowRekber))) {
+    throw new Error("Rekber agreement belongs to another public deployment.");
+  }
+}
+export function rekberRailFields(account: WalletAccountV6): Pick<EscrowActionPayload,"transactionMode"|"publicRailAddress"|"publicRekberAddress"> {
+  return transactionModeOf(account) === "unshield" ? { transactionMode: "unshield", publicRailAddress: PUBLIC_RAIL_ADDRESS, publicRekberAddress: PUBLIC_CONTRACTS.escrowRekber } : {};
+}
+function stampRail(account: WalletAccountV6, action: EscrowActionPayload): void {
+  if (transactionModeOf(account) === "unshield") {
+    action.transactionMode = "unshield";
+    action.publicRailAddress = PUBLIC_RAIL_ADDRESS;
+    action.publicRekberAddress = PUBLIC_CONTRACTS.escrowRekber;
+  }
+  assertRekberRail(account, action);
+}
+function bindTypedRail(data: TypedData, action: EscrowActionPayload): TypedData {
+  if (parseTransactionMode(action.transactionMode) === "unshield") {
+    data.types[data.primaryType]!.push({ name: "Public Rail", type: "ContractAddress" }, { name: "Custody Contract", type: "ContractAddress" });
+    (data.message as Record<string, unknown>)["Public Rail"] = address(action.publicRailAddress, "public rail");
+    (data.message as Record<string, unknown>)["Custody Contract"] = address(action.publicRekberAddress, "public custody contract");
+  }
+  return data;
+}
+
 export function buildRekberSetupTypedData(
   setup: EscrowActionPayload,
 ): TypedData {
@@ -181,7 +212,7 @@ export function buildRekberSetupTypedData(
     );
   }
 
-  return {
+  const result: TypedData = {
     types: {
       StarknetDomain: DOMAIN_TYPES,
       RekberSetup: [
@@ -255,6 +286,7 @@ export function buildRekberSetupTypedData(
       ),
     },
   };
+  return bindTypedRail(result, setup);
 }
 
 export function buildRekberAcceptanceTypedData(
@@ -270,7 +302,11 @@ export function buildRekberAcceptanceTypedData(
     );
   }
 
-  return {
+  if (parseTransactionMode(setup.transactionMode) !== parseTransactionMode(acceptance.transactionMode) ||
+      setup.publicRailAddress !== acceptance.publicRailAddress || setup.publicRekberAddress !== acceptance.publicRekberAddress) {
+    throw new Error("Rekber approvals use different transaction rails.");
+  }
+  const result: TypedData = {
     types: {
       StarknetDomain: DOMAIN_TYPES,
       RekberAcceptance: [
@@ -366,6 +402,7 @@ export function buildRekberAcceptanceTypedData(
       ),
     },
   };
+  return bindTypedRail(result, acceptance);
 }
 
 function signatureToStrings(
@@ -387,6 +424,7 @@ export async function signRekberSetup(
   account: WalletAccountV6,
   setup: EscrowActionPayload,
 ): Promise<string[]> {
+  stampRail(account, setup);
   return signatureToStrings(
     await account.signMessage(
       buildRekberSetupTypedData(setup),
@@ -399,6 +437,8 @@ export async function signRekberAcceptance(
   setup: EscrowActionPayload,
   acceptance: EscrowActionPayload,
 ): Promise<string[]> {
+  assertRekberRail(account, setup);
+  stampRail(account, acceptance);
   return signatureToStrings(
     await account.signMessage(
       buildRekberAcceptanceTypedData(

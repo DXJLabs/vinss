@@ -10,9 +10,7 @@ import {
 import type {
   VinssWalletSession,
 } from "@/lib/starknet/walletClient";
-import {
-  BACKEND_URL,
-} from "@/lib/starknet/constants";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 import {
   deriveDirectMessageKey,
   sameStarknetAddress,
@@ -60,6 +58,7 @@ export function useDirectPresence({
   entries,
   setEntries,
 }: UseDirectPresenceOptions): boolean {
+  const BACKEND_URL = backendForAccount(session?.account);
   const [peerTyping, setPeerTyping] =
     useState(false);
 
@@ -154,7 +153,7 @@ export function useDirectPresence({
         window.clearInterval(interval);
       }
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,
@@ -309,7 +308,7 @@ export function useDirectPresence({
       window.clearInterval(timer);
       setPeerTyping(false);
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,
@@ -416,7 +415,7 @@ export function useDirectPresence({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     session?.account.address,

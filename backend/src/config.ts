@@ -15,6 +15,8 @@ export interface AppConfig {
   };
   contracts: {
     privacyPool: string;
+    /** Set only on the separate public-rail backend deployment. */
+    publicRailAdapter?: string;
     messageHelper: string;
     offerHelper: string;
     privateEscrowHelper: string;
@@ -270,6 +272,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ssl: parseBoolean(env.DATABASE_SSL, false),
     },
     contracts: {
+      ...(env.PUBLIC_RAIL_ADAPTER_ADDRESS?.trim() ? {
+        publicRailAdapter: parseAddress(env.PUBLIC_RAIL_ADAPTER_ADDRESS.trim(), "PUBLIC_RAIL_ADAPTER_ADDRESS"),
+      } : {}),
       privacyPool: parseAddress(
         requireEnv(env, "PRIVACY_POOL_ADDRESS"),
         "PRIVACY_POOL_ADDRESS",

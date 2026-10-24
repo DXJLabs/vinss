@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { createRailContext } from "@/lib/starknet/transactionMode";
 import { useEffect, useState } from "react";
 import { NETWORK } from "@/lib/starknet/constants";
 import {
@@ -12,6 +13,8 @@ import {
   createLiveFeeRow,
   type FlatVinssAction,
 } from "@/lib/starknet/feeQuoteView";
+
+const publicQuoteContext = createRailContext("unshield");
 
 const newSourceFloors: {
   id: FlatVinssAction;
@@ -33,6 +36,9 @@ export default function FeeTransparencyPage() {
     roomActivation: { state: "loading" },
     message: { state: "loading" },
     offer: { state: "loading" },
+  });
+  const [publicQuotes, setPublicQuotes] = useState<Record<FlatVinssAction, QuoteResult>>({
+    roomActivation: { state: "loading" }, message: { state: "loading" }, offer: { state: "loading" },
   });
   const [refresh, setRefresh] = useState(0);
 
@@ -63,6 +69,20 @@ export default function FeeTransparencyPage() {
       setQuotes(next);
     });
 
+    setPublicQuotes({ roomActivation: { state: "loading" }, message: { state: "loading" }, offer: { state: "loading" } });
+    void Promise.allSettled([
+      quoteRoomActivationFee(publicQuoteContext), quoteMessageFee(publicQuoteContext), quoteOfferFee(publicQuoteContext),
+    ]).then(results => {
+      if (cancelled) return;
+      const ids: FlatVinssAction[] = ["roomActivation", "message", "offer"];
+      const next = {} as Record<FlatVinssAction, QuoteResult>;
+      results.forEach((result,index) => {
+        const id = ids[index]!;
+        next[id] = result.status === "fulfilled" ? { state: "ready", value: createLiveFeeRow(id,result.value).serviceFee } : { state: "unavailable" };
+      });
+      setPublicQuotes(next);
+    });
+
     return () => { cancelled = true; };
   }, [refresh]);
 
@@ -74,7 +94,7 @@ export default function FeeTransparencyPage() {
         </Link>
         <section className="mt-8 rounded-xl border border-wire bg-vault/50 p-5 sm:p-7">
           <p className="font-display text-xs uppercase tracking-[0.18em] text-signal">
-            STRK20 · {NETWORK}
+            Shield / Unshield · {NETWORK}
           </p>
           <h1 className="mt-3 font-display text-2xl uppercase">Fees</h1>
           <p className="mt-3 text-sm leading-6 text-paper/70">
@@ -88,12 +108,14 @@ export default function FeeTransparencyPage() {
                 <tr>
                   <th className="px-3 py-3 font-normal">Action</th>
                   <th className="px-3 py-3 font-normal">New source base</th>
-                  <th className="px-3 py-3 font-normal">On-chain quote</th>
+                  <th className="px-3 py-3 font-normal">On-chain quote · Shield</th>
+                  <th className="px-3 py-3 font-normal">On-chain quote · Unshield</th>
                 </tr>
               </thead>
               <tbody>
                 {newSourceFloors.map((entry) => {
                   const quote = quotes[entry.id];
+                  const publicQuote = publicQuotes[entry.id];
                   return (
                     <tr key={entry.id} className="border-b border-wire/60">
                       <td className="px-3 py-3">{entry.label}</td>
@@ -101,6 +123,9 @@ export default function FeeTransparencyPage() {
                       <td className="px-3 py-3 font-mono text-signal">
                         {quote.state === "ready" ? quote.value :
                           quote.state === "loading" ? "Loading…" : "Unavailable"}
+                      </td>
+                      <td className="px-3 py-3 font-mono text-signal">
+                        {publicQuote.state === "ready" ? publicQuote.value : publicQuote.state === "loading" ? "Loading…" : "Not configured / unavailable"}
                       </td>
                     </tr>
                   );
@@ -126,10 +151,12 @@ export default function FeeTransparencyPage() {
               Private execution can cost more than ordinary public payment.
             </p>
             <p><strong className="text-paper">Unshield (ordinary public mode):</strong>{" "}
-              Sends public wallet funds through a standard Starknet ERC-20 transfer,
-              NOT through STRK20 withdrawal. VINSS adds no public transfer service fee;
-              the wallet/network fee is separate from transferred principal.
-              Direct public payment is not protected Rekber escrow.
+              Uses ordinary Starknet account transactions for room activation,
+              encrypted onchain messages, offers and Rekber. The public flat fee policy
+              quotes half the Shield service fee, rounded up to one wei; Rekber's
+              2% / floor / reserve and existing workflow fees stay unchanged.
+              Wallet addresses, token amounts and transaction metadata are public;
+              message and offer contents stay encrypted. Network gas is separate.
             </p>
             <p><strong className="text-paper">Wallet / network charges:</strong>{" "}
               separate from VINSS service fees; confirm them in your wallet.
@@ -141,7 +168,7 @@ export default function FeeTransparencyPage() {
               never replaced by a guessed amount.
             </p>
           </div>
-          <p className="mt-7 text-xs text-paper/55">Choose Shield or Unshield inside the existing Deal Room payment sheet.</p>
+          <p className="mt-7 text-xs text-paper/55">Choose the transaction mode inside the Deal Room before its first onchain action. Existing active rooms keep their mode.</p>
         </section>
       </div>
     </main>

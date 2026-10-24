@@ -21,9 +21,11 @@ test("reject zero, malformed, rounded or negative principal and invalid addresse
   assert.throws(()=>buildPublicTransferCall({token:"0x0",recipient:"0x2",amount:"1",decimals:6}));
   assert.throws(()=>buildPublicTransferCall({token:"0x1",recipient:"0x0",amount:"1",decimals:6}));
 });
-test("connected public wallet execution is present; no fake STRK20 fee transfer",()=>{
-  const ui=readFileSync(new URL("../frontend/components/room/escrow/PublicTransferPanel.tsx",import.meta.url),"utf8");
-  assert.match(ui,/session.account.execute\(call\)/);
-  assert.doesNotMatch(ui,/strk20InvokeTransaction\(/);
-  assert.doesNotMatch(ui,/type:\s*["']withdraw["']/);
+test("room mode retains Rekber and routes public operations through the execution gateway",()=>{
+  const room=readFileSync(new URL("../frontend/app/room/[roomId]/page.tsx",import.meta.url),"utf8");
+  const gateway=readFileSync(new URL("../frontend/lib/starknet/vinssExecution.ts",import.meta.url),"utf8");
+  assert.match(room,/<EscrowPanel/);
+  assert.doesNotMatch(room,/PublicTransferPanel/);
+  assert.match(gateway,/account.execute\(calls\)/);
+  assert.match(gateway,/transactionModeOf\(account\) === "shield"/);
 });

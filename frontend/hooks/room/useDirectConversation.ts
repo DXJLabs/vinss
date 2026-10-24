@@ -1,4 +1,5 @@
 "use client";
+import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
   useEffect,
@@ -10,7 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { VinssWalletSession } from "@/lib/starknet/walletClient";
-import { BACKEND_URL } from "@/lib/starknet/constants";
+
 import {
   discoverMessages,
   sendMessage,
@@ -141,6 +142,7 @@ export function useDirectConversation({
   setBusy,
   setError,
 }: UseDirectConversationOptions): UseDirectConversationResult {
+  const BACKEND_URL = backendForAccount(session?.account);
   // Direct messages live in their own state and are never merged into Group state.
   const [entries, setEntries] =
     useState<ConversationEntry[]>([]);
@@ -1403,7 +1405,7 @@ export function useDirectConversation({
       ] = await Promise.all([
         getWorkRekberState(
           custodyCommitment,
-        ),
+         session?.account,),
         loadWorkRekberSecrets(
           roomId,
           session.account.address,
@@ -1524,6 +1526,7 @@ export function useDirectConversation({
        */
       const confirmationPromise =
         waitForFulfillmentConfirmation({
+          account: session.account,
           custodyCommitment,
           evidenceCommitment,
           previousRoundsRemaining:
@@ -1667,7 +1670,7 @@ export function useDirectConversation({
       ] = await Promise.all([
         getWorkRekberState(
           custodyCommitment,
-        ),
+         session?.account,),
         loadWorkRekberSecrets(
           roomId,
           session.account.address,
@@ -2074,7 +2077,7 @@ export function useDirectConversation({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     peerKey,
     session?.account.address,
@@ -2228,7 +2231,7 @@ export function useDirectConversation({
     return () => {
       cancelled = true;
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     channelKey,
@@ -2298,7 +2301,7 @@ export function useDirectConversation({
         onVisible,
       );
     };
-  }, [
+  }, [BACKEND_URL,
     active,
     roomId,
     channelKey,
@@ -2337,7 +2340,7 @@ export function useDirectConversation({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [entries.length, active, peerKey]);
+  }, [BACKEND_URL, entries.length, active, peerKey]);
 
   return {
     entries,

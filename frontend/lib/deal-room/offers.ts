@@ -1,3 +1,6 @@
+import { contractsForAccount } from "@/lib/starknet/railConfig";
+import { prepareActionLocator } from "@/lib/starknet/actionLocator";
+import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
 /**
  * Offer domain module.
  *
@@ -78,6 +81,7 @@ export async function sendOfferAction(
     prepared: PreparedOfferSend,
   ) => void | Promise<void>,
 ): Promise<SendActionResult> {
+  const CONTRACTS = contractsForAccount(account);
   if (!CONTRACTS.offerHelper) {
     throw new Error(
       "NEXT_PUBLIC_OFFER_HELPER_ADDRESS is not set — see .env.local.example.",
@@ -110,7 +114,7 @@ export async function sendOfferAction(
     route?.recipientIdentity ?? GROUP_RECIPIENT_IDENTITY;
 
   // Generate a fresh locator from the encryption context for every action.
-  const actionLocator = generateActionLocator(encryptionKey);
+  const { actionLocator, locatorNonce } = prepareActionLocator(account, encryptionKey);
 
   // Derive unlinkable sender and recipient tags for this one locator.
   const [senderTag, recipientTag] = await Promise.all([
@@ -155,7 +159,7 @@ export async function sendOfferAction(
 
   // Fetch the helper's authoritative FeePolicy quote immediately before
   // Ready X builds the transaction. OfferHelper validates quoted_fee on-chain.
-  const quotedFee = await quoteOfferFee();
+  const quotedFee = await quoteOfferFee(account);
 
   /*
    * Persist recovery state only after encryption, calldata and FeePolicy
@@ -167,6 +171,7 @@ export async function sendOfferAction(
    * Otherwise an RPC/preflight failure could leave a ghost Offer even though
    * Ready X was never invoked.
    */
+  await preflightVinssActions(account);
   if (onPrepared) {
     await onPrepared({
       actionLocator,
@@ -175,7 +180,7 @@ export async function sendOfferAction(
   }
 
   // STRK20 invokes privacy_invoke itself, so no selector is prepended.
-  const response = await account.strk20InvokeTransaction([
+  const response = await invokeVinssActions(account, [
     {
       type: "withdraw",
       token: CONTRACTS.offerHelperOpenNoteToken,
@@ -198,7 +203,7 @@ export async function sendOfferAction(
         "${openNoteIds[0]}",
       ],
     },
-  ]);
+  ], { locatorNonce });
 
   return {
     transactionHash: response.transaction_hash,
