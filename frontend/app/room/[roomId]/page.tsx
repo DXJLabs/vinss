@@ -26,6 +26,8 @@ import {
 } from "@/components/room/conversation/ConversationPanel";
 import { OfferPanel } from "@/components/room/offer/OfferPanel";
 import { EscrowPanel } from "@/components/room/escrow/EscrowPanel";
+import { PublicTransferPanel } from "@/components/room/escrow/PublicTransferPanel";
+import type { TransactionMode } from "@/lib/starknet/publicTransfer";
 import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
 import { RoomTabs, type RoomTab } from "@/components/room/RoomTabs";
@@ -75,6 +77,8 @@ export default function DealRoomPage() {
     inviteScope !== null;
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
+  // The original private STRK20 Rekber implementation remains the default.
+  const [paymentMode, setPaymentMode] = useState<TransactionMode>("shield");
   const {
     room,
     channelKey,
@@ -859,10 +863,12 @@ export default function DealRoomPage() {
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/90">
-                    Rekber Escrow
+                    {paymentMode === "shield" ? "Rekber Escrow" : "Public payment"}
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/32">
-                    Secure payment for an accepted agreement.
+                    {paymentMode === "shield"
+                      ? "Private STRK20 agreement and Rekber workflow."
+                      : "Ordinary public Starknet transfer. No escrow protection."}
                   </p>
                 </div>
 
@@ -880,7 +886,24 @@ export default function DealRoomPage() {
               </header>
 
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
-                <EscrowPanel
+                <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-vault/60 p-1 ring-1 ring-wire/60" role="group" aria-label="Payment mode">
+                  <button type="button" aria-pressed={paymentMode === "shield"}
+                    className={paymentMode === "shield"
+                      ? "rounded-lg bg-signal/15 px-3 py-2.5 text-xs font-medium text-signal ring-1 ring-signal/30"
+                      : "rounded-lg px-3 py-2.5 text-xs text-paper/55 hover:text-paper"}
+                    onClick={() => setPaymentMode("shield")}>
+                    Shield · STRK20
+                  </button>
+                  <button type="button" aria-pressed={paymentMode === "unshield"}
+                    className={paymentMode === "unshield"
+                      ? "rounded-lg bg-signal/15 px-3 py-2.5 text-xs font-medium text-signal ring-1 ring-signal/30"
+                      : "rounded-lg px-3 py-2.5 text-xs text-paper/55 hover:text-paper"}
+                    onClick={() => setPaymentMode("unshield")}>
+                    Unshield · Public
+                  </button>
+                </div>
+                {paymentMode === "shield" ? (
+                  <EscrowPanel
                   roomId={
                     room?.id ?? params.roomId
                   }
@@ -901,7 +924,10 @@ export default function DealRoomPage() {
                   onSendCoordination={
                     sendDirectEscrowCoordination
                   }
-                />
+                  />
+                ) : (
+                  <PublicTransferPanel session={session} />
+                )}
               </div>
             </section>
           </div>

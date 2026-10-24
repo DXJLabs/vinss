@@ -120,15 +120,16 @@ export default function FeeTransparencyPage() {
               Its service fee depends on principal, selected asset and the
               active on-chain Rekber contract. Review the precise quote before funding.
             </p>
-            <p><strong className="text-paper">Shield (public to private):</strong>{" "}
-              Deposits public assets into the STRK20 privacy pool. Shield fees
-              may be higher than Unshield, depending on wallet and protocol operations.
-              Review the wallet quote. VINSS does not control this fee.
+            <p><strong className="text-paper">Shield (STRK20 private mode):</strong>{" "}
+              The original private Rekber and agreement flow remains STRK20.
+              VINSS workflow fees, STRK20 protocol fees and network gas are separate.
+              Private execution can cost more than ordinary public payment.
             </p>
-            <p><strong className="text-paper">Unshield (private to public):</strong>{" "}
-              Withdraws protected funds to a public Starknet address. VINSS adds no
-              Unshield service fee, but wallet or network fees may still apply.
-              The withdrawn amount is your principal, not a fee.
+            <p><strong className="text-paper">Unshield (ordinary public mode):</strong>{" "}
+              Sends public wallet funds through a standard Starknet ERC-20 transfer,
+              NOT through STRK20 withdrawal. VINSS adds no public transfer service fee;
+              the wallet/network fee is separate from transferred principal.
+              Direct public payment is not protected Rekber escrow.
             </p>
             <p><strong className="text-paper">Wallet / network charges:</strong>{" "}
               separate from VINSS service fees; confirm them in your wallet.
@@ -140,10 +141,7 @@ export default function FeeTransparencyPage() {
               never replaced by a guessed amount.
             </p>
           </div>
-          <nav aria-label="STRK20 transactions" className="mt-7 flex flex-wrap gap-5 font-display text-xs uppercase tracking-wider">
-            <Link href="/shield" className="text-signal hover:underline">Open Shield →</Link>
-            <Link href="/unshield" className="text-signal hover:underline">Open Unshield →</Link>
-          </nav>
+          <p className="mt-7 text-xs text-paper/55">Choose Shield or Unshield inside the existing Deal Room payment sheet.</p>
         </section>
       </div>
     </main>
