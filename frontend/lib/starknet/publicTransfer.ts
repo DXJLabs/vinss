@@ -1,5 +1,5 @@
 /** VINSS public payment rail. Not STRK20 note withdrawal and not escrow. */
-import { normalizeStarknetAddress, parseTokenUnits } from "./unshield";
+import { normalizeStarknetAddress, parseTokenUnits } from "./unshield.ts";
 export type TransactionMode = "shield" | "unshield";
 const UINT128_MAX = (1n << 128n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;

@@ -2,7 +2,7 @@
 
 This document describes the current VINSS frontend wallet, Wallet Standard, `WalletAccountV6`, STRK20, typed-data signing, and public account-execution boundaries.
 
-**Feature-branch addenda (23 October 2026):** [Native Shield/Unshield](./shield-unshield.md) documents `deposit`/`withdraw` action forms and wallet/RPC chain preflight. [Message audit](./messaging-implementation-audit.md) documents client encryption, Message V2 helper calls and risks. Neither page claims a new live Sepolia transaction.
+**Feature-branch addenda (24 October 2026):** [VINSS payment modes](./shield-unshield.md) documents the default private STRK20 Rekber and the ordinary public Starknet transaction mode inside the Deal Room, separate from native STRK20 wallet deposit/withdraw. [Message audit](./messaging-implementation-audit.md) documents client encryption. No new live wallet transaction is claimed.
 
 The core authority model is:
 

@@ -24,9 +24,10 @@ test("blocks unverified or unsupported chain IDs, including invalid config", () 
   assert.throws(() => assertUnshieldNetwork("devnet", SEPOLIA, SEPOLIA));
 });
 
-test("Unshield page checks actual wallet and RPC chain IDs before native withdrawal", () => {
-  const source = readFileSync(new URL("../frontend/app/unshield/page.tsx", import.meta.url), "utf8");
+test("public mode preflights wallet and RPC before ordinary account execution", () => {
+  const source = readFileSync(new URL("../frontend/components/room/escrow/PublicTransferPanel.tsx", import.meta.url), "utf8");
   assert.match(source, /walletV6\.requestChainId\(session\.wallet\)/);
   assert.match(source, /getProvider\(\)\.getChainId\(\)/);
-  assert.ok(source.indexOf("assertUnshieldNetwork(") < source.indexOf("strk20InvokeTransaction([action])"));
+  assert.ok(source.indexOf("assertUnshieldNetwork(") < source.indexOf("session.account.execute(call)"));
+  assert.doesNotMatch(source, /strk20InvokeTransaction\(/);
 });
