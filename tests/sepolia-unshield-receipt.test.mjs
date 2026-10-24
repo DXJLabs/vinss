@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { verifySepoliaUnshield } from "../frontend/scripts/verify-sepolia-unshield.mjs";
 
-const input = { txHash: "0xabc", token: "0x111", recipient: "0x222", amountUnits: 42n, transferSelector: "0x99" };
+const input = { txHash: "0xabc", token: "0x111", recipient: "0x222", sender: "0x777", amountUnits: 42n, transferSelector: "0x99" };
 function provider({ chain = "0x534e5f5345504f4c4941", receipt = {}, event = {} } = {}) {
   let queried = false;
   const defaults = {
@@ -17,7 +19,7 @@ function provider({ chain = "0x534e5f5345504f4c4941", receipt = {}, event = {} }
     async getTransactionReceipt() { queried = true; return { ...defaults, ...receipt }; },
   };
 }
-test("verifies accepted native INVOKE and legacy ERC-20 public payout", async () => {
+test("verifies accepted public INVOKE and legacy ERC-20 public payout", async () => {
   const proof = await verifySepoliaUnshield(provider(), input);
   assert.equal(proof.publicTransferUnits, "42");
   assert.equal(proof.executionStatus, "SUCCEEDED");
@@ -29,7 +31,7 @@ test("supports indexed SNIP-13 Transfer, but refuses wrong recipients", async ()
   assert.equal((await verifySepoliaUnshield(provider({event}), input)).publicTransferUnits, "42");
   await assert.rejects(
     verifySepoliaUnshield(provider({event: { ...event, keys: ["0x99", "0x777", "0x333"] }}), input),
-    /exact ERC-20 Transfer/,
+    /matching ERC-20 Transfer/,
   );
 });
 test("rejects Mainnet RPC before requesting a transaction receipt", async () => {
@@ -60,4 +62,25 @@ test("never counts receipt gas as a VINSS or STRK20 protocol fee", async () => {
   assert.equal(proof.networkFee, null);
   assert.equal(Object.hasOwn(proof, "vinssFee"), false);
   assert.equal(Object.hasOwn(proof, "strk20Fee"), false);
+});
+
+test("public receipt proof rejects a payout made by a different sender", async () => {
+  await assert.rejects(verifySepoliaUnshield(provider({ event: { data: ["0x888", "0x222", "0x2a", "0x0"] } }), input));
+});
+
+test("requires the sending wallet for receipt verification", async () => {
+  await assert.rejects(verifySepoliaUnshield(provider(), { ...input, sender: undefined }));
+});
+
+test("CLI reaches the real public calldata builder before querying RPC", () => {
+  const result = spawnSync(process.execPath, [
+    "--experimental-strip-types", fileURLToPath(new URL("../frontend/scripts/verify-sepolia-unshield.mjs", import.meta.url)),
+    "0xabc", "STRK", "0x222", "1", "0x777",
+  ], { encoding: "utf8", env: { ...process.env,
+    NEXT_PUBLIC_STARKNET_NETWORK: "sepolia", NEXT_PUBLIC_RPC_URL: "http://127.0.0.1:1",
+    NEXT_PUBLIC_STRK_ADDRESS: "invalid-token",
+  } });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Invalid Starknet hex address/);
+  assert.doesNotMatch(result.stderr, /is not a function/);
 });

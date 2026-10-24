@@ -19,7 +19,7 @@ jobs:
       - name: Shield and Unshield UI regression
         run: node --experimental-strip-types --test tests/strk20-shield-ui.test.mjs
       - name: Public transfer calldata and mode regression
-        run: node --experimental-strip-types --test tests/vinss-public-transfer-mode.test.mjs
+        run: node --experimental-strip-types --test tests/vinss-public-transfer-mode.test.mjs tests/vinss-public-transfer-receipt.test.mjs
       - name: Unshield network guard regression
         run: node --experimental-strip-types --test tests/strk20-unshield-network.test.mjs
       - name: Fee policy regression

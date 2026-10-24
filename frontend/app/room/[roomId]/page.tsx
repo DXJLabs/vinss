@@ -26,7 +26,7 @@ import {
 } from "@/components/room/conversation/ConversationPanel";
 import { OfferPanel } from "@/components/room/offer/OfferPanel";
 import { EscrowPanel } from "@/components/room/escrow/EscrowPanel";
-import { PublicTransferPanel } from "@/components/room/escrow/PublicTransferPanel";
+import { PublicTransferPanel, usePublicTransferTracking } from "@/components/room/escrow/PublicTransferPanel";
 import type { TransactionMode } from "@/lib/starknet/publicTransfer";
 import { InvitationPanel } from "@/components/room/invitation/InvitationPanel";
 import { RoomHeader } from "@/components/room/RoomHeader";
@@ -77,6 +77,7 @@ export default function DealRoomPage() {
     inviteScope !== null;
   const { session } = useWallet();
   const [tab, setTab] = useState<RoomTab>("timeline");
+  const publicTransferTracking = usePublicTransferTracking();
   // The original private STRK20 Rekber implementation remains the default.
   const [paymentMode, setPaymentMode] = useState<TransactionMode>("shield");
   const {
@@ -926,7 +927,7 @@ export default function DealRoomPage() {
                   }
                   />
                 ) : (
-                  <PublicTransferPanel session={session} />
+                  <PublicTransferPanel session={session} tracking={publicTransferTracking} />
                 )}
               </div>
             </section>
