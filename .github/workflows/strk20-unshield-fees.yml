@@ -71,3 +71,56 @@ jobs:
           starknet-foundry-version: 0.56.0
       - run: scarb build
       - run: snforge test
+
+  deploy-public-sepolia:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-unshield-sepolia]')
+    needs: [verify, contracts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    concurrency:
+      group: vinss-public-sepolia-deployment
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate Sepolia deployment configuration
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
+          ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
+          VINSS_SEPOLIA_TREASURY_ADDRESS: ${{ vars.VINSS_SEPOLIA_TREASURY_ADDRESS || secrets.VINSS_SEPOLIA_TREASURY_ADDRESS }}
+        run: |
+          node - <<'JS'
+          const required = ['STARKNET_RPC_URL', 'ACCOUNT_ADDRESS', 'PRIVATE_KEY', 'VINSS_SEPOLIA_TREASURY_ADDRESS'];
+          const missing = required.filter(name => !process.env[name]);
+          if (missing.length) {
+            console.error('Required CI configuration missing: ' + missing.join(', '));
+            process.exit(1);
+          }
+          JS
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.20.1
+          cache: false
+      - run: scarb build
+        working-directory: contracts
+      - run: npm ci
+        working-directory: backend
+      - name: Deploy and verify full Unshield rail
+        working-directory: backend
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
+          ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
+          VINSS_SEPOLIA_TREASURY_ADDRESS: ${{ vars.VINSS_SEPOLIA_TREASURY_ADDRESS || secrets.VINSS_SEPOLIA_TREASURY_ADDRESS }}
+        run: node scripts/deploy-public-sepolia.mjs
+      - name: Save deployment addresses and application configuration
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-sepolia-deployment
+          path: backend/deployment-public-sepolia/
+          if-no-files-found: ignore
+          retention-days: 90
