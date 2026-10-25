@@ -90,7 +90,7 @@ jobs:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
           ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
           PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
-          VINSS_SEPOLIA_TREASURY_ADDRESS: ${{ vars.VINSS_SEPOLIA_TREASURY_ADDRESS || secrets.VINSS_SEPOLIA_TREASURY_ADDRESS }}
+          VINSS_SEPOLIA_TREASURY_ADDRESS: "0x03A2662aDF2E7E37CDB015577bCa13F5c6B5E62ffe7D3aF3D66412f0178e8009"
         run: |
           node - <<'JS'
           const required = ['STARKNET_RPC_URL', 'ACCOUNT_ADDRESS', 'PRIVATE_KEY', 'VINSS_SEPOLIA_TREASURY_ADDRESS'];
@@ -114,7 +114,7 @@ jobs:
           STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
           ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
           PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
-          VINSS_SEPOLIA_TREASURY_ADDRESS: ${{ vars.VINSS_SEPOLIA_TREASURY_ADDRESS || secrets.VINSS_SEPOLIA_TREASURY_ADDRESS }}
+          VINSS_SEPOLIA_TREASURY_ADDRESS: "0x03A2662aDF2E7E37CDB015577bCa13F5c6B5E62ffe7D3aF3D66412f0178e8009"
         run: node scripts/deploy-public-sepolia.mjs
       - name: Save deployment addresses and application configuration
         if: always()
