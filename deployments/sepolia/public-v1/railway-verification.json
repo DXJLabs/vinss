@@ -1,0 +1,113 @@
+{
+  "verifiedAt": "2026-10-27T08:26:53.032Z",
+  "projectId": "accabdf7-6118-4740-a995-d9340afb4f28",
+  "environmentId": "b8327b8b-73c2-4c4f-965d-649b137fc6ab",
+  "serviceId": "94ffe8a4-947f-44fc-a6e8-e1102289158f",
+  "databaseServiceId": "63fda5f9-94e5-4ac4-948f-baeac08f9034",
+  "deploymentId": "0926d9cb-8ea6-4959-aaed-ae9313c70664",
+  "sourceCommit": "d235e1f2bf8069904c8450e969b489ba7e8728d2",
+  "deploymentStatus": "SUCCESS",
+  "apiUrl": "https://vinss-unshield-api-sepolia.up.railway.app",
+  "checks": [
+    {
+      "path": "/health",
+      "http": 200,
+      "cors": "matches frontend",
+      "network": "sepolia",
+      "indexers": "all caught up"
+    },
+    {
+      "path": "/discover",
+      "kind": "message",
+      "http": 200,
+      "keys": []
+    },
+    {
+      "path": "/discover",
+      "kind": "offer",
+      "http": 200,
+      "keys": []
+    },
+    {
+      "path": "/discover",
+      "kind": "escrow",
+      "http": 200,
+      "keys": []
+    },
+    {
+      "path": "/activity?limit=1",
+      "http": 200
+    },
+    {
+      "path": "/rekber/events?limit=1",
+      "http": 200
+    }
+  ],
+  "health": {
+    "status": "ok",
+    "network": "sepolia",
+    "indexer": {
+      "message": {
+        "identity": "sepolia:message:0x2b36958b64b0c78422b8b915b9a64abf3d3349feab15e9c67c07902e05712e7",
+        "kind": "message",
+        "contractAddress": "0x2b36958b64b0c78422b8b915b9a64abf3d3349feab15e9c67c07902e05712e7",
+        "startBlock": 17118585,
+        "nextBlock": 17221889,
+        "lastIndexedBlock": 17221888,
+        "latestObservedBlock": 17221888,
+        "status": "caught_up",
+        "updatedAt": "2026-10-27T08:26:10.826Z"
+      },
+      "offer": {
+        "identity": "sepolia:offer:0x1e8a6c8c4ec1ffdd8d8edcfe3c640a3e02adce14e8e16ac9d611633dc5f44c7",
+        "kind": "offer",
+        "contractAddress": "0x1e8a6c8c4ec1ffdd8d8edcfe3c640a3e02adce14e8e16ac9d611633dc5f44c7",
+        "startBlock": 17118585,
+        "nextBlock": 17221889,
+        "lastIndexedBlock": 17221888,
+        "latestObservedBlock": 17221888,
+        "status": "caught_up",
+        "updatedAt": "2026-10-27T08:26:10.948Z"
+      },
+      "escrow": {
+        "identity": "sepolia:escrow:0x2992b2c9b6481158bd02bd9d3dc8622e5bd60aa823b3d0b2c54b7077155f0f5",
+        "kind": "escrow",
+        "contractAddress": "0x2992b2c9b6481158bd02bd9d3dc8622e5bd60aa823b3d0b2c54b7077155f0f5",
+        "startBlock": 17118585,
+        "nextBlock": 17221889,
+        "lastIndexedBlock": 17221888,
+        "latestObservedBlock": 17221888,
+        "status": "caught_up",
+        "updatedAt": "2026-10-27T08:26:11.059Z"
+      }
+    },
+    "rekberIndexer": {
+      "identity": "sepolia:rekber:0x3867fd7388027929eaaa0812d32aeb089563e54dde745afcba264262cf8fdc",
+      "contractAddress": "0x3867fd7388027929eaaa0812d32aeb089563e54dde745afcba264262cf8fdc",
+      "startBlock": 17118585,
+      "nextBlock": 17221889,
+      "lastIndexedBlock": 17221888,
+      "latestObservedBlock": 17221888,
+      "status": "caught_up",
+      "updatedAt": "2026-10-27T08:26:10.145Z"
+    },
+    "certificateIndexer": {
+      "identity": "sepolia:certificate:0x57692452809c321214e51980da3514e7de3cf8cbfd942fa15fc0362ae3fd11c",
+      "contractAddress": "0x57692452809c321214e51980da3514e7de3cf8cbfd942fa15fc0362ae3fd11c",
+      "startBlock": 17118585,
+      "nextBlock": 17221889,
+      "lastIndexedBlock": 17221888,
+      "latestObservedBlock": 17221888,
+      "status": "caught_up",
+      "updatedAt": "2026-10-27T08:26:10.040Z"
+    }
+  },
+  "backendTestsPassed": 46,
+  "backendTypecheck": "passed",
+  "backendBuild": "passed",
+  "privacyBoundaries": "passed",
+  "runtimeAuditVulnerabilities": 0,
+  "agentEnabled": false,
+  "automaticDisputeExecution": false,
+  "realWalletAcceptanceTested": false
+}
