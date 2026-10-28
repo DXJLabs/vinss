@@ -50,8 +50,8 @@ jobs:
           npm --prefix backend run build
       - name: Typecheck
         run: npm --prefix frontend run typecheck
-      - name: Production build
-        run: npm --prefix frontend run build
+      - name: Production build without sibling backend
+        run: node scripts/verify-frontend-only-build.mjs
       - name: Privacy regression
         run: node scripts/test-privacy-boundaries.mjs
 

@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Vercel uploads frontend alone; cross-service tests are checked separately in CI.
+  typescript: {
+    tsconfigPath: "tsconfig.build.json",
+  },
 
   async headers() {
     return [
