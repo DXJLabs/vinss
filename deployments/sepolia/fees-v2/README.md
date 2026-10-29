@@ -19,3 +19,5 @@ Policies convert USD prices to STRK through Pragma. Flat prices do not include t
 `shield-backend-rollout.env` and `public-backend-rollout.env` update the existing Sepolia services. Additional ciphertext helper definitions preserve old Shield/public history and discover both modes within the same room; no room key or plaintext is sent to discovery. Primary checkpoints retain their kind labels and additional checkpoints expose their full identities in health responses. Native Rekber/certificate addresses remain unchanged.
 
 `frontend.env` is the combined v2 public configuration. The manual `node scripts/deploy-sepolia.mjs` command reads this profile when the user chooses to publish to Vercel. CI does not publish the frontend.
+
+Activated on Railway Sepolia using backend commit 05c65763fbd349ef39d1f4ae1f7a16b36642e7dc. Both /health endpoints report ok with the v2 primary helper addresses. Both /discover message requests returned the same 18-record ciphertext history during verification. Evidence is in backend-verification.json. The application verification and contract jobs passed in CI run 40831780253. Frontend publication remains manual.

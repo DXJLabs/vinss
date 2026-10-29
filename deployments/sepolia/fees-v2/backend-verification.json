@@ -1,0 +1,41 @@
+{
+  "shield": {
+    "status": "ok",
+    "messageHelper": "0x2fe9d58755197fa7b8b22731fe673c97de915def5d1ee748ac328beab082caf",
+    "checkpoints": {
+      "message": "caught_up",
+      "offer": "caught_up",
+      "escrow": "caught_up",
+      "sepolia:message:0x35f30958a8132bc6eb0d1907d03f4165b798656474be1c4b57cdbb0d2153596": "caught_up",
+      "sepolia:offer:0x29395ca27658b5a3f68c421af8a1222f4f2acda73f12ec65809de6dbc57e53f": "caught_up",
+      "sepolia:escrow:0x69f6970ef84cb070de58512baef0821016829ba1d8e279bee1c7d9041a2ff0": "caught_up",
+      "sepolia:message:0x2b36958b64b0c78422b8b915b9a64abf3d3349feab15e9c67c07902e05712e7": "caught_up",
+      "sepolia:offer:0x1e8a6c8c4ec1ffdd8d8edcfe3c640a3e02adce14e8e16ac9d611633dc5f44c7": "caught_up",
+      "sepolia:escrow:0x2992b2c9b6481158bd02bd9d3dc8622e5bd60aa823b3d0b2c54b7077155f0f5": "caught_up",
+      "sepolia:message:0x7255cfbf34f0b0b6233dc2337fc6e77db03405e98186783af81ae5185d936af": "caught_up",
+      "sepolia:offer:0x7eb5b9518a6dd4c8d10e989b92444507dc704e765d8d5eab976734e5d3585": "caught_up"
+    },
+    "messageRecords": 18,
+    "rekber": "0x16a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c"
+  },
+  "public": {
+    "status": "ok",
+    "messageHelper": "0x35f30958a8132bc6eb0d1907d03f4165b798656474be1c4b57cdbb0d2153596",
+    "checkpoints": {
+      "message": "caught_up",
+      "offer": "caught_up",
+      "escrow": "caught_up",
+      "sepolia:message:0x2fe9d58755197fa7b8b22731fe673c97de915def5d1ee748ac328beab082caf": "caught_up",
+      "sepolia:offer:0x365d97f9fdaceb0ac224f0e761c02e8ae631e171e36f860749d5f7d94804a99": "caught_up",
+      "sepolia:message:0x2b36958b64b0c78422b8b915b9a64abf3d3349feab15e9c67c07902e05712e7": "caught_up",
+      "sepolia:offer:0x1e8a6c8c4ec1ffdd8d8edcfe3c640a3e02adce14e8e16ac9d611633dc5f44c7": "syncing",
+      "sepolia:escrow:0x2992b2c9b6481158bd02bd9d3dc8622e5bd60aa823b3d0b2c54b7077155f0f5": "caught_up",
+      "sepolia:message:0x7255cfbf34f0b0b6233dc2337fc6e77db03405e98186783af81ae5185d936af": "caught_up",
+      "sepolia:offer:0x7eb5b9518a6dd4c8d10e989b92444507dc704e765d8d5eab976734e5d3585": "caught_up",
+      "sepolia:escrow:0x697abbd998a74ca9d2f13be16a705b96f72adb949dfd8320f84acd30c973dd9": "caught_up"
+    },
+    "messageRecords": 18,
+    "rekber": "0x3a98636b77d5bff57a6ee5c80b4e4880e0594422350a47ae09061fa3a2243c"
+  },
+  "sameMessageHistory": true
+}
