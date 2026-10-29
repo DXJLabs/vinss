@@ -1,5 +1,6 @@
 /** Deploy flat app-fee policies and Shield helpers. Existing Rekber is untouched. */
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { Account, RpcProvider, CallData, hash } from 'starknet';
 const output = 'deployment-app-fees-sepolia';
 mkdirSync(output, { recursive: true });
@@ -70,8 +71,11 @@ async function main() {
   manifest.publicPolicy = publicPolicy;
   manifest.shieldPolicy = policy;
   manifest.shieldHelpers = helpers;
-  manifest.activation = 'Staged: public adapter/helper deployment and backend rollout must be verified before frontend promotion.';
+  manifest.activation = 'Staged: backend rollout and frontend promotion must be verified before activation.';
   save();
-  console.log('Verified flat-fee policy deployment saved. No active frontend/backend pointers changed.');
+  execFileSync(process.execPath, ['scripts/deploy-public-sepolia.mjs'], {
+    stdio: 'inherit', env: { ...process.env, VINSS_APP_FEE_POLICY_ADDRESS: policy },
+  });
+  console.log('Verified new Shield helpers and full public fee deployment saved. Active frontend/backend pointers are unchanged.');
 }
 main().catch(() => { save(); console.error('Fee deployment failed. Provider details withheld.'); process.exitCode = 1; });

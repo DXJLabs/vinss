@@ -2,6 +2,8 @@ import { readFileSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import { Account, RpcProvider, CallData, hash } from 'starknet';
 
 const out = 'deployment-public-sepolia';
+const appPolicy = process.env.VINSS_APP_FEE_POLICY_ADDRESS;
+const deploymentVersion = appPolicy ? 'v2-app-fees' : 'v1';
 mkdirSync(out, { recursive: true });
 const manifest = { network: 'sepolia', source: process.env.GITHUB_SHA, contracts: {}, verified: false };
 const save = () => writeFileSync(`${out}/manifest.json`, JSON.stringify(manifest, null, 2));
@@ -54,7 +56,7 @@ async function main() {
       await settled(tx);
     }
     const constructorCalldata = new CallData(contract.abi).compile('constructor', args);
-    const payload = { classHash, constructorCalldata, salt: hash.getSelectorFromName(`vinss-public-sepolia-v1-${name}`), unique: true };
+    const payload = { classHash, constructorCalldata, salt: hash.getSelectorFromName(`vinss-public-sepolia-${deploymentVersion}-${name}`), unique: true };
     const { calls, addresses } = account.deployer.buildDeployerCall(payload, signer);
     const deployedAddress = addresses[0];
     let current;
@@ -75,7 +77,9 @@ async function main() {
     console.log(`${name}: ${deployedAddress}`);
     return deployedAddress;
   }
-  const wrapper = await deploy('VinssPublicFeePolicy', [policy[0]]);
+  const wrapper = appPolicy
+    ? await deploy('VinssPublicAppFeePolicy', [policy[0], address(appPolicy, 'VINSS_APP_FEE_POLICY_ADDRESS')])
+    : await deploy('VinssPublicFeePolicy', [policy[0]]);
   const adapter = await deploy('VinssPublicRail', [signer, treasury, tokens[0]]);
   const invite = await deploy('VinssInvite', [adapter, tokens[0], wrapper]);
   const message = await deploy('VinssMessageHelper', [adapter, tokens[0], wrapper]);
@@ -100,7 +104,7 @@ async function main() {
   if (!equal((await call(rekber, 'get_revenue_fee_policy'))[0], policy[0])) throw new Error('Rekber revenue policy mismatch');
   if (!(await call(rekber, 'get_fee_policy')).every((v, i) => equal(v, economics[i]))) throw new Error('Rekber economics mismatch');
   for (let action = 1; action <= 4; action++) {
-    const base = BigInt((await call(policy[0], 'quote_fee_usd_micros', [action]))[0]);
+    const base = BigInt((await call(appPolicy && action !== 4 ? appPolicy : policy[0], 'quote_fee_usd_micros', [action]))[0]);
     const publicFee = BigInt((await call(wrapper, 'quote_fee_usd_micros', [action]))[0]);
     if (publicFee !== (action === 4 ? base : (base + 1n) / 2n)) throw new Error('Public fee mismatch');
   }

@@ -185,5 +185,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-fees-sepolia
-          path: backend/deployment-app-fees-sepolia/
+          path: |
+            backend/deployment-app-fees-sepolia/
+            backend/deployment-public-sepolia/
           if-no-files-found: ignore

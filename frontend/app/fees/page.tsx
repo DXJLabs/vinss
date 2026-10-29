@@ -107,7 +107,7 @@ export default function FeeTransparencyPage() {
               <thead className="border-b border-wire bg-ink/50 text-paper/55">
                 <tr>
                   <th className="px-3 py-3 font-normal">Action</th>
-                  <th className="px-3 py-3 font-normal">New source base</th>
+                  <th className="px-3 py-3 font-normal">Unshield target</th>
                   <th className="px-3 py-3 font-normal">On-chain quote · Shield</th>
                   <th className="px-3 py-3 font-normal">On-chain quote · Unshield</th>
                 </tr>
@@ -153,7 +153,8 @@ export default function FeeTransparencyPage() {
             <p><strong className="text-paper">Unshield (ordinary public mode):</strong>{" "}
               Uses ordinary Starknet account transactions for room activation,
               encrypted onchain messages, offers and Rekber. The public flat fee policy
-              quotes half the Shield service fee, rounded up to one wei; Rekber's
+              targets $0.01 per message and $0.05 per offer or room activation.
+              Shield app targets are twice those amounts. Rekber's
               2% / floor / reserve and existing workflow fees stay unchanged.
               Wallet addresses, token amounts and transaction metadata are public;
               message and offer contents stay encrypted. Network gas is separate.
@@ -168,7 +169,7 @@ export default function FeeTransparencyPage() {
               never replaced by a guessed amount.
             </p>
           </div>
-          <p className="mt-7 text-xs text-paper/55">Choose the transaction mode inside the Deal Room before its first onchain action. Existing active rooms keep their mode.</p>
+          <p className="mt-7 text-xs text-paper/55">Choose the transaction mode for your next action inside the Deal Room. Existing escrow agreements keep their original rail.</p>
         </section>
       </div>
     </main>
