@@ -14,13 +14,7 @@ for (const rail of ['public-v1', 'shield-v1']) {
   }
 }
 if (values.get('NEXT_PUBLIC_STARKNET_NETWORK') !== 'sepolia') throw new Error('Sepolia deployment only.');
-const args = ['vercel', '--prod', '--yes'];
-if (process.env.CI) {
-  for (const name of ['VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
-    if (!process.env[name]) throw new Error(`Missing CI secret: ${name}`);
-  }
-  args.push('--token', process.env.VERCEL_TOKEN);
-}
+const args = ['vercel', '--prod'];
 for (const [key, value] of values) args.push('--build-env', `${key}=${value}`, '--env', `${key}=${value}`);
 const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', args, { cwd: frontend, stdio: 'inherit' });
 if (result.error) throw result.error;

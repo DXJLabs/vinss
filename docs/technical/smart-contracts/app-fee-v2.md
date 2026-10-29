@@ -4,7 +4,7 @@ The target app fee schedule is Unshield: message $0.01, offer $0.05, room activa
 
 VinssAppFeePolicy prices flat actions through Pragma using ceil-rounded integer arithmetic. It does not include the old sponsor-cost floor in actions 1–3. Action 4 delegates to the original policy. VinssPublicAppFeePolicy halves only the new flat action prices and delegates Rekber to the original policy, preserving the public adapter's source-policy check. The existing fee policy classes remain available for old deployments.
 
-The feature branch workflow deploys the frontend after application and Cairo checks pass, using VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID from GitHub Actions secrets. Missing credentials fail with names only; never put secret values in the repository or chat.
+The feature branch CI tests the application and contracts and deploys only Sepolia smart contracts. Frontend publication stays in Vercel and is handled separately; CI does not require Vercel secrets.
 
 A commit containing [deploy-app-fees-sepolia] stages and verifies new fee policies, native Shield helpers and a complete independent public adapter/helper deployment. It uses the existing Sepolia signer secrets. Artifacts contain public addresses and receipt start blocks. Retries use versioned deterministic salts and verify any reused class. The original Mainnet deployment and funded Rekber custody are never replaced.
 
