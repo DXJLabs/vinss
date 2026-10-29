@@ -77,7 +77,7 @@ export default function DealRoomPage() {
   const showAccessDetails =
     inviteScope !== null;
   const { session: connectedSession } = useWallet();
-  const { mode: transactionMode, hydrated: modeHydrated, locked: modeLocked, changeMode, modeError } = useRoomTransactionMode(params.roomId);
+  const { mode: transactionMode, hydrated: modeHydrated, changeMode, modeError } = useRoomTransactionMode(params.roomId);
   const session = useMemo(() => connectedSession && modeHydrated && !modeError ? {
     ...connectedSession, account: accountForMode(connectedSession.account, transactionMode, params.roomId),
   } : null, [connectedSession, transactionMode, params.roomId, modeHydrated, modeError]);
@@ -538,7 +538,7 @@ export default function DealRoomPage() {
           <span className="col-span-2 text-xs text-paper/65">Transaction mode</span>
           {(["shield", "unshield"] as const).map(mode => <button key={mode} type="button"
             aria-pressed={transactionMode === mode}
-            disabled={Boolean(modeError) || busy || modeLocked || offerEntries.length > 0 || escrowActions.length > 0 || entries.some(entry => Boolean(entry.transactionHash)) || (mode === "unshield" && Boolean(publicRailConfigurationError()))}
+            disabled={Boolean(modeError) || busy || (mode === "unshield" && Boolean(publicRailConfigurationError()))}
             onClick={() => { try { changeMode(mode); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cannot change room mode."); } }}
             className="min-h-12 rounded-lg border border-wire px-3 py-2 text-xs text-paper aria-pressed:border-signal aria-pressed:text-signal disabled:opacity-50">
             {mode === "shield" ? "Shield · STRK20" : "Unshield · Public"}
@@ -548,7 +548,7 @@ export default function DealRoomPage() {
           Messages and offers stay encrypted onchain in both modes. Unshield exposes the wallet, token amounts and transaction metadata. Rekber remains escrow.
         </p>
         {modeError && <p role="alert" className="mt-2 text-xs text-danger">{modeError}</p>}
-        {modeLocked && <p className="mt-1 text-xs text-paper/45">This room's onchain mode is fixed to protect its existing deals.</p>}
+        <p className="mt-1 text-xs text-paper/45">Choose the mode for your next transaction. Existing escrow agreements keep their original mode.</p>
         {publicRailConfigurationError() && <p className="mt-1 text-xs text-paper/45">Unshield requires its public contracts and discovery service to be deployed and configured.</p>}
       </section>}
 

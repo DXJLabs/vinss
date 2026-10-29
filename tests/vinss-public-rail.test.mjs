@@ -62,12 +62,12 @@ test("account mode scoping preserves bound methods, isolates wallets, defaults l
 });
 
 
-test("persisted room rail rejects corrupt/conflicting values without a Shield fallback", async()=>{
+test("persisted room preference migrates legacy locks and rejects corrupt values", async()=>{
  const {resolvePersistedRoomMode}=await import("../frontend/lib/starknet/roomMode.ts");
  assert.equal(resolvePersistedRoomMode([{id:"old"}],"old",null),"shield");
  assert.equal(resolvePersistedRoomMode([{id:"r",transactionMode:"unshield"}],"r","unshield"),"unshield");
  assert.throws(()=>resolvePersistedRoomMode([{id:"r",transactionMode:"unshiled"}],"r",null));
- assert.throws(()=>resolvePersistedRoomMode([{id:"r",transactionMode:"unshield"}],"r","shield"));
+ assert.equal(resolvePersistedRoomMode([{id:"r",transactionMode:"unshield"}],"r","shield"),"unshield");
  assert.throws(()=>resolvePersistedRoomMode([],"r","bad"));
  assert.throws(()=>resolvePersistedRoomMode({},"r",null));
 });

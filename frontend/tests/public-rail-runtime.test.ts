@@ -167,6 +167,27 @@ test("public rail runtime seams", async (t) => {
     assert.equal(executions.length, before);
   });
 
+  await t.test("one room can send Unshield then Shield without persisting a room lock", async () => {
+    const writes: string[] = [];
+    const previousWindow = globalThis.window;
+    Object.defineProperty(globalThis, "window", { configurable: true, value: {
+      localStorage: { setItem: (key: string) => writes.push(key) },
+    } });
+    try {
+      const beforePublic = executions.length, beforeShield = shieldBundles.length;
+      await sendMessage(modes.accountForMode(account, "unshield", "same-room"), key,
+        { kind: "text", body: "public send", sentAt: "2026-10-29T00:00:00Z" });
+      await sendMessage(modes.accountForMode(account, "shield", "same-room"), key,
+        { kind: "text", body: "shield send", sentAt: "2026-10-29T00:00:01Z" });
+      assert.equal(executions.length, beforePublic + 1);
+      assert.equal(shieldBundles.length, beforeShield + 1);
+      assert.deepEqual(writes, []);
+    } finally {
+      if (previousWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", { configurable: true, value: previousWindow });
+    }
+  });
+
   async function encryptedInvite(payload: Record<string, unknown>, aad = "VINSS_INVITE_V3") {
     const raw = new Uint8Array(32).fill(9), iv = new Uint8Array(12).fill(4);
     const imported = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);

@@ -20,10 +20,6 @@ export function parseTransactionMode(value: unknown): TransactionMode {
   if (value === "unshield") return "unshield";
   throw new Error("Unsupported VINSS transaction mode.");
 }
-export function lockRoomMode(account: object): void {
-  const roomId = roomIdOf(account);
-  if (roomId && typeof window !== "undefined") window.localStorage.setItem(`vinss:rail-lock:${roomId}`, transactionModeOf(account));
-}
 const wallets = new WeakMap<object, unknown>();
 export function bindAccountWallet(account: object, wallet: unknown): void { wallets.set(account, wallet); }
 export function walletForAccount(account: object): unknown { return wallets.get(account); }

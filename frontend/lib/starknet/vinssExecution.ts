@@ -4,7 +4,7 @@ import { assertUnshieldNetwork, normalizeStarknetAddress } from "./unshield";
 import { buildPublicRailCalls, type VinssAction } from "./publicRailCalls";
 import { publicRailConfigurationError } from "./railConfig";
 import { getProvider } from "./walletClient";
-import { lockRoomMode, transactionModeOf, walletForAccount } from "./transactionMode";
+import { transactionModeOf, walletForAccount } from "./transactionMode";
 
 type Actions = Parameters<WalletAccountV6["strk20InvokeTransaction"]>[0];
 export async function assertPublicRailReady(account: WalletAccountV6): Promise<void> {
@@ -29,7 +29,6 @@ export async function assertPublicRailReady(account: WalletAccountV6): Promise<v
 /** Every VINSS mutation selects one explicit execution rail. Never silently downgrade. */
 export async function invokeVinssActions(account: WalletAccountV6, actions: Actions, options: { payee?: string; locatorNonce?: string; inviteClaimKey?: string } = {}) {
   if (transactionModeOf(account) === "shield") {
-    lockRoomMode(account);
     return account.strk20InvokeTransaction(actions);
   }
   await assertPublicRailReady(account);
@@ -43,7 +42,6 @@ export async function invokeVinssActions(account: WalletAccountV6, actions: Acti
   const calls = buildPublicRailCalls(mapped, { adapter: PUBLIC_RAIL_ADDRESS,
     treasury: process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS ?? "", feeToken: STRK_ADDRESS,
     ...PUBLIC_CONTRACTS }, options);
-  lockRoomMode(account);
   return account.execute(calls);
 }
 

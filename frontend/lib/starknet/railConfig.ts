@@ -1,7 +1,10 @@
-import { BACKEND_URL, CONTRACTS, PUBLIC_CONTRACTS, PUBLIC_RAIL_ADDRESS, PUBLIC_BACKEND_URL, PUBLIC_FEE_POLICY_ADDRESS } from "./constants";
+import { assertShieldPoolNetwork } from "./shieldNetwork";
+import { NETWORK, BACKEND_URL, CONTRACTS, PUBLIC_CONTRACTS, PUBLIC_RAIL_ADDRESS, PUBLIC_BACKEND_URL, PUBLIC_FEE_POLICY_ADDRESS } from "./constants";
 import { transactionModeOf } from "./transactionMode";
 export function contractsForAccount(account?: object | null) {
-  return transactionModeOf(account) === "unshield" ? PUBLIC_CONTRACTS : CONTRACTS;
+  if (transactionModeOf(account) === "unshield") return PUBLIC_CONTRACTS;
+  assertShieldPoolNetwork(NETWORK, CONTRACTS.privacyPool);
+  return CONTRACTS;
 }
 export function publicRailConfigurationError(): string | null {
   if (!PUBLIC_FEE_POLICY_ADDRESS || !PUBLIC_RAIL_ADDRESS || !PUBLIC_BACKEND_URL || !PUBLIC_CONTRACTS.invite ||

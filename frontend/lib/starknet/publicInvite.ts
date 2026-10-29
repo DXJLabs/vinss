@@ -2,7 +2,6 @@ import { constants, ec, hash, shortString, type WalletAccountV6 } from "starknet
 import { NETWORK, PUBLIC_RAIL_ADDRESS } from "./constants";
 import { getProvider } from "./walletClient";
 import { assertPublicRailReady } from "./vinssExecution";
-import { lockRoomMode } from "./transactionMode";
 import { normalizeStarknetAddress } from "./unshield";
 const chainId = NETWORK === "mainnet" ? constants.StarknetChainId.SN_MAIN : constants.StarknetChainId.SN_SEPOLIA;
 const tag = shortString.encodeShortString;
@@ -28,7 +27,6 @@ export async function consumePublicInvite(account: WalletAccountV6, secret: stri
   ]);
   const digest = "0x" + (BigInt(rawDigest) % (1n << 251n)).toString(16);
   const signature = ec.starkCurve.sign(digest, secret);
-  lockRoomMode(account);
   return account.execute({ contractAddress: PUBLIC_RAIL_ADDRESS, entrypoint: "consume_invite",
     calldata: [commitment, "0x" + signature.r.toString(16), "0x" + signature.s.toString(16)] });
 }

@@ -1,0 +1,68 @@
+{
+  "network": "sepolia",
+  "chainId": "0x534e5f5345504f4c4941",
+  "privacyPool": "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+  "source": "Existing successful GitHub Actions deployments; Aug 27\u201328 suite and Aug 18 PrivateEscrowHelper",
+  "contracts": {
+    "VinssSettlementCertificate": "0x02c9bb5e3cdb939ed2193361c741d1bacf607faa858a2d75aaba3d8d6b6ca333",
+    "VinssEscrowRekber": "0x016a59641ec1360bfd6d8bd9ac8883877fbcfc43ec7394d20d9ee35045be832c",
+    "VinssOfferHelper": "0x0007eb5b9518a6dd4c8d10e989b92444507dc704e765d8d5eab976734e5d3585",
+    "VinssInvite": "0x01dddf088b93f67a63f6e5fbefae43fbb4de63ce38d389a0bfd5714b6bf93627",
+    "VinssMessageHelper": "0x07255cfbf34f0b0b6233dc2337fc6e77db03405e98186783af81ae5185d936af",
+    "VinssFeePolicy": "0x01d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+    "VinssPrivateEscrowHelper": "0x0697abbd998a74ca9d2f13be16a705b96f72adb949dfd8320f84acd30c973dd9"
+  },
+  "deployments": {
+    "VinssSettlementCertificate": {
+      "deploymentTransaction": "0x04cc2cb89eeb056bc4f2e5e5d7e8e201776aead899df396bf02d276361a972a9",
+      "run": 33195071374,
+      "job": 98930016074,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33195071374",
+      "blockNumber": 14190760
+    },
+    "VinssEscrowRekber": {
+      "deploymentTransaction": "0x03178e73e393313f6349d03a19a12e91875f74c2b31b334ec209f9cebb3634a4",
+      "run": 33194846137,
+      "job": 98929252591,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33194846137",
+      "blockNumber": 14190658
+    },
+    "VinssOfferHelper": {
+      "deploymentTransaction": "0x02604cbae0338df8b36eabffa512c6508ed92d2dad173e397108f83c1b95561d",
+      "run": 33052863847,
+      "job": 98452363922,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052863847",
+      "blockNumber": 14118747
+    },
+    "VinssInvite": {
+      "deploymentTransaction": "0x06c647a685b0f3dd2d60e88b1ff67b8356b62350ca9d16c3cf3f58170b7ba917",
+      "run": 33052681166,
+      "job": 98451761258,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052681166",
+      "blockNumber": 14118658
+    },
+    "VinssMessageHelper": {
+      "deploymentTransaction": "0x07163ad4e0ba934970669347accd09bdfd0ecc70babfdf171972efc0e2c6d889",
+      "run": 33052453901,
+      "job": 98451021663,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052453901",
+      "blockNumber": 14118550
+    },
+    "VinssFeePolicy": {
+      "deploymentTransaction": "0x06e24d0313a93b3bf6323133707f8164d36c6b95a50ae063272fa669603491bc",
+      "run": 33052274014,
+      "job": 98450436086,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/33052274014",
+      "blockNumber": 14118486
+    },
+    "VinssPrivateEscrowHelper": {
+      "deploymentTransaction": "0x005a8a073fa1716c01cde6ddf70d9c38f9f2639aa9222d9659148c66e2c5efc7",
+      "run": 32118551273,
+      "source": "https://github.com/DXJLabs/vinss/actions/runs/32118551273",
+      "blockNumber": 13653843
+    }
+  },
+  "tokens": {
+    "STRK": "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
+  }
+}
