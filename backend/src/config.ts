@@ -9,6 +9,7 @@ export interface AppConfig {
   corsOrigin: string;
   rpcUrl: string;
   network: StarknetNetwork;
+  additionalDiscovery?: Array<{kind: "message" | "offer" | "escrow"; contractAddress: string; startBlock: number}>;
   database: {
     url: string;
     ssl: boolean;
@@ -197,6 +198,19 @@ function parseLlmSelection(value: string | undefined): VinssLlmSelection {
   );
 }
 
+function parseAdditionalDiscovery(value: string | undefined): NonNullable<AppConfig["additionalDiscovery"]> {
+  if (!value?.trim()) return [];
+  try {
+    const rows: unknown = JSON.parse(value);
+    if (!Array.isArray(rows) || rows.length > 12) throw new Error();
+    return rows.map(row => {
+      if (!row || !["message","offer","escrow"].includes(row.kind) ||
+          !Number.isSafeInteger(row.startBlock) || row.startBlock < 0) throw new Error();
+      return {kind: row.kind, contractAddress: parseAddress(row.contractAddress, "additional discovery helper"), startBlock: row.startBlock};
+    });
+  } catch { throw new Error("Invalid additional discovery helper configuration."); }
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const network = parseNetwork(requireEnv(env, "STARKNET_NETWORK"));
   const corsOrigin = env.CORS_ORIGIN?.trim() || "http://localhost:3000";
@@ -267,6 +281,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     corsOrigin,
     rpcUrl,
     network,
+    additionalDiscovery: parseAdditionalDiscovery(env.ADDITIONAL_DISCOVERY_HELPERS),
     database: {
       url: parseDatabaseUrl(requireEnv(env, "DATABASE_URL")),
       ssl: parseBoolean(env.DATABASE_SSL, false),

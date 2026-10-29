@@ -161,16 +161,10 @@ export function createDiscoverRouter(
       }
 
       try {
-        const definition = getIndexerDefinition(
-          definitions,
-          input.kind,
-        );
-
-        const records = await store.discover(
-          definition,
-          input.fromBlock,
-          input.toBlock,
-        );
+        getIndexerDefinition(definitions, input.kind); // Fail if the primary kind is absent.
+        const groups = await Promise.all(definitions.filter(d => d.kind === input.kind)
+          .map(definition => store.discover(definition, input.fromBlock, input.toBlock)));
+        const records = groups.flat().sort((a,b) => a.blockNumber - b.blockNumber);
 
         return res.json(records);
       } catch {

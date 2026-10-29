@@ -233,7 +233,7 @@ export class DiscoveryStore {
   ): Promise<Record<DiscoverKind, IndexerCheckpointView>> {
     const entries = await Promise.all(
       definitions.map(async (definition) => [
-        definition.kind,
+        definitions.find(d => d.kind === definition.kind) === definition ? definition.kind : definition.identity,
         await this.getCheckpoint(definition),
       ] as const),
     );

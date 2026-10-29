@@ -63,6 +63,11 @@ export function createIndexerDefinitions(
     },
   ];
 
+  for (const helper of config.additionalDiscovery ?? []) {
+    if (definitions.some(d => d.kind === helper.kind && d.contractAddress === helper.contractAddress)) continue;
+    const template = definitions.find(d => d.kind === helper.kind)!;
+    definitions.push({...template, contractAddress: helper.contractAddress, startBlock: helper.startBlock});
+  }
   return definitions.map(({ eventName, ...definition }) => ({
     ...definition,
     identity: createIndexerIdentity(

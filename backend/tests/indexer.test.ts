@@ -86,3 +86,13 @@ test("definitions use explicit helper start blocks", () => {
     ],
   );
 });
+
+test('additional ciphertext helpers preserve primary identity and reject duplicate definitions', () => {
+  const config = testConfig();
+  config.additionalDiscovery = [
+    {kind:'message', contractAddress:'0x12', startBlock:10},
+    {kind:'message', contractAddress:'0x2', startBlock:100},
+  ];
+  const definitions = createIndexerDefinitions(config);
+  assert.deepEqual(definitions.filter(d => d.kind === 'message').map(d => [d.contractAddress,d.startBlock]), [['0x2',100],['0x12',10]]);
+});
