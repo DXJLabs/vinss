@@ -124,3 +124,66 @@ jobs:
           path: backend/deployment-public-sepolia/
           if-no-files-found: ignore
           retention-days: 90
+
+  deploy-frontend-sepolia:
+    needs: [verify, contracts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: vinss-frontend-sepolia
+      cancel-in-progress: false
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate Vercel CI credentials
+        run: |
+          node - <<'JS'
+          const missing = ['VERCEL_TOKEN','VERCEL_ORG_ID','VERCEL_PROJECT_ID'].filter(key => !process.env[key]);
+          if (missing.length) { console.error('Missing GitHub Actions secrets: ' + missing.join(', ')); process.exit(1); }
+          JS
+      - name: Install pinned deployment CLI
+        run: npm install --global vercel@65.5.0
+      - name: Deploy both configured Sepolia modes
+        run: node scripts/deploy-sepolia.mjs
+
+  stage-app-fees-sepolia:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-app-fees-sepolia]')
+    needs: [verify, contracts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    concurrency:
+      group: vinss-app-fees-sepolia
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.20.1
+          cache: false
+      - run: scarb build
+        working-directory: contracts
+      - run: npm ci
+        working-directory: backend
+      - name: Deploy and verify application fee policies without changing Rekber
+        working-directory: backend
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_SEPOLIA_RPC_URL }}
+          ACCOUNT_ADDRESS: ${{ secrets.VEIL_POC_ACCOUNT_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.VEIL_POC_ACCOUNT_PRIVATE_KEY }}
+        run: node scripts/deploy-app-fees-sepolia.mjs
+      - name: Save verified fee deployment for adapter and backend rollout
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-fees-sepolia
+          path: backend/deployment-app-fees-sepolia/
+          if-no-files-found: ignore

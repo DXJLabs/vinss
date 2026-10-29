@@ -20,6 +20,7 @@ pub mod fee_policy {
     pub mod interfaces;
     pub mod types;
     pub mod vinss_fee_policy;
+    pub mod vinss_app_fee_policy;
 }
 
 pub mod interfaces { pub mod privacy_pool_types; }
@@ -73,5 +74,6 @@ pub mod invite {
 pub mod public_rail {
     pub mod interfaces;
     pub mod public_fee_policy;
+    pub mod public_app_fee_policy;
     pub mod vinss_public_rail;
 }
