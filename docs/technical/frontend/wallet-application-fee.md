@@ -26,3 +26,22 @@ After that interface is available, implement its capability detection and fee re
 ## Current status
 
 Blocked on that wallet integration. No native-wallet fee implementation is claimed. No unsupported payload, replacement treasury, fee waiver, contract redeployment or frontend publication was introduced for this request. Existing fee collection is unchanged. Merely renaming a transfer in VINSS would not satisfy this requirement. No message or issue has been sent to Ready on the user's behalf.
+
+
+## Follow-up: live wallet and submission fee ownership
+
+The user's read-only diagnostic succeeded with Ready X (`argentX`), advertising Wallet API versions `0.10.4`, `0.10.3`, and `0.7.2`. Its wallet-version metadata was the literal string `undefined`. The report's `applicationFee` text was written by VINSS, not returned by Ready. Neither that text nor version support proves app-fee acceptance or rejection.
+
+Upstream clarification [starknet-specs PR #401](https://github.com/starkware-libs/starknet-specs/pull/401) explicitly describes the wallet's paymaster/relayer fee action as a **withdrawal**. For `wallet_strk20InvokeTransaction`, the wallet adds it; for `wallet_strk20PrepareInvoke`, the submitting dapp must arrange its own paymaster fee withdrawal. Thus a withdrawal can fund a fee; the unresolved requirement is wallet recognition and presentation, not the mere existence of a token movement.
+
+The reference [client paymaster implementation](https://github.com/starkware-libs/starknet-privacy/blob/main/client/src/paymaster.ts) likewise returns a quoted withdrawal (`type`, `recipient`, `token`, `amount`) to add before proving. This establishes an alternative submission architecture, not permission to change Ready's quote or classify an arbitrary treasury withdrawal as an application fee. A dapp-owned relayer could in principle collect a payment and distribute proceeds, but Ready's approval UI classification remains unverified. Do not migrate VINSS to that architecture on this evidence alone.
+
+The pool's `collect_fee` is a separate mechanism: it charges the caller using the configured pool amount and collector. No receipt or complete wallet breakdown has established how the screenshot's 2 STRK splits between pool cost, network cost, and relayer pricing. Do not infer its precise composition or mainnet price formula from the screenshot.
+
+No supported application-fee request has been found in the public Wallet API examined. The public argent-x repository tree also did not expose STRK20-specific files in the path inventory checked; it cannot establish how the user's installed privacy-capable Ready build classifies fees. Absence from that source is not proof that a private integration does not exist.
+
+### Exact integration question for Ready (draft; not sent)
+
+> We use Ready X with Wallet API 0.10.4 for VINSS. Can a dapp collect an application fee to its treasury and have Ready explicitly display it as a separate VINSS application fee in the fee breakdown of a STRK20 approval, rather than as an ordinary withdraw/transfer/OpenNote operation? If supported, please provide the documented request shape, supported wallet versions, fee-recipient verification requirements, and a Sepolia example. Does a dapp-submitted `wallet_strk20PrepareInvoke` flow support such classification, or only a relayer fee configured by Ready? We need to preserve the existing pool fee and avoid duplicate fees.
+
+Investigation status: payment execution is available, but the requested Ready fee presentation remains blocked on an identified supported integration. No financial probe, new fee, contract upgrade, or deployment was performed for this follow-up.
