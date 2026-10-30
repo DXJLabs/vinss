@@ -45,3 +45,14 @@ No supported application-fee request has been found in the public Wallet API exa
 > We use Ready X with Wallet API 0.10.4 for VINSS. Can a dapp collect an application fee to its treasury and have Ready explicitly display it as a separate VINSS application fee in the fee breakdown of a STRK20 approval, rather than as an ordinary withdraw/transfer/OpenNote operation? If supported, please provide the documented request shape, supported wallet versions, fee-recipient verification requirements, and a Sepolia example. Does a dapp-submitted `wallet_strk20PrepareInvoke` flow support such classification, or only a relayer fee configured by Ready? We need to preserve the existing pool fee and avoid duplicate fees.
 
 Investigation status: payment execution is available, but the requested Ready fee presentation remains blocked on an identified supported integration. No financial probe, new fee, contract upgrade, or deployment was performed for this follow-up.
+
+
+## Distributed Ready code and live pool reads
+
+The follow-up now includes static inspection of a publicly distributed Ready X extension (manifest version 5.33.16), rather than assuming the public GitHub repository matches the installed privacy wallet. See [evidence and hashes](./ready-fee-trace-2026-10-30.json).
+
+Current read-only pool views returned 2 STRK on Sepolia and 2.5 STRK on mainnet, with separate configured collectors. These values match the user's reported magnitudes; without a transaction hash they do not establish the exact screenshot transaction's complete fee composition or a USD pricing formula.
+
+The inspected extension strictly accepts only actions and api_version for Invoke (Prepare additionally accepts simulate). Its Invoke handler fetches internal per-token paymaster quotes, its action builder appends the quoted withdrawal, and its fee UI adapter converts feeAction.amount into the displayed paymaster fee. VINSS's helper payment and treasury OpenNote remain ordinary dapp actions in that request path. No app-controlled fee metadata field was found in these handlers. Changing the VINSS helper alone does not populate this internal wallet quote.
+
+This establishes the behavior of the inspected distributed build, not necessarily the user's exact installed version. A separate wallet-supported partner integration remains possible but unverified. The exact requested app-fee presentation still requires that integration; arbitrary fields, spoofed quote metadata, or redirecting a known relayer payment are not valid implementations.

@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-10-30T15:50:27.751868+00:00",
+  "method": "Read-only contract calls and static inspection of the publicly distributed Ready X extension. Extension code was not executed.",
+  "poolReads": [
+    {
+      "network": "sepolia",
+      "pool": "0x254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91",
+      "get_fee_amount": "0x1bc16d674ec80000",
+      "feeSTRK": "2",
+      "get_fee_collector": "0x3e6c6f41d833ec5e7d38e6007df5b0ab6b48bc4c2d3dbeac1ed665456ae4766",
+      "rpc": "https://starknet-sepolia-rpc.publicnode.com"
+    },
+    {
+      "network": "mainnet",
+      "pool": "0x40337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "get_fee_amount": "0x22b1c8c1227a0000",
+      "feeSTRK": "2.5",
+      "get_fee_collector": "0xd79041634625e5288296fbc648088788710ba44903a3a49468a66567749e77",
+      "rpc": "https://starknet-rpc.publicnode.com"
+    }
+  ],
+  "extension": {
+    "id": "dlcobpjiigpikoobohmabehhmhfoodbb",
+    "manifestVersion": "5.33.16",
+    "distribution": "https://clients2.google.com/service/update2/crx",
+    "crxSha256": "077148ca2653e4c816b7852d411ef1d5f401ca7b3a07f2a8daa8799a94c019e0",
+    "bundles": {
+      "background.js": "10815f321eb16886c6cd8364707fd31fd859219666b9cebfd81dd4533400f98a",
+      "inpage.js": "1cbc95edc72239e37cf09d4fc84010035ad09d9f883a0720890ab65287c04e17",
+      "826.js": "43a16116d0fb7b7ff55bdc920684c70765748926eb38359bfed7adb1954151d1"
+    },
+    "findings": [
+      {
+        "bundle": "inpage.js",
+        "offset": 932896,
+        "meaning": "Invoke request schema accepts only actions and api_version, with strict unknown-field rejection. Prepare additionally accepts simulate."
+      },
+      {
+        "bundle": "background.js",
+        "offset": 2035668,
+        "meaning": "Invoke handler obtains per-token fee quotes from its paymaster service and stores them in internal transaction details; dapp action review is constructed separately."
+      },
+      {
+        "bundle": "background.js",
+        "symbol": "buildStrk20ActionsBuilder",
+        "meaning": "Wallet appends the internally supplied feeAction withdrawal during action construction."
+      },
+      {
+        "bundle": "826.js",
+        "offset": 169567,
+        "symbol": "Wo",
+        "meaning": "Fee UI adapter maps quote feeAction.amount into paymaster overallFee and maxFee."
+      },
+      {
+        "bundle": "826.js",
+        "offset": 173768,
+        "meaning": "Selected token quote supplies privacyFeeAmount to privacy review."
+      }
+    ]
+  },
+  "limitations": [
+    "Pool values are current view results, not a reconstruction of the screenshot transaction. No transaction hash was supplied.",
+    "The downloaded extension version is not established as the exact build installed on the user device; live wallet metadata returned the string undefined.",
+    "Pool amount can be changed by its authorized configuration. Price tracking or an exact relayer pricing formula was not established.",
+    "No custom application-fee parameter exists in the inspected request handlers. This does not establish the absence of a separate private partner integration.",
+    "No transaction, signature, wallet modification, fee change, or deployment was performed."
+  ]
+}
