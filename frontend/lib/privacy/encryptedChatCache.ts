@@ -9,6 +9,8 @@ export interface EncryptedLocalRecord {
   ciphertext: string;
 }
 
+export type LocalEncryptionKey = Uint8Array | CryptoKey;
+
 function bytesToBase64(
   bytes: Uint8Array,
 ): string {
@@ -54,8 +56,9 @@ function toArrayBuffer(
 }
 
 async function importChatKey(
-  rawKey: Uint8Array,
+  rawKey: LocalEncryptionKey,
 ): Promise<CryptoKey> {
+  if (!(rawKey instanceof Uint8Array)) return rawKey;
   return crypto.subtle.importKey(
     "raw",
     toArrayBuffer(rawKey),
@@ -68,7 +71,7 @@ async function importChatKey(
 }
 
 export async function encryptLocalJson<T>(
-  rawKey: Uint8Array,
+  rawKey: LocalEncryptionKey,
   value: T,
 ): Promise<EncryptedLocalRecord> {
   const iv = crypto.getRandomValues(
@@ -103,7 +106,7 @@ export async function encryptLocalJson<T>(
 }
 
 export async function decryptLocalJson<T>(
-  rawKey: Uint8Array,
+  rawKey: LocalEncryptionKey,
   record: EncryptedLocalRecord,
 ): Promise<T> {
   if (record.version !== 1) {
@@ -142,7 +145,7 @@ export async function decryptLocalJson<T>(
 
 export async function saveEncryptedLocalJson<T>(
   storageKey: string,
-  rawKey: Uint8Array,
+  rawKey: LocalEncryptionKey,
   value: T,
 ): Promise<void> {
   const record =
@@ -159,7 +162,7 @@ export async function saveEncryptedLocalJson<T>(
 
 export async function loadEncryptedLocalJson<T>(
   storageKey: string,
-  rawKey: Uint8Array,
+  rawKey: LocalEncryptionKey,
 ): Promise<T | null> {
   const raw =
     window.localStorage.getItem(

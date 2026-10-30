@@ -37,6 +37,7 @@ import {
   loadEncryptedLocalJson,
   saveEncryptedLocalJson,
 } from "@/lib/privacy/encryptedChatCache";
+import { readDirectHistory, writeDirectHistory } from "@/lib/privacy/deviceHistory";
 import {
   downloadDirectAttachment,
   uploadDirectAttachment,
@@ -156,17 +157,6 @@ export function useDirectConversation({
 
   const chatEndRef =
     useRef<HTMLDivElement | null>(null);
-
-  /*
-   * Serialize encrypted history writes. Multiple discovery/send callbacks
-   * can finish out of order on mobile; every write must merge with the
-   * latest persisted snapshot instead of replacing it.
-   */
-  const historyWriteChainRef =
-    useRef<Promise<void>>(
-      Promise.resolve(),
-    );
-
   const peerKey = peerAddress
     ? canonicalStarknetAddress(peerAddress)
     : "";
@@ -458,139 +448,22 @@ export function useDirectConversation({
     );
   }
 
-  function historyStorageKey():
-    string | null {
-    if (
-      !roomId ||
-      !session ||
-      !selectedPeer
-    ) {
-      return null;
-    }
-
-    return (
-      `vinss:direct-history:v2:${roomId}:` +
-      `${canonicalStarknetAddress(
-        session.account.address,
-      )}:` +
-      canonicalStarknetAddress(
-        selectedPeer.address,
-      )
-    );
+  function deviceHistoryOptions() {
+    if (!roomId || !session || !selectedPeer || !channelKey) return null;
+    return { roomId, walletAddress: session.account.address,
+      peerAddress: selectedPeer.address, roomKey: channelKey };
   }
 
-  function legacyHistoryStorageKey():
-    string | null {
-    if (
-      !roomId ||
-      !session ||
-      !selectedPeer
-    ) {
-      return null;
+  async function persistHistory(nextEntries: ConversationEntry[]): Promise<void> {
+    // Capture the selected room/account/peer before any asynchronous work.
+    const options = deviceHistoryOptions();
+    if (!options) return;
+    try {
+      await writeDirectHistory(options, nextEntries);
+    } catch {
+      console.error("[VINSS DIRECT HISTORY] device cache save failed");
+      setError("Chat history could not be saved on this device. Existing saved data was kept.");
     }
-
-    return (
-      `vinss:direct-history:v1:${roomId}:` +
-      `${canonicalStarknetAddress(
-        session.account.address,
-      )}:` +
-      canonicalStarknetAddress(
-        selectedPeer.address,
-      )
-    );
-  }
-
-  async function persistHistory(
-    nextEntries: ConversationEntry[],
-  ): Promise<void> {
-    const storageKey =
-      historyStorageKey();
-
-    const historyKey =
-      channelKey;
-
-    if (
-      !storageKey ||
-      !historyKey
-    ) {
-      return;
-    }
-
-    /*
-     * Capture key + storage key now. The selected peer can change before
-     * an earlier queued encryption finishes.
-     */
-    historyWriteChainRef.current =
-      historyWriteChainRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          const cached =
-            await loadEncryptedLocalJson<{
-              version: 1;
-              savedAt: number;
-              entries:
-                ConversationEntry[];
-            }>(
-              storageKey,
-              historyKey,
-            );
-
-          const byLocator =
-            new Map<
-              string,
-              ConversationEntry
-            >();
-
-          for (const entry of [
-            ...(cached?.entries ?? []),
-            ...nextEntries,
-          ]) {
-            const locator =
-              entry.actionLocator
-                .replace(/^0x/, "")
-                .toLowerCase();
-
-            const existing =
-              byLocator.get(locator);
-
-            byLocator.set(
-              locator,
-              {
-                ...existing,
-                ...entry,
-                readAt:
-                  entry.readAt ??
-                  existing?.readAt,
-              },
-            );
-          }
-
-          const merged =
-            [...byLocator.values()]
-              .sort(
-                (left, right) =>
-                  new Date(
-                    left.sentAt,
-                  ).getTime() -
-                  new Date(
-                    right.sentAt,
-                  ).getTime(),
-              );
-
-          await saveEncryptedLocalJson(
-            storageKey,
-            historyKey,
-            {
-              version: 1,
-              savedAt:
-                Date.now(),
-              entries:
-                merged,
-            },
-          );
-        });
-
-    await historyWriteChainRef.current;
   }
 
   /*
@@ -2085,11 +1958,8 @@ export function useDirectConversation({
   ]);
 
   /*
-   * Direct history v2 is encrypted with the stable room channel key.
-   *
-   * v1 used the current ECDH direct key, so a participant identity change
-   * could make that cache unreadable. Keep v1 as a best-effort migration
-   * source without ever deleting it after a failed decrypt.
+   * v3 history uses an independent non-exportable device key. The storage
+   * layer merges v1/v2 history and removes only successfully migrated copies.
    */
   useEffect(() => {
     if (
@@ -2106,65 +1976,12 @@ export function useDirectConversation({
     let cancelled = false;
 
     const hydrate = async () => {
-      const stableStorageKey =
-        historyStorageKey();
-
-      if (!stableStorageKey) {
-        return;
-      }
-
-      const stable =
-        await loadEncryptedLocalJson<{
-          version: 1;
-          savedAt: number;
-          entries:
-            ConversationEntry[];
-        }>(
-          stableStorageKey,
-          channelKey,
-        );
-
-      if (cancelled) {
-        return;
-      }
-
-      let legacyEntries:
-        ConversationEntry[] = [];
-
-      const legacyStorageKey =
-        legacyHistoryStorageKey();
-
-      const directKey =
-        await resolveDirectKey();
-
-      if (
-        legacyStorageKey &&
-        directKey &&
-        !cancelled
-      ) {
-        const legacy =
-          await loadEncryptedLocalJson<{
-            version: 1;
-            savedAt: number;
-            entries:
-              ConversationEntry[];
-          }>(
-            legacyStorageKey,
-            directKey,
-          );
-
-        legacyEntries =
-          legacy?.entries ?? [];
-      }
-
-      if (cancelled) {
-        return;
-      }
-
-      const cachedEntries = [
-        ...legacyEntries,
-        ...(stable?.entries ?? []),
-      ];
+      const options = deviceHistoryOptions();
+      if (!options) return;
+      const directKey = await resolveDirectKey();
+      if (cancelled) return;
+      const cachedEntries = await readDirectHistory({ ...options, directKey });
+      if (cancelled) return;
 
       if (
         cachedEntries.length === 0
@@ -2221,11 +2038,9 @@ export function useDirectConversation({
       });
     };
 
-    void hydrate().catch((err) => {
-      console.error(
-        "[VINSS DIRECT HISTORY HYDRATE ERROR]",
-        err,
-      );
+    void hydrate().catch(() => {
+      console.error("[VINSS DIRECT HISTORY] device cache unlock failed");
+      if (!cancelled) setError("Saved chat history could not be unlocked on this device. Existing saved data was kept.");
     });
 
     return () => {

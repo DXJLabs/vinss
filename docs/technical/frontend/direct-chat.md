@@ -1,5 +1,8 @@
 # VINSS Two-Party Private Chat
 
+> Pembaruan 31 Oktober 2026: penyimpanan riwayat direct aktif menggunakan cache v3 dan kunci perangkat non-exportable di IndexedDB. Bagian v1/v2 di bawah adalah format legacy untuk migrasi; lihat [device history](./device-history.md) untuk aturan penyimpanan dan pemulihan terbaru.
+
+
 This document describes the current direct two-party private Chat implementation in the VINSS frontend.
 
 **Current code audit (23 October 2026):** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. No OpenMLS integration is claimed.

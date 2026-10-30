@@ -25,7 +25,7 @@ Lokasi frontend relatif terhadap `frontend/`; backend terhadap `backend/src/`; k
 
 ## Temuan: perlindungan riwayat direct lokal bergantung pada secret room yang tersimpan terbaca
 
-**Risiko sedang, dengan prasyarat penyerang memperoleh salinan localStorage origin VINSS. Belum diperbaiki dalam perubahan ini.**
+**Risiko sedang pada baseline audit, dengan prasyarat penyerang memperoleh salinan localStorage origin VINSS. Diperbaiki untuk cache direct yang ditulis/dimigrasikan ke v3; lihat [kunci perangkat dan migrasi](./device-history.md). Uraian berikut merekam kondisi baseline sebelum perbaikan.**
 
 - `HomeWorkspace.tsx:43–44` menyimpan objek room termasuk `roomSecret` melalui JSON biasa di `vinss:local-rooms`.
 - `useRoom.ts:55–56` menurunkan channel key dari secret tersebut; `channelKey.ts:31–36` menggunakan SHA-256 dengan domain room.
@@ -57,3 +57,10 @@ Rekomendasi: pisahkan enkripsi cache dari secret room yang dibagikan, gunakan ku
 ## Penghapusan debug
 
 Halaman `/debug/wallet` dan panduan `wallet-debug.md` dihapus dari source. Tes audit ini tidak menambah route/debug UI. Mekanisme dan nominal fee tidak diubah. Penghapusan di situs aktif memerlukan deployment frontend berikutnya; tidak ada deploy kontrak atau Vercel dalam pekerjaan ini.
+
+
+## Tindak lanjut perbaikan cache direct
+
+Hook direct sekarang memakai `deviceHistory.ts`: cache v3 dienkripsi dengan kunci AES-GCM non-exportable di IndexedDB yang terpisah dari secret room. Migrasi v1/v2 memverifikasi salinan baru sebelum menghapus salinan lama yang berhasil dibaca. Data yang gagal didekripsi tetap disimpan. Error IndexedDB, kuota, atau autentikasi tidak menurunkan penyimpanan ke plaintext/room-key.
+
+Perbaikan ini berlaku saat percakapan dimigrasikan atau ditulis oleh versi frontend baru, bukan pada salinan localStorage yang sudah bocor sebelumnya atau room lama yang belum dibuka. Secret room/group sendiri belum dipindahkan ke penyimpanan terenkripsi perangkat. Tidak ada perubahan kontrak, fee, atau mekanisme enkripsi pesan on-chain.

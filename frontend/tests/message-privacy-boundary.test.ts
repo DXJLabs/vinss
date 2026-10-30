@@ -37,7 +37,7 @@ test("discovery sends no plaintext/key and joins readable body with chain metada
   const wire = JSON.stringify(record);
   assert.ok(!wire.includes(payload.body));
   assert.ok(!("message" in record) && !("body" in record));
-  t.mock.method(globalThis, "fetch", async (_url, options) => {
+  t.mock.method(globalThis, "fetch", async (_url: string | URL | Request, options?: RequestInit) => {
     assert.equal(String(_url), "https://audit.invalid/discover");
     assert.deepEqual(JSON.parse(String(options?.body)), { kind: "message" });
     return new Response(JSON.stringify([record]), { status: 200 });
