@@ -2,6 +2,8 @@
 
 The target app fee schedule is Unshield: message $0.01, offer $0.05, room activation $0.05. Shield app fees are twice these amounts. Wallet, STRK20 protocol and network fees are separate. The existing Rekber contract, percentage, minimum, sponsor reserve and workflow fees are unchanged.
 
+This deployment changes pricing, not Ready's fee classification: VINSS collection still uses the helper/OpenNote payment flow. The separate request to collect and display VINSS as a wallet-native application fee remains blocked on a supported wallet interface; see [wallet application fee](../frontend/wallet-application-fee.md).
+
 VinssAppFeePolicy prices flat actions through Pragma using ceil-rounded integer arithmetic. It does not include the old sponsor-cost floor in actions 1–3. Action 4 delegates to the original policy. VinssPublicAppFeePolicy halves only the new flat action prices and delegates Rekber to the original policy, preserving the public adapter's source-policy check. The existing fee policy classes remain available for old deployments.
 
 The feature branch CI tests the application and contracts and deploys only Sepolia smart contracts. Frontend publication stays in Vercel and is handled separately; CI does not require Vercel secrets.
