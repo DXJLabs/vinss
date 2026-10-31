@@ -63,7 +63,7 @@ function stageLabel(
     case "agreed":
       return "Agreed";
     case "escrow_pending":
-      return "Escrow pending";
+      return "Escrow Rekber pending";
     case "funded":
       return "Funded";
     case "rekber_pending":

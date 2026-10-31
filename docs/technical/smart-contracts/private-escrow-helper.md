@@ -1,6 +1,6 @@
 # VinssPrivateEscrowHelper
 
-`VinssPrivateEscrowHelper` is the canonical encrypted Rekber-coordination storage helper used by VINSS.
+`VinssPrivateEscrowHelper` is the canonical encrypted coordination storage helper for the user-facing VINSS **Escrow Rekber** flow.
 
 It persists one independently addressable encrypted coordination action, exposes only opaque routing metadata plus ciphertext, enforces envelope integrity and duplicate protection, and returns no token output.
 
@@ -27,6 +27,14 @@ contracts/src/utils/constants.cairo
 contracts/src/utils/errors.cairo
 ```
 
+## Execution modes and product naming
+
+**Escrow Rekber** is the product name. `VinssPrivateEscrowHelper` remains the technical identifier of the coordination layer; it must not be renamed or confused with `VinssEscrowRekber`, the principal-holding contract. A confirmed encrypted setup record alone does not mean custody was funded.
+
+Shield invokes the native coordination helper through STRK20. Unshield uses the dedicated helper behind the public adapter's `post_escrow_action`; agreement content remains encrypted, while execution metadata differs. The original signed agreement fixes its rail/deployment, and follow-up custody operations must use that binding.
+
+The frontend implements this in `escrow.ts`, `rekberAuthorization.ts`, `settlement.ts` and `EscrowPanel.tsx`; see the [complete frontend code map](../frontend/escrow-rekber.md). This update preserves the Cairo ABI, storage identifiers and existing commitments.
+
 ## Purpose
 
 The helper exists to store encrypted Rekber coordination actions for discovery without exposing plaintext coordination semantics and without taking custody of ERC-20 principal.
@@ -42,20 +50,22 @@ VinssEscrowRekber
 ```
 
 ```mermaid
-flowchart LR
-    APP[Private Rekber coordination]
-    ENC[Client-side encryption]
-    HELPER[VinssPrivateEscrowHelper]
-    STORE[Public ciphertext + opaque metadata]
-
-    CUSTODY[VinssEscrowRekber]
-    FUNDS[Public custody + settlement state]
-
+flowchart TD
+    APP["Escrow Rekber coordination"]
+    ENC["Client-side encryption"]
+    RAIL{"Selected rail"}
+    HELPER["Shield: native PrivateEscrowHelper"]
+    ADAPTER["Unshield: public adapter"]
+    STORE["Public ciphertext and opaque metadata"]
+    CUSTODY["Separate native or public VinssEscrowRekber"]
+    FUNDS["Canonical custody and settlement state"]
     APP --> ENC
-    ENC --> HELPER
+    ENC --> RAIL
+    RAIL --> HELPER
+    RAIL --> ADAPTER
     HELPER --> STORE
-
-    APP -->|separate custody capabilities| CUSTODY
+    ADAPTER --> STORE
+    APP -->|bound agreement and capabilities| CUSTODY
     CUSTODY --> FUNDS
 ```
 

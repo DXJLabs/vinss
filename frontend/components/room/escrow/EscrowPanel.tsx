@@ -660,7 +660,7 @@ export function EscrowPanel({
       return {
         verified: false,
         reason:
-          "Encrypted Escrow coordination is incomplete.",
+          "Encrypted Escrow Rekber coordination is incomplete.",
       };
     }
 
@@ -753,7 +753,7 @@ export function EscrowPanel({
       return {
         verified: false,
         reason:
-          "The expected Escrow commitments cannot be reconstructed.",
+          "The expected Escrow Rekber commitments cannot be reconstructed.",
       };
     }
 
@@ -779,7 +779,7 @@ export function EscrowPanel({
       sameStarknetAddress(custodyState.payeeAddress!, agreedPayeeAddress)
     );
     try { if (session) { assertRekberRail(session.account, createAction); assertRekberRail(session.account, acceptAction); } }
-    catch { return { verified: false, reason: "The Rekber agreement uses another transaction rail or deployment." }; }
+    catch { return { verified: false, reason: "The Escrow Rekber agreement uses another transaction rail or deployment." }; }
     const matches = publicPartiesMatch &&
       custodyState.releaseAuthorizationCommitment ===
         expected.releaseAuthorizationCommitment &&
@@ -1513,7 +1513,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          `Escrow request — ${accepted.amount} ${accepted.asset}`,
+          `Escrow Rekber request — ${accepted.amount} ${accepted.asset}`,
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1537,7 +1537,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "Escrow setup is not complete. Tap Continue setup to reuse the same approval.",
+          "Escrow Rekber setup is not complete. Tap Continue setup to reuse the same approval.",
         ),
       );
     } finally {
@@ -1602,7 +1602,7 @@ export function EscrowPanel({
         ))
       ) {
         throw new Error(
-          "The Payer's wallet authorization does not match the Escrow terms shown here.",
+          "The Payer's wallet authorization does not match the Escrow Rekber terms shown here.",
         );
       }
 
@@ -1762,7 +1762,7 @@ export function EscrowPanel({
       onSent({
         id: crypto.randomUUID(),
         kind: "offer",
-        summary: "Escrow approved — payment can now be secured",
+        summary: "Escrow Rekber approved — payment can now be secured",
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -1786,7 +1786,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "Escrow approval is not complete. Tap continue to reuse the same approval.",
+          "Escrow Rekber approval is not complete. Tap continue to reuse the same approval.",
         ),
       );
     } finally {
@@ -1886,7 +1886,7 @@ export function EscrowPanel({
       !settlementAsset?.address
     ) {
       setError(
-        "Secure Escrow commitments are incomplete. Sync the room and try again.",
+        "Secure Escrow Rekber commitments are incomplete. Sync the room and try again.",
       );
       return;
     }
@@ -1973,7 +1973,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          `Escrow funded — ${accepted.amount} ${accepted.asset}`,
+          `Escrow Rekber funded — ${accepted.amount} ${accepted.asset}`,
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -2190,7 +2190,7 @@ export function EscrowPanel({
         id: crypto.randomUUID(),
         kind: "offer",
         summary:
-          "Escrow refunded after the protection window",
+          "Escrow Rekber refunded after the protection window",
         transactionHash:
           result.transactionHash,
         actionLocator:
@@ -2209,7 +2209,7 @@ export function EscrowPanel({
       setError(
         humanizeError(
           error,
-          "We couldn't refund the Escrow payment.",
+          "We couldn't refund the Escrow Rekber payment.",
         ),
       );
     } finally {
@@ -2342,7 +2342,7 @@ export function EscrowPanel({
               Accept an Offer first
             </p>
             <p className="mt-1 text-xs leading-relaxed text-paper/35">
-              Escrow can only start from a private Offer accepted by both parties.
+              Escrow Rekber can only start from an Offer accepted by both parties.
             </p>
           </div>
         ) : (
@@ -2435,9 +2435,9 @@ export function EscrowPanel({
               </p>
               <p className="mt-1 text-xs leading-relaxed text-paper/40">
                 {role === "payer"
-                  ? "The wallet that sent the original Offer prepares Escrow and deposits the funds."
+                  ? "The wallet that sent the original Offer prepares Escrow Rekber and deposits the funds."
                   : role === "payee"
-                    ? "This wallet cannot deposit. Wait for the Payer to send the Escrow setup."
+                    ? "This wallet cannot deposit. Wait for the Payer to send the Escrow Rekber setup."
                     : "The original Offer history is not available yet. Wait for sync to finish."}
               </p>
 
@@ -2463,7 +2463,7 @@ export function EscrowPanel({
                   Waiting for the Payer
                 </p>
                 <p className="mt-1 text-[10px] leading-relaxed text-paper/34">
-                  When the setup arrives, the “Approve Escrow” button will appear. This wallet never gets a deposit button.
+                  When the setup arrives, the “Approve Escrow Rekber” button will appear. This wallet never gets a deposit button.
                 </p>
               </div>
             )}
@@ -2472,7 +2472,7 @@ export function EscrowPanel({
               <>
                 <div className="rounded-xl border border-amber/25 bg-amber/[0.045] p-3">
                   <p className="text-xs font-medium text-amber">
-                    Prepare Rekber agreement
+                    Prepare Escrow Rekber agreement
                   </p>
                   <p className="mt-1 text-[10px] leading-relaxed text-paper/38">
                     After the Payee approves this setup, the deposit button for {accepted.amount} {accepted.asset} will appear on this wallet.
@@ -2509,7 +2509,7 @@ export function EscrowPanel({
                 </label>
 
                 <div className="rounded-xl bg-paper/[0.02] px-3 py-2.5 text-[9px] leading-relaxed text-paper/35">
-                  Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the Rekber agreement, then <strong className="text-paper/60">(2) publish</strong> the private setup. Setup is complete only after VINSS finds its Starknet proof.
+                  Ready X opens twice: <strong className="text-paper/60">(1) sign</strong> the Escrow Rekber agreement, then <strong className="text-paper/60">(2) publish</strong> the private setup. Setup is complete only after VINSS finds its Starknet proof.
                 </div>
 
                 <button
@@ -2524,12 +2524,12 @@ export function EscrowPanel({
                   className="w-full rounded-xl bg-signal px-4 py-3.5 text-sm font-medium text-ink disabled:opacity-30"
                 >
                   {coordinationPhase === "payer-signature"
-                    ? "1/2 · Sign Rekber agreement…"
+                    ? "1/2 · Sign Escrow Rekber agreement…"
                     : coordinationPhase === "payer-send"
                       ? "2/2 · Verifying setup on Starknet…"
                       : pendingPayerSetup
                         ? "2/2 · Publish setup →"
-                        : "Prepare Rekber agreement →"}
+                        : "Prepare Escrow Rekber agreement →"}
                 </button>
               </>
             )}
@@ -2644,7 +2644,7 @@ export function EscrowPanel({
                 Ready for funding
               </p>
               <p className="mt-1 text-[10px] text-paper/30">
-                Waiting for the Payer to secure the agreed amount in Rekber Escrow.
+                Waiting for the Payer to secure the agreed amount in Escrow Rekber.
               </p>
             </div>
           )}
@@ -2868,10 +2868,10 @@ export function EscrowPanel({
 
                   <p className="mt-2 text-xs leading-relaxed text-paper/48">
                     {resolved
-                      ? "The disputed principal was settled using the authorized Payer/Payee split. This Escrow is now closed."
+                      ? "The disputed principal was settled using the authorized Payer/Payee split. This Escrow Rekber is now closed."
                       : released
-                        ? "Payment released to the Payee. This Escrow is now closed."
-                        : "Principal returned to the Payer. This Escrow is now closed."}
+                        ? "Payment released to the Payee. This Escrow Rekber is now closed."
+                        : "Principal returned to the Payer. This Escrow Rekber is now closed."}
                   </p>
                 </div>
 
@@ -2892,7 +2892,7 @@ export function EscrowPanel({
 
               <div className="mt-4 flex items-center justify-between gap-3 border-t border-wire/45 pt-3">
                 <span className="text-[9px] text-paper/28">
-                  Escrow closed
+                  Escrow Rekber closed
                 </span>
 
                 <span className="text-[9px] text-paper/40">

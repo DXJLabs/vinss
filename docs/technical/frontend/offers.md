@@ -2983,3 +2983,8 @@ The strongest current recovery statement is:
 The strongest current Rekber linkage statement is:
 
 > An authenticated ACCEPT makes the private agreement eligible for Rekber, but does not move funds. The room additionally prevents silently reusing the same accepted Offer for a second Rekber lifecycle.
+
+
+## Escrow Rekber handoff
+
+Message and Offer are coordination surfaces for the same **Escrow Rekber** product. An authenticated accepted Offer opens the actual agreement/funding/protection UI; it does not itself move principal. The [Escrow Rekber lifecycle and code map](./escrow-rekber.md) documents the two contract layers, fixed roles, original Shield/Unshield binding and canonical settlement authority.

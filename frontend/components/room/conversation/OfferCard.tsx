@@ -703,7 +703,7 @@ export function OfferCard({
 
   /*
    * Accept confirms the negotiated Offer only.
-   * Rekber agreement preparation is a separate step before escrow funding.
+   * Escrow Rekber agreement preparation is a separate step before escrow funding.
    */
   const accepted =
     action.kind === "accept";
@@ -976,8 +976,8 @@ export function OfferCard({
               {actionPending
                 ? "Accept is confirming on Starknet…"
                 : rekberStarted
-                  ? "✓ Rekber agreement prepared"
-                  : "Offer accepted · prepare the Rekber agreement before funding"}
+                  ? "✓ Escrow Rekber agreement prepared"
+                  : "Offer accepted · prepare the Escrow Rekber agreement before funding"}
             </p>
 
             {onOpenEscrow &&
@@ -991,8 +991,8 @@ export function OfferCard({
                   className="mt-2.5 w-full border border-signal/30 px-3 py-2.5 font-display text-[8px] uppercase tracking-[0.13em] text-signal transition hover:bg-signal hover:text-ink disabled:opacity-30"
                 >
                   {rekberStarted
-                    ? "Open Rekber →"
-                    : "Prepare Rekber agreement →"}
+                    ? "Open Escrow Rekber →"
+                    : "Prepare Escrow Rekber agreement →"}
                 </button>
               )}
           </div>

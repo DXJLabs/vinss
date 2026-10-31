@@ -1,6 +1,6 @@
 # VinssEscrowRekber
 
-`VinssEscrowRekber` is the canonical public custody and settlement state machine behind VINSS Rekber.
+`VinssEscrowRekber` is the canonical public custody and settlement state machine behind the user-facing VINSS **Escrow Rekber** flow.
 
 It holds supported ERC-20 principal, computes and charges the funding service fee, enforces fulfillment/review/revision/refund/dispute rules, maintains per-token principal reserves, and exposes authorized settlement outputs through the configured STRK20 Privacy Pool.
 
@@ -18,23 +18,40 @@ contracts/src/escrow_rekber/
 └── vinss_escrow_rekber.cairo
 ```
 
+## Shield and Unshield deployment boundary
+
+The frontend exposes **Escrow Rekber** in both room modes. Shield selects `NEXT_PUBLIC_ESCROW_REKBER_ADDRESS`; Unshield selects `NEXT_PUBLIC_UNSHIELD_REKBER_ADDRESS` behind `NEXT_PUBLIC_UNSHIELD_ADAPTER_ADDRESS`. These are separate deployed custody instances, not two views over one shared balance.
+
+The same Cairo financial state machine enforces custody commitments, supported assets, funding fee/reserves, fulfillment/review/refund/dispute and authorized claims. Its configured authorized execution address is the pool for the native instance or the adapter for the public instance. Public adapter methods `fund_custody` / `act_custody` translate account execution and settle authorized ERC-20 outputs. Native settlement returns OpenNote outputs.
+
+Room mode changes do not mutate an existing custody record or its signed agreement binding. `rekberAuthorization.ts` binds public deployment identity; the UI refuses mismatched agreement/rail execution. Only changing wording to Escrow Rekber is insufficient to establish custody safety: canonical state and Cairo guards remain decisive.
+
+See [frontend lifecycle and code map](../frontend/escrow-rekber.md) and the actual [public adapter source](../../../contracts/src/public_rail/vinss_public_rail.cairo). No contract deployment or fee change accompanies this naming update.
+
 ## Responsibility Boundary
 
 `VinssEscrowRekber` is **not** the encrypted negotiation layer.
 
 ```mermaid
-flowchart LR
-    OFFER[Encrypted accepted Offer]
-    PRIVATE[VinssPrivateEscrowHelper]
-    REKBER[VinssEscrowRekber]
-    POOL[STRK20 Privacy Pool]
-    CERT[VinssSettlementCertificate]
-
-    OFFER -->|private business context| PRIVATE
-    PRIVATE -->|coordination only| APP[Application]
-    APP -->|precommitted capabilities + public settlement parameters| POOL
-    POOL -->|privacy_invoke| REKBER
-    REKBER -->|canonical settlement state| CERT
+flowchart TD
+    OFFER["Encrypted accepted Offer"]
+    APP["Application verifies signed agreement"]
+    PRIVATE["Helper or adapter: encrypted coordination"]
+    RAIL{"Agreed transaction rail"}
+    POOL["STRK20 privacy pool"]
+    ADAPTER["Public adapter"]
+    NATIVE["Native VinssEscrowRekber"]
+    PUBLIC["Public VinssEscrowRekber"]
+    CERT["Optional settlement certificate"]
+    OFFER --> APP
+    APP --> PRIVATE
+    APP --> RAIL
+    RAIL -->|Shield| POOL
+    RAIL -->|Unshield| ADAPTER
+    POOL -->|privacy_invoke| NATIVE
+    ADAPTER -->|authorized calls| PUBLIC
+    NATIVE --> CERT
+    PUBLIC --> CERT
 ```
 
 The encrypted accepted Offer determines the real business relationship off-chain/private-side. The public Rekber contract receives only the public settlement parameters and precommitted capabilities required to enforce custody.

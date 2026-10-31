@@ -345,6 +345,36 @@ test("public rail runtime seams", async (t) => {
     assert.throws(() => authorization.buildRekberAcceptanceTypedData(setup, { ...acceptance, publicRailAddress: "0x99" }), /different transaction rails/);
   });
 
+  await t.test("Shield Escrow Rekber funds canonical custody and retains native lifecycle execution", async () => {
+    const beforePublic = executions.length;
+    await settlement.depositEscrow(shieldAccount, { custodyCommitment: 1n, releaseAuthorizationCommitment: 2n, payeeClaimCommitment: 3n, refundCommitment: 4n, payerConfirmationCommitment: 5n, payerDisputeCommitment: 6n, payeeDisputeCommitment: 7n, payeeRefundConsentCommitment: 8n, fulfillmentChainHead: 9n, revisionChainHead: 10n, payerCertificateCommitment: 11n, payeeCertificateCommitment: 12n, refundAfter: 10000, reviewWindow: 300, verificationPolicy: 2, fulfillmentRounds: 2, revisionRounds: 1, token: "0x30", amount: 100n });
+    const funding = shieldBundles.at(-1) as Array<{ type: string; amount?: string; recipient?: string; contract?: string; calldata?: string[] }>;
+    assert.equal(BigInt(funding[0]!.amount!), 107n, "principal and canonical funding fee remain distinct from gas");
+    assert.equal(funding[0]!.recipient, "0x15");
+    assert.equal(funding[2]!.contract, "0x15");
+    const cases: Array<[number, () => Promise<unknown>]> = [
+      [2, () => settlement.releaseEscrow(shieldAccount, { custodyCommitment: 1n, releaseAuthorizationSecret: 2n, payeeClaimSecret: 3n })],
+      [3, () => settlement.refundEscrow(shieldAccount, { custodyCommitment: 1n, refundSecret: 2n })],
+      [4, () => settlement.submitRekberFulfillment(shieldAccount, { custodyCommitment: 1n, chainSecret: 2n, evidenceCommitment: 3n })],
+      [5, () => settlement.confirmRekberFulfillment(shieldAccount, { custodyCommitment: 1n, confirmationSecret: 2n, evidenceCommitment: 3n })],
+      [7, () => settlement.requestRekberRevision(shieldAccount, { custodyCommitment: 1n, chainSecret: 2n, reasonCommitment: 3n })],
+      [6, () => settlement.openRekberDispute(shieldAccount, { custodyCommitment: 1n, role: "payer", disputeSecret: 2n, evidenceCommitment: 3n })],
+      [8, () => settlement.autoReleaseEscrow(shieldAccount, { custodyCommitment: 1n, payeeClaimSecret: 2n })],
+      [9, () => settlement.mutualRefundEscrow(shieldAccount, { custodyCommitment: 1n, refundSecret: 2n, payeeRefundConsentSecret: 3n })],
+      [10, () => settlement.claimRekberResolution(shieldAccount, { custodyCommitment: 1n, role: "payee", partySecret: 2n })],
+    ];
+    for (const [operation, run] of cases) {
+      const beforeShield = shieldBundles.length;
+      await run();
+      assert.equal(shieldBundles.length, beforeShield + 1);
+      const bundle = shieldBundles.at(-1) as Array<{ type: string; contract?: string; calldata?: string[] }>;
+      const invoke = bundle.find(action => action.type === "invoke");
+      assert.equal(invoke?.contract, "0x15");
+      assert.equal(BigInt(invoke!.calldata![1]!), BigInt(operation));
+    }
+    assert.equal(executions.length, beforePublic, "Shield must not silently execute through the public rail");
+  });
+
   await t.test("Offer lifecycle uses the room mode in both rails and keeps pairwise terms encrypted", async () => {
     const pairwiseKey = new Uint8Array(32).fill(11);
     for (const mode of ["shield", "unshield"] as const) {

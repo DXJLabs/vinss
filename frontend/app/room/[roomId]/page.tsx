@@ -108,7 +108,7 @@ export default function DealRoomPage() {
   const [counterSource, setCounterSource] =
     useState<ConversationEntry | null>(null);
 
-  // Accepted Offer handoff stays local and only pre-fills the Escrow workflow.
+  // Accepted Offer handoff stays local and only pre-fills the Escrow Rekber workflow.
   const [escrowOfferSource, setEscrowOfferSource] =
     useState<ConversationEntry | null>(null);
 
@@ -308,7 +308,7 @@ export default function DealRoomPage() {
         ? `Deal · ${shortAddress(directAgentPeer)}`
         : "Deal"
       : tab === "escrow"
-        ? "Escrow"
+        ? "Escrow Rekber"
         : selectedGroup
           ? `Group · ${selectedGroup.name}`
           : directAgentPeer
@@ -469,7 +469,7 @@ export default function DealRoomPage() {
       : null;
 
   // One accepted Offer may create exactly one Rekber lifecycle.
-  // Released/refunded Rekber stays available as history, but Add Escrow
+  // Released/refunded Rekber stays available as history, but Add Escrow Rekber
   // must never silently reuse its accepted Offer.
   const latestUnusedAcceptedDirectOffer =
     directAgentPeer
@@ -785,11 +785,11 @@ export default function DealRoomPage() {
             setTab("offer");
           }}
           onOpenEscrow={(entry) => {
-            // A locally prepared ACCEPT is optimistic only. Agreement/Escrow
+            // A locally prepared ACCEPT is optimistic only. Agreement/Escrow Rekber
             // becomes authoritative after encrypted discovery sees it again.
             if (!isOfferDiscovered(entry)) {
               setError(
-                "Offer acceptance is still confirming. Sync again before opening Escrow.",
+                "Offer acceptance is still confirming. Sync again before opening Escrow Rekber.",
               );
               void handleOfferRefresh(true);
               return;
@@ -888,13 +888,13 @@ export default function DealRoomPage() {
             <section
               role="dialog"
               aria-modal="true"
-              aria-label="Add Escrow"
+              aria-label="Add Escrow Rekber"
               className="vinss-modal-sheet absolute -left-px -right-px top-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl border border-wire/80 bg-[#090d12] shadow-[0_28px_90px_rgba(0,0,0,0.58)] sm:left-auto sm:right-5 sm:top-auto sm:bottom-5 sm:h-auto sm:max-h-[88vh] sm:w-full sm:max-w-lg sm:rounded-2xl"
             >
               <header className="flex items-center justify-between border-b border-wire/60 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-paper/90">
-                    Rekber Escrow
+                    Escrow Rekber
                   </p>
                   <p className="mt-0.5 text-[9px] text-paper/32">
                     {transactionMode === "shield"
@@ -910,7 +910,7 @@ export default function DealRoomPage() {
                     setTab("timeline");
                   }}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-paper/35 ring-1 ring-wire/60"
-                  aria-label="Close Escrow"
+                  aria-label="Close Escrow Rekber"
                 >
                   ×
                 </button>

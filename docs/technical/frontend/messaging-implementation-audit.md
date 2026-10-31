@@ -234,3 +234,8 @@ Runtime evidence resides in:
 - `tests/messaging-codec-transport.test.mjs`: lossless felt packing and authenticated legacy recovery.
 
 These tests establish source behavior at controlled boundaries. They are not a new claim of live two-wallet Offer execution or complete browser/Android gesture verification. The scoped [31 October privacy audit](./message-privacy-audit-2026-10-31.md) records live discovery schema observations and their limits; [device history](./device-history.md) records recovery limits.
+
+
+## Escrow Rekber handoff
+
+Message and Offer are coordination surfaces for the same **Escrow Rekber** product. An authenticated accepted Offer opens the actual agreement/funding/protection UI; it does not itself move principal. The [Escrow Rekber lifecycle and code map](./escrow-rekber.md) documents the two contract layers, fixed roles, original Shield/Unshield binding and canonical settlement authority.

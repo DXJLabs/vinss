@@ -1371,7 +1371,7 @@ export function DirectConversationPanel({
                       {review.decision ===
                         "approved" && (
                         <p className="mt-1 text-[9px] leading-relaxed text-paper/35">
-                          Work approval is complete. Payment settlement still needs to finish in Escrow.
+                          Work approval is complete. Payment settlement still needs to finish in Escrow Rekber.
                         </p>
                       )}
 
@@ -1395,7 +1395,7 @@ export function DirectConversationPanel({
                           >
                             {ownReview
                               ? "Continue settlement →"
-                              : "Open Escrow for payment →"}
+                              : "Open Escrow Rekber for payment →"}
                           </button>
                         )}
 
@@ -1656,7 +1656,7 @@ export function DirectConversationPanel({
                               >
                                 {isCurrentPayer
                                   ? "Continue settlement →"
-                                  : "Open Escrow for payment →"}
+                                  : "Open Escrow Rekber for payment →"}
                               </button>
                             )}
                         </div>

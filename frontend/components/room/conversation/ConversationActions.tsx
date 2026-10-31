@@ -177,7 +177,7 @@ export function ConversationActions({
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-signal/[0.055] text-signal/70 ring-1 ring-signal/10 transition group-hover:bg-signal/[0.09] group-hover:text-signal">
                   <ActionIcon kind="escrow" />
                 </span>
-                <span>Escrow</span>
+                <span>Escrow Rekber</span>
               </button>
             )}
 

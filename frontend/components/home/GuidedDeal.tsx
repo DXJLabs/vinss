@@ -97,7 +97,7 @@ const STEPS: Step[] = [
     eyebrow: "VINSS Room · Protect payment",
     title: "Secure payment with Rekber.",
     body:
-      "Payer prepares the Rekber agreement, Payee approves it, then Payer secures the agreed payment.",
+      "Payer prepares the Escrow Rekber agreement, Payee approves it, then Payer secures the agreed payment.",
     view: "rekber",
   },
   {
@@ -725,7 +725,7 @@ function Preview({
               </div>
 
               <div className="rounded-xl border border-wire/60 bg-vault/35 px-3 py-2.5 text-[10px] text-paper/62">
-                Escrow
+                Escrow Rekber
               </div>
             </div>
           </div>
@@ -841,7 +841,7 @@ function Preview({
           <div className="space-y-3 px-1 pt-2">
             <div className="rounded-xl bg-signal/[0.045] p-4 ring-1 ring-signal/15">
               <p className="text-[9px] uppercase tracking-[0.12em] text-signal/70">
-                Rekber agreement
+                Escrow Rekber agreement
               </p>
 
               <p className="mt-1 text-sm font-medium text-paper/80">

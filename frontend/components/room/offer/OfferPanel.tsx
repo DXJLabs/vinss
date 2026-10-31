@@ -39,10 +39,10 @@ const OFFER_HELP: Record<
       "Complete the main terms first. Optional fields can be left empty when they are not important to your agreement.",
       "More Terms is for additional conditions that can make the agreement clearer, such as deadlines, acceptance requirements, revisions, delivery conditions or inspection periods.",
       "Before anything is sent, Review Offer lets you check the complete proposal. The other participant can then Accept, Reject or Counter it.",
-      "The Private Offer action fee is quoted from VINSS FeePolicy at confirmation time. It is separate from the deal value and does not fund Escrow. Pool and network fees appear separately in Ready X.",
+      "The Private Offer action fee is quoted from VINSS FeePolicy at confirmation time. It is separate from the deal value and does not fund Escrow Rekber. Pool and network fees appear separately in Ready X.",
       "When an Offer or Counter is accepted, it becomes the agreed basis for the deal. Accepting it still does not move funds.",
-      "The wallet that sends the original Offer is the Escrow Payer and deposits the agreed token. The other wallet is the Payee. Counter Offers do not swap these roles.",
-      "Escrow is a separate step after agreement. Funds are only secured when Escrow is started from the accepted agreement and the funding action is completed.",
+      "The wallet that sends the original Offer is the Escrow Rekber Payer and deposits the agreed token. The other wallet is the Payee. Counter Offers do not swap these roles.",
+      "Escrow Rekber is a separate step after agreement. Funds are only secured when Escrow Rekber is started from the accepted agreement and the funding action is completed.",
       "VINSS keeps the deal terms private while recording proof of the private action on Starknet.",
     ],
   },
@@ -1676,8 +1676,8 @@ export function OfferPanel({
             </p>
             <p className="mt-2 text-[10px] leading-relaxed text-paper/55">
               {counterSource
-                ? "This Counter does not change Escrow roles: the original Offer sender remains the Payer."
-                : "If accepted, your wallet becomes the Escrow Payer and the recipient wallet becomes the Payee."}
+                ? "This Counter does not change Escrow Rekber roles: the original Offer sender remains the Payer."
+                : "If accepted, your wallet becomes the Escrow Rekber Payer and the recipient wallet becomes the Payee."}
             </p>
           </div>
 

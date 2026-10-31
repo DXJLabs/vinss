@@ -1,8 +1,8 @@
 # VINSS Escrow Rekber
 
-This document describes the current frontend Rekber architecture and lifecycle implemented on `main`.
+This document describes the current frontend Escrow Rekber architecture and lifecycle on `feat/strk20-unshield-fees` (reviewed 31 October 2026, baseline `764c78d`).
 
-`Rekber` is the canonical frontend name for the current VINSS two-party settlement flow.
+**Escrow Rekber** is the user-facing product name for VINSS's two-party agreement, custody, fulfillment and protected settlement flow. Code identifiers such as `EscrowPanel`, `escrow` tab keys, `VinssPrivateEscrowHelper` and `VinssEscrowRekber` retain their technical names for compatibility. A UI label is not a contract rename.
 
 The current system has two distinct layers:
 
@@ -17,6 +17,53 @@ VinssEscrowRekber
 These layers are related but must never be described as the same contract or the same state machine.
 
 ---
+
+
+# Shield and Unshield in the actual UI and runtime
+
+The room's **Shield / Unshield** switch applies to Message, Offer and new Escrow Rekber actions through the same mode-scoped session. Escrow Rekber is opened from the chat Actions button or the accepted Offer card; the agreement/funding/protection interface is `EscrowPanel.tsx`. This is an operational interface, not a documentation-only feature.
+
+The payer and payee sign the agreement before funding. The active payload/signature binding includes the mode and, for Unshield, public rail/custody deployment addresses. `assertRekberRail` refuses a setup/acceptance from another rail or deployment. Existing funded custody remains at its original address when the room toggle changes. Return to the agreement's mode to continue; do not describe the toggle as moving funds between modes.
+
+| Concern | Shield | Unshield |
+|---|---|---|
+| Private agreement narrative | Pairwise-encrypted coordination through native helper | Pairwise-encrypted coordination through adapter/helper |
+| Wallet approval | STRK20 native transaction | Ordinary account multicall |
+| Funding | Withdraw principal plus canonical fee to selected custody; helper returns treasury fee output | Approve exact principal plus fee, call adapter fund_custody with bound payee, revoke allowance |
+| Principal custody | Native VinssEscrowRekber instance | Dedicated public VinssEscrowRekber instance |
+| Settlement output | Authorized wallet-created OpenNote | Authorized public ERC-20 transfer to bound Payer/Payee |
+| Public metadata | Custody asset/amount, commitments, timing/state and invocation metadata | Those fields plus public party-wallet execution metadata |
+| Contract authority | Native pool is authorized caller | Adapter is authorized caller for its dedicated deployment |
+| Financial policy | Canonical custody quote and guards | Canonical custody quote and guards; not a fee-free transfer shortcut |
+
+## Lifecycle and visible state
+
+1. Rediscover and authenticate the accepted Offer; derive exact principal/token and fixed payer/payee roles.
+2. Payer prepares/signs setup; Payee signs acceptance; each encrypted coordination locator must be discoverable. Wallet callback success alone is not agreement completion.
+3. Payer confirms funding. The principal is held in the selected custody contract, distinct from service fee. Contract state confirms funding.
+4. Payee submits bounded fulfillment and encrypted evidence. Payer confirms, requests revision, or follows the authorized dispute path as applicable.
+5. Release, pre-fulfillment timeout refund, mutual refund, auto-release or authorized resolution claims execute only when contract conditions permit. These are not unconditional send-token buttons.
+6. Read custody/proof state for final outcome; optional public Certificate remains a separate action. Local cached cards and read receipts do not release funds.
+
+## Current code map
+
+| Stage | Code | Meaning |
+|---|---|---|
+| Entry/UI | [room page](../../../frontend/app/room/[roomId]/page.tsx), [ConversationActions](../../../frontend/components/room/conversation/ConversationActions.tsx), [OfferCard](../../../frontend/components/room/conversation/OfferCard.tsx), [EscrowPanel](../../../frontend/components/room/escrow/EscrowPanel.tsx) | Actual buttons, dialog and agreement/funding/recovery status |
+| Pairwise agreement coordination | [useRoomEscrow.ts](../../../frontend/hooks/room/useRoomEscrow.ts), [escrow.ts](../../../frontend/lib/deal-room/escrow.ts) | Encrypt, publish, discover and locally decrypt setup/accept/confirm/resolve coordination |
+| Role/asset mapping | [escrowSettlement.ts](../../../frontend/lib/deal-room/escrowSettlement.ts), [settlementPlan.ts](../../../frontend/lib/deal-room/settlementPlan.ts) | Accepted Offer snapshot, exact token units, fixed roles and review policies |
+| Wallet signatures and original rail | [rekberAuthorization.ts](../../../frontend/lib/deal-room/rekberAuthorization.ts), `signRekberSetup`, `signRekberAcceptance`, `assertRekberRail` | Bind accepted terms and correct mode/deployment; reject mismatch |
+| Funding and settlement | [settlement.ts](../../../frontend/lib/deal-room/settlement.ts), `depositEscrow`, `invokeSettlement`, lifecycle wrappers | Real custody operations, commitments, canonical reads and proofs |
+| Rail execution | [vinssExecution.ts](../../../frontend/lib/starknet/vinssExecution.ts), [publicRailCalls.ts](../../../frontend/lib/starknet/publicRailCalls.ts) | Native Shield dispatch or public adapter translation and allowance cleanup |
+| Protection actions | [RekberProtectionPanel.tsx](../../../frontend/components/room/escrow/RekberProtectionPanel.tsx), [useRekberProtectionActions.ts](../../../frontend/hooks/room/useRekberProtectionActions.ts) | Revision, refund, dispute, resolution and auto-release UX |
+| Local secret recovery | [rekberSecrets.ts](../../../frontend/lib/deal-room/rekberSecrets.ts) | Per-role custody secrets; still room-key-encrypted, not the separate direct-history v3 key |
+| Chain authority | [vinss_escrow_rekber.cairo](../../../contracts/src/escrow_rekber/vinss_escrow_rekber.cairo), [vinss_public_rail.cairo](../../../contracts/src/public_rail/vinss_public_rail.cairo) | Custody invariants and public entry points |
+
+## Fees and evidence limits
+
+This naming/documentation update does not change custody economics. Funding reads `quote_rekber_fee(token, principal)`; percentage and reserve/minimum policy are separate from the flat Message/Offer discount. The funding service fee is distinct from refundable principal and from Ready/pool/network charges. `quoteRekberWorkflowFee` is currently 1 STRK in source; treat its actual call sites and adapter policy as authoritative rather than inferring a charge from a button label.
+
+`frontend/tests/public-rail-runtime.test.ts` exercises actual domain funding/lifecycle code with wallet/RPC fixtures in both rails: selected custody/helper, principal plus canonical quote, public approvals/revocations, and absence of silent fallback. Signature and deployment mismatch cases are also covered in the public authorization/dispute suites. `frontend/tests/rekber-protection.test.ts` checks UX predicate boundaries; Cairo remains the authority. These are source/runtime tests, not a fresh live two-wallet deposit, settlement or dispute demonstration.
 
 # Evidence Rule
 
@@ -108,7 +155,7 @@ flowchart TD
     PLAN["Settlement plan + exact asset mapping"]
     SETUP["Payer signed private setup"]
     ACCEPT["Payee signed private acceptance"]
-    FUND["Public Rekber funding"]
+    FUND["Escrow Rekber funding on agreed rail"]
     WORK["Fulfillment / evidence"]
     REVIEW["Review / confirmation / revision"]
     DISPUTE["Dispute / resolver"]
@@ -132,13 +179,15 @@ flowchart TD
 
 # Canonical Frontend Contract Configuration
 
-The frontend currently uses one canonical Rekber contract environment variable:
+Shield selects its custody deployment through:
 
 ```text
 NEXT_PUBLIC_ESCROW_REKBER_ADDRESS
 ```
 
-and one separate Certificate address:
+Unshield selects the dedicated custody through `NEXT_PUBLIC_UNSHIELD_REKBER_ADDRESS` and routes calls through `NEXT_PUBLIC_UNSHIELD_ADAPTER_ADDRESS`. `contractsForAccount(account)` resolves the selected rail. An existing signed agreement binds its original mode/deployment; changing the next-transaction toggle does not migrate custody.
+
+The native configuration also has a separate Certificate address:
 
 ```text
 NEXT_PUBLIC_SETTLEMENT_CERTIFICATE_ADDRESS
@@ -515,16 +564,21 @@ Current flow:
 
 ```mermaid
 sequenceDiagram
-    participant UI as Escrow UI
+    participant UI as Escrow Rekber UI
     participant E as Private Escrow client
     participant W as Ready X
-    participant C as PrivateEscrowHelper
+    participant C as Selected helper / adapter
     participant I as Backend index
 
     UI->>E: prepare coordination action
     E-->>UI: locator + commitment
-    E->>W: STRK20 request
-    W->>C: encrypted helper action
+    alt Shield
+        E->>W: STRK20 encrypted action
+        W->>C: native helper action
+    else Unshield
+        E->>W: ordinary multicall
+        W->>C: public adapter with ciphertext
+    end
     C-->>I: indexed ciphertext
     UI->>I: search exact prepared locator
     I-->>UI: found / not yet found
@@ -759,7 +813,7 @@ before verifying the payee wallet signature.
 ```text
 wallet typed-data signature
 from
-STRK20 encrypted coordination send
+mode-selected encrypted coordination send (Shield STRK20 or Unshield adapter)
 ```
 
 for both payer and payee.
@@ -1244,7 +1298,7 @@ Current public Rekber action:
 
 `invokeSettlement()` asks the wallet to create an OPEN note for the custody token and passes the wallet placeholder into the Rekber invocation.
 
-Principal output therefore follows the STRK20 wallet/open-note path.
+In Shield, principal output follows the STRK20 wallet/OpenNote path. Unshield translates settlement through the public adapter and sends the authorized ERC-20 output to the bound party wallet; it does not create a private wallet note or allow an arbitrary dapp-selected recipient. Both paths must satisfy the selected custody contract's financial guards.
 
 ---
 
@@ -2132,29 +2186,28 @@ stateDiagram-v2
 
 ```mermaid
 sequenceDiagram
-    participant P as Payer
     participant UI as EscrowPanel
     participant W as Wallet
-    participant H as PrivateEscrowHelper
+    participant H as Selected helper / adapter
     participant B as Discovery
-    participant E as Payee
+    participant A as Payer / Payee
 
-    P->>UI: Start Rekber from accepted Offer
+    A->>UI: Payer starts Escrow Rekber from accepted Offer
     UI->>UI: create custody + payer secrets + terms commitment
     UI->>W: sign SNIP-12 payer setup
     W-->>UI: payer signature
     UI->>UI: persist encrypted payer secrets
-    UI->>H: encrypted signed setup via Ready X
+    UI->>H: encrypted signed setup on agreed rail
     H-->>B: immutable ciphertext indexed
     UI->>B: confirm exact setup locator
 
-    E->>UI: Accept Rekber
+    A->>UI: Payee accepts Escrow Rekber
     UI->>UI: verify payer signature + private terms
     UI->>UI: create payee secrets
     UI->>W: sign SNIP-12 acceptance
     W-->>UI: payee signature
     UI->>UI: persist encrypted payee secrets
-    UI->>H: encrypted signed acceptance
+    UI->>H: encrypted signed acceptance on same rail
     H-->>B: immutable ciphertext indexed
     UI->>B: confirm exact acceptance locator
 ```
@@ -2176,8 +2229,13 @@ sequenceDiagram
     UI->>UI: reconstruct commitments + exact amount
     UI->>R: quote_rekber_fee(token, principal)
     R-->>UI: exact fee
-    UI->>W: principal + fee STRK20 bundle
-    W->>R: action 1 funding
+    alt Shield
+        UI->>W: principal + fee STRK20 bundle
+        W->>R: native action 1 funding
+    else Unshield
+        UI->>W: approve / fund_custody / revoke
+        W->>R: authorized public adapter funding
+    end
     UI->>R: get_custody(custody)
     R-->>UI: canonical custody
     UI->>UI: verify custody matches encrypted agreement
