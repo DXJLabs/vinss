@@ -136,6 +136,7 @@ export type OfferActionKind =
   | "expire";
 
 export interface OfferActionPayload {
+  authorship?: import("@/lib/deal-room/offerAuthorization").OfferAuthorship;
   kind: OfferActionKind;
 
   // These participant fields live only inside encrypted Offer ciphertext.

@@ -12,6 +12,7 @@ export interface ConversationEntry {
   senderAddress?: string;
   groupId?: string;
   offerAction?: OfferActionPayload;
+  offerAuthorshipVerified?: boolean;
   workEvidence?: WorkEvidence;
   attachment?: AttachmentRef;
   readAt?: string;

@@ -1,4 +1,5 @@
 "use client";
+import { validOfferLifecycle } from "@/lib/deal-room/offerLifecycle";
 import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import { useEffect, useRef, useState } from "react";
@@ -34,10 +35,7 @@ import {
   pollPresence,
   publishPresence,
 } from "@/lib/privacy/presence";
-import {
-  loadEncryptedLocalJson,
-  saveEncryptedLocalJson,
-} from "@/lib/privacy/encryptedChatCache";
+import { readOfferHistory, writeOfferHistory } from "@/lib/deal-room/offerHistory";
 
 export interface OfferTermsInput {
   dealType?: DealType;
@@ -200,15 +198,7 @@ export function useRoomOffers({
       return;
     }
 
-    await saveEncryptedLocalJson(
-      storageKey,
-      channelKey,
-      {
-        version: 1,
-        savedAt: Date.now(),
-        entries: next,
-      },
-    );
+    await writeOfferHistory(roomId!, session!.account.address, channelKey, next);
   }
 
   useEffect(() => {
@@ -265,17 +255,8 @@ export function useRoomOffers({
           return;
         }
 
-        const cached =
-          await loadEncryptedLocalJson<{
-            version: 1;
-            savedAt: number;
-            entries:
-              ConversationEntry[];
-          }>(
-            storageKey,
-            channelKey,
-          );
-
+        const entries = await readOfferHistory(roomId, session.account.address, channelKey);
+        const cached = { entries };
         if (
           cancelled ||
           !cached?.entries
@@ -288,11 +269,11 @@ export function useRoomOffers({
           (previous) =>
             previous.length > 0
               ? previous
-              : cached.entries,
+              : cached.entries.map(entry => ({ ...entry, offerAuthorshipVerified: false })),
         );
       };
 
-    void hydrate();
+    void hydrate().catch(() => setError("Offer history could not be unlocked. Existing recovery data was preserved."));
 
     return () => {
       cancelled = true;
@@ -475,9 +456,7 @@ export function useRoomOffers({
           ).getTime(),
       );
 
-      void persistOfferHistory(
-        next,
-      );
+      void persistOfferHistory(next).catch(() => setError("Offer history could not be saved securely. Existing recovery data was preserved."));
 
       return next;
     });
@@ -533,9 +512,7 @@ export function useRoomOffers({
           ).getTime(),
       );
 
-      void persistOfferHistory(
-        next,
-      );
+      void persistOfferHistory(next).catch(() => setError("Offer history could not be saved securely. Existing recovery data was preserved."));
 
       return next;
     });
@@ -615,14 +592,11 @@ export function useRoomOffers({
         BACKEND_URL,
         channelKey,
         routes,
+        session.account,
       );
 
-      for (const item of discovered) {
-        matchedOfferRoutesRef.current.set(
-          stripLocator(item.actionLocator),
-          item.matchedRoute,
-        );
-      }
+      const validLifecycle = validOfferLifecycle(discovered);
+      for (const item of discovered) item.authorshipVerified = item.authorshipVerified && validLifecycle.has(BigInt(item.actionLocator).toString(16));
 
       const self =
         canonicalStarknetAddress(
@@ -680,14 +654,22 @@ export function useRoomOffers({
           senderAddress: item.action.senderAddress,
           recipientAddress: item.action.recipientAddress,
           offerAction: item.action,
+          offerAuthorshipVerified: item.authorshipVerified,
         }));
+
+      const allowed = new Set(incomingEntries.map(entry => stripLocator(entry.actionLocator)));
+      matchedOfferRoutesRef.current.clear();
+      for (const item of discovered) {
+        const locator = stripLocator(item.actionLocator);
+        if (item.authorshipVerified && allowed.has(locator)) matchedOfferRoutesRef.current.set(locator, item.matchedRoute);
+      }
 
       // Merge by immutable action locator so polling never duplicates cards.
       setOfferEntries((previous) => {
-        const byLocator = new Map(
+        const byLocator = new Map<string, ConversationEntry>(
           previous.map((entry) => [
             stripLocator(entry.actionLocator),
-            entry,
+            { ...entry, offerAuthorshipVerified: matchedOfferRoutesRef.current.has(stripLocator(entry.actionLocator)) },
           ]),
         );
 
@@ -717,9 +699,7 @@ export function useRoomOffers({
                 ).getTime(),
             );
 
-        void persistOfferHistory(
-          next,
-        );
+        void persistOfferHistory(next).catch(() => setError("Offer history could not be saved securely. Existing recovery data was preserved."));
 
         return next;
       });
@@ -844,9 +824,7 @@ export function useRoomOffers({
             ),
         );
 
-      void persistOfferHistory(
-        next,
-      );
+      void persistOfferHistory(next).catch(() => setError("Offer history could not be saved securely. Existing recovery data was preserved."));
 
       return next;
     });

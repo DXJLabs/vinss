@@ -1,4 +1,5 @@
 "use client";
+import { observeWalletOutcome, waitForWalletPreparation } from "@/lib/deal-room/walletPreparation";
 import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/lib/starknet/constants";
 
 export interface DiscoveredEscrowAction {
+  recoveryOnly?: boolean;
   actionLocator: string;
   payloadCommitment: string;
   senderTag: string;
@@ -254,6 +256,7 @@ export function useRoomEscrow({
         BACKEND_URL,
         channelKey,
         routes,
+        session.account,
       );
 
     const self =
@@ -485,7 +488,8 @@ export function useRoomEscrow({
       );
 
     // sendEscrowCoordinationAction invokes onPrepared before opening Ready X.
-    await preparedReady;
+    const walletOutcome = observeWalletOutcome(walletPromise);
+    await waitForWalletPreparation(preparedReady, walletOutcome);
 
     const locatorKey =
       preparedLocator
@@ -510,6 +514,7 @@ export function useRoomEscrow({
                 BACKEND_URL,
                 channelKey,
                 route,
+                session.account,
               );
 
             const match =
@@ -539,18 +544,6 @@ export function useRoomEscrow({
 
         return null;
       })();
-
-    const walletOutcome =
-      walletPromise
-        .then((result) => ({
-          kind: "wallet" as const,
-          result,
-        }))
-        .catch((error) => ({
-          kind:
-            "wallet_error" as const,
-          error,
-        }));
 
     const first =
       await Promise.race([

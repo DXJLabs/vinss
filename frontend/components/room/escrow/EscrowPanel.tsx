@@ -104,6 +104,7 @@ import {
 } from "@/lib/utils/units";
 
 interface LocalCoordination {
+  recoveryOnly?: boolean;
   actionLocator: string;
   transactionHash: string;
   action: EscrowActionPayload;
@@ -145,6 +146,7 @@ interface EscrowPanelProps {
   setBusy: (value: boolean) => void;
   setError: (value: string | null) => void;
   acceptedOffer?: ConversationEntry | null;
+  acceptedOfferVerified?: boolean;
   offerEntries: ConversationEntry[];
   escrowActions: DiscoveredEscrowAction[];
   onSendCoordination: (
@@ -168,6 +170,7 @@ export function EscrowPanel({
   setBusy,
   setError,
   acceptedOffer,
+  acceptedOfferVerified = false,
   offerEntries,
   escrowActions,
   onSendCoordination,
@@ -1090,6 +1093,7 @@ export function EscrowPanel({
 
     let cancelled = false;
 
+    setLocalSecrets(null);
     void loadRekberSecrets(
       roomId,
       session.account.address,
@@ -1127,6 +1131,8 @@ export function EscrowPanel({
           payload: pendingPayload,
         });
       }
+    }).catch(() => {
+      if (!cancelled) setError("Escrow Rekber recovery could not be unlocked. Existing secrets were preserved; restore device access before continuing.");
     });
 
     return () => {
@@ -1314,6 +1320,11 @@ export function EscrowPanel({
       setError(
         "The accepted Offer is missing its production Rekber settlement plan.",
       );
+      return;
+    }
+
+    if (!acceptedOfferVerified) {
+      setError("Verify the Offer wallet signature and Starknet proof before preparing a new Escrow Rekber agreement.");
       return;
     }
 
@@ -1571,6 +1582,11 @@ export function EscrowPanel({
       acceptAction ||
       role !== "payee"
     ) {
+      return;
+    }
+
+    if (createRecord?.recoveryOnly) {
+      setError("This legacy agreement is already funded. Restore its existing acceptance and device secrets to continue settlement.");
       return;
     }
 
@@ -1888,6 +1904,11 @@ export function EscrowPanel({
       setError(
         "Secure Escrow Rekber commitments are incomplete. Sync the room and try again.",
       );
+      return;
+    }
+
+    if (createRecord?.recoveryOnly || acceptRecord?.recoveryOnly) {
+      setError("This historical agreement is available for recovery only; it cannot authorize new funding.");
       return;
     }
 
@@ -2517,6 +2538,7 @@ export function EscrowPanel({
                   onClick={handleStartRekber}
                   disabled={
                     busy ||
+                    !acceptedOfferVerified ||
                     !session ||
                     !channelKey ||
                     !peerAddress
@@ -2591,6 +2613,12 @@ export function EscrowPanel({
             </div>
           )}
 
+        {(createRecord?.recoveryOnly || acceptRecord?.recoveryOnly) && !funded && (
+          <p className="rounded-lg bg-amber/[0.035] px-3 py-2.5 text-[10px] text-paper/45">
+            Existing custody recovery · sync the funded state and restore its original secrets. New funding is disabled.
+          </p>
+        )}
+
         {accepted &&
           rekberConfigured &&
           acceptAction &&
@@ -2618,6 +2646,7 @@ export function EscrowPanel({
                 onClick={handleFund}
                 disabled={
                   busy ||
+                  Boolean(createRecord?.recoveryOnly || acceptRecord?.recoveryOnly) ||
                   !localSecrets ||
                   coordinationAuthorized !== true
                 }

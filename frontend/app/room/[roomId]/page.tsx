@@ -787,7 +787,9 @@ export default function DealRoomPage() {
           onOpenEscrow={(entry) => {
             // A locally prepared ACCEPT is optimistic only. Agreement/Escrow Rekber
             // becomes authoritative after encrypted discovery sees it again.
-            if (!isOfferDiscovered(entry)) {
+            const termsLocator = entry.offerAction?.parentOfferLocator ?? entry.actionLocator;
+            const existingAgreement = escrowActions.some(record => record.action.kind === "create" && record.action.dealOfferLocator?.replace(/^0x/, "").toLowerCase() === termsLocator.replace(/^0x/, "").toLowerCase());
+            if (!isOfferDiscovered(entry) && !existingAgreement) {
               setError(
                 "Offer acceptance is still confirming. Sync again before opening Escrow Rekber.",
               );
@@ -933,6 +935,7 @@ export default function DealRoomPage() {
                   setError={setError}
                   busy={busy}
                   acceptedOffer={escrowOfferSource}
+                  acceptedOfferVerified={isOfferDiscovered(escrowOfferSource)}
                   offerEntries={offerEntries}
                   escrowActions={escrowActions}
                   onSendCoordination={

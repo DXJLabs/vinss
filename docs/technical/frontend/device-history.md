@@ -25,3 +25,6 @@ The new key is device/origin-local. Copying only localStorage to another browser
 `frontend/tests/device-history.test.ts` uses real WebCrypto and fake-indexeddb's IndexedDB implementation. It covers non-exportability, room/direct-key rejection for v3, v1/v2 migration, canonical address reconnect, concurrent initial key creation and updates, read receipts, account/context isolation, bad legacy keys, quota failure, and corrupt target preservation. Browser-specific IndexedDB CryptoKey persistence still needs a live browser smoke test; the test runner does not simulate Ready wallet behavior.
 
 Validation run: 42 frontend runtime test results and 61 root regression tests passed, along with privacy boundary checks, frontend TypeScript checks, and a production Next.js build. No live Ready/browser transaction or frontend deployment was performed.
+
+
+The non-exportable key provider now lives in `frontend/lib/privacy/deviceKey.ts` and is reused by protected Offer history and Rekber recovery. The direct-history API, v3 format and migration behavior remain unchanged. See `docs/technical/audits/offer-escrow-remediation-2026-10-31.md`.

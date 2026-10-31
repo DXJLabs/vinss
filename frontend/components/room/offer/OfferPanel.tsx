@@ -1672,7 +1672,7 @@ export function OfferPanel({
 
           <div className="border border-signal/20 bg-signal/[0.03] p-3">
             <p className="text-[10px] leading-relaxed text-paper/40">
-              Deal terms and participant addresses are encrypted with the pairwise direct key. Creating this Offer does not fund escrow.
+              Deal terms and participant addresses are encrypted with the pairwise direct key. Creating this Offer does not fund Escrow Rekber.
             </p>
             <p className="mt-2 text-[10px] leading-relaxed text-paper/55">
               {counterSource
@@ -1681,6 +1681,9 @@ export function OfferPanel({
             </p>
           </div>
 
+          <p className="text-[10px] leading-relaxed text-paper/40">
+            Ready X opens twice: sign this Offer, then publish its encrypted record. The signature stays encrypted.
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"

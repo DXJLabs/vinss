@@ -51,6 +51,7 @@ test("public rail runtime seams", async (t) => {
   let consumer = "0xabc";
   const account = {
     address: "0xabc",
+    async signMessage() { return ["0x1", "0x2"]; },
     async execute(calls: Call | Call[]) {
       const bundle = Array.isArray(calls) ? calls : [calls];
       executions.push(bundle);
@@ -104,7 +105,12 @@ test("public rail runtime seams", async (t) => {
     assert.equal(BigInt(call.calldata[0]!), BigInt(call.calldata.length - 1 - suffixCount));
     const count = Number(BigInt(call.calldata[6]!));
     const ciphertext = call.calldata.slice(7, 7 + count).map(BigInt);
-    assert.deepEqual(await decryptPayload(key, ciphertext), payload);
+    const decoded = await decryptPayload(key, ciphertext) as any;
+    if (decoded.authorship) {
+      assert.deepEqual(decoded.authorship, {version:1,signature:["0x1","0x2"]});
+      const {authorship, ...terms} = decoded;
+      assert.deepEqual(terms, payload);
+    } else assert.deepEqual(decoded, payload);
     assert.equal(JSON.stringify(call).includes("confidential"), false);
     const nonce = call.calldata.at(-1)!;
     assert.notEqual(BigInt(nonce), 0n);
@@ -145,7 +151,7 @@ test("public rail runtime seams", async (t) => {
   });
 
   await t.test("actual Offer encryption keeps plaintext terms out of public calldata", async () => {
-    const payload: OfferActionPayload = { kind: "create", asset: "STRK", amount: "19.75", paymentTerms: "confidential offer terms", conditions: "confidential conditions" };
+    const payload: OfferActionPayload = { kind: "create", senderAddress: account.address, recipientAddress: "0xdef", asset: "STRK", amount: "19.75", paymentTerms: "confidential offer terms", conditions: "confidential conditions" };
     await sendOfferAction(publicAccount, key, payload);
     assert.deepEqual(lastCalls().map(call => call.entrypoint), ["approve", "post_offer", "approve"]);
     await assertEncryptedEnvelope(adapterCall("post_offer"), payload);
@@ -403,7 +409,10 @@ test("public rail runtime seams", async (t) => {
           assert.equal(BigInt(data.at(-3)!), 100n);
         }
         const ciphertext = data.slice(7, 7 + Number(BigInt(data[6]!))).map(BigInt);
-        assert.deepEqual(await decryptPayload(pairwiseKey, ciphertext), payload);
+        const decoded = await decryptPayload(pairwiseKey, ciphertext) as OfferActionPayload;
+        assert.deepEqual(decoded.authorship, {version:1,signature:["0x1","0x2"]});
+        const {authorship, ...terms} = decoded;
+        assert.deepEqual(terms, payload);
         await assert.rejects(decryptPayload(key, ciphertext), /authentication/i);
         assert.ok(!JSON.stringify(data).includes(payload.paymentTerms!));
       }

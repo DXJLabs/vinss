@@ -633,7 +633,7 @@ export function OfferCard({
   entry,
   walletAddress,
   busy,
-  actionable,
+  actionable: requestedActionable,
   rekberStarted = false,
   onAccept,
   onReject,
@@ -705,6 +705,8 @@ export function OfferCard({
    * Accept confirms the negotiated Offer only.
    * Escrow Rekber agreement preparation is a separate step before escrow funding.
    */
+  const actionable = requestedActionable && entry.offerAuthorshipVerified === true;
+
   const accepted =
     action.kind === "accept";
 
@@ -752,18 +754,23 @@ export function OfferCard({
     >
       <div
         className={
-          accepted
+          accepted && entry.offerAuthorshipVerified === true
             ? "border border-signal/25 border-l-2 border-l-signal bg-vault/35 px-3.5 py-3"
             : rejected
               ? "border border-danger/20 border-l-2 border-l-danger/60 bg-vault/35 px-3.5 py-3"
               : "border border-wire border-l-2 border-l-amber-400/60 bg-vault/35 px-3.5 py-3"
         }
       >
+        {entry.offerAuthorshipVerified !== true && (
+          <p className="mb-2 text-[10px] text-amber-300/70">
+            {action.authorship ? "Verifying wallet signature and Starknet proof…" : "Wallet consent is unverified"}
+          </p>
+        )}
         <div className="flex items-center justify-between gap-3">
           <span className="font-display text-[8px] uppercase tracking-[0.16em] text-amber-300/70">
-            {cardTitle(
-              action.kind,
-            )}
+            {entry.offerAuthorshipVerified === true
+              ? cardTitle(action.kind)
+              : action.kind === "accept" ? "Unverified acceptance" : "Unverified Offer"}
             {" · "}
             {actionPending
               ? "Preparing"
@@ -977,10 +984,12 @@ export function OfferCard({
                 ? "Accept is confirming on Starknet…"
                 : rekberStarted
                   ? "✓ Escrow Rekber agreement prepared"
-                  : "Offer accepted · prepare the Escrow Rekber agreement before funding"}
+                  : entry.offerAuthorshipVerified === true
+                    ? "Offer accepted · prepare the Escrow Rekber agreement before funding"
+                    : "Unsigned history · create and accept a new Offer before a new agreement"}
             </p>
 
-            {onOpenEscrow &&
+            {onOpenEscrow && (entry.offerAuthorshipVerified === true || rekberStarted) &&
               confirmed && (
                 <button
                   type="button"

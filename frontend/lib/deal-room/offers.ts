@@ -1,3 +1,5 @@
+import { signOfferAction, verifyOfferAuthorship } from "./offerAuthorization";
+import { verifyEnvelopeProof, felt } from "./envelopeProof";
 import { contractsForAccount } from "@/lib/starknet/railConfig";
 import { prepareActionLocator } from "@/lib/starknet/actionLocator";
 import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
@@ -132,11 +134,13 @@ export async function sendOfferAction(
     ),
   ]);
 
-  // Encrypt all deal terms and participant metadata locally.
-  const ciphertextChunks = await encryptPayload(
-    encryptionKey,
-    payload,
-  );
+  // Fail fee/config preflight before asking for a wallet signature.
+  await quoteOfferFee(account);
+  await preflightVinssActions(account);
+  const signedPayload = await signOfferAction(account, payload, actionLocator);
+  const ciphertextChunks = await encryptPayload(encryptionKey, signedPayload);
+  // Signing may take time; use a fresh fee quote for the actual transaction.
+  const quotedFee = await quoteOfferFee(account);
 
   // Commit to the exact encrypted envelope before sending it to Starknet.
   const payloadCommitment = commitOfferPayloadV2(
@@ -157,21 +161,11 @@ export async function sendOfferAction(
     ...ciphertextChunks,
   ].map(toFelt);
 
-  // Fetch the helper's authoritative FeePolicy quote immediately before
-  // Ready X builds the transaction. OfferHelper validates quoted_fee on-chain.
-  const quotedFee = await quoteOfferFee(account);
-
-  /*
-   * Persist recovery state only after encryption, calldata and FeePolicy
-   * preflight succeed. Otherwise a failed preflight can leave a ghost Offer
-   * even though Ready X was never invoked.
-   */
   /*
    * Create optimistic recovery state only after FeePolicy/config preflight.
    * Otherwise an RPC/preflight failure could leave a ghost Offer even though
    * Ready X was never invoked.
    */
-  await preflightVinssActions(account);
   if (onPrepared) {
     await onPrepared({
       actionLocator,
@@ -324,6 +318,7 @@ export async function discoverOfferActions(
   backendUrl: string,
   channelKey: ChannelKey,
   route?: MessageRoute | MessageRoute[],
+  account?: object,
 ): Promise<
   Array<{
     actionLocator: string;
@@ -334,6 +329,7 @@ export async function discoverOfferActions(
     blockNumber: number;
     transactionHash: string;
     matchedRoute: MessageRoute;
+    authorshipVerified: boolean;
   }>
 > {
   // The backend remains keyless and receives only the record kind.
@@ -383,15 +379,19 @@ export async function discoverOfferActions(
     blockNumber: number;
     transactionHash: string;
     matchedRoute: MessageRoute;
+    authorshipVerified: boolean;
   }> = [];
 
   // Try only private routing contexts known by this client.
+  if (!Array.isArray(records)) throw new Error("Invalid ciphertext discovery response.");
   for (const record of records) {
+    if (!record || typeof record !== "object") continue;
     if (!record.senderTag || !record.recipientTag) {
       continue;
     }
 
-    const actionLocator = BigInt(record.actionLocator);
+    let actionLocator: bigint;
+    try { actionLocator = felt(record.actionLocator); } catch { continue; }
 
     for (const candidate of candidateRoutes) {
       try {
@@ -456,7 +456,12 @@ export async function discoverOfferActions(
           continue;
         }
 
+        await verifyEnvelopeProof("offer", record, account);
+        const authorshipVerified = await verifyOfferAuthorship(action, actionLocator, account);
+        // Unsigned, anchored history remains readable, never authenticated consent.
+        if (action.authorship && !authorshipVerified) continue;
         decrypted.push({
+          authorshipVerified,
           actionLocator: record.actionLocator,
           payloadCommitment: record.payloadCommitment,
           senderTag: record.senderTag,

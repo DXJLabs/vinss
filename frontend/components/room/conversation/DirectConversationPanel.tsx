@@ -1,4 +1,5 @@
 "use client";
+import { supersededOfferParents } from "@/lib/deal-room/offerLifecycle";
 import type { WalletAccountV6 } from "starknet";
 import { useConversationScroll } from "@/hooks/room/useConversationScroll";
 
@@ -917,24 +918,7 @@ export function DirectConversationPanel({
       ),
     ]);
 
-  const supersededOfferLocators =
-    new Set(
-      pairEntries
-        .filter(
-          (entry) =>
-            entry.kind === "offer" &&
-            Boolean(
-              entry.offerAction
-                ?.parentOfferLocator,
-            ),
-        )
-        .map((entry) =>
-          normalizeLocator(
-            entry.offerAction
-              ?.parentOfferLocator,
-          ),
-        ),
-    );
+  const supersededOfferLocators = supersededOfferParents(pairEntries);
 
   const {
     label: peerLabel,

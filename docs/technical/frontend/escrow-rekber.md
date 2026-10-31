@@ -1,5 +1,12 @@
 # VINSS Escrow Rekber
 
+## Security update — 31 October 2026
+
+Offer-derived new agreements require authenticated wallet consent and selected-chain publication proof. Setup/acceptance discovery also checks existing Rekber wallet signatures before treating a record as agreement state. Private helper publication is verified independently of indexer assertions. Early preflight rejection now settles the UI operation instead of waiting indefinitely for preparation.
+
+Rekber secrets use device-protected `rekber-secrets:v3` storage; shared-room-key `v2` is migrated without changing funded capabilities. Paid Unshield create/accept/dispute coordination requires exact fee-bearing adapter trace evidence. Unpaid historical agreements with proven existing custody remain recovery-only, with new acceptance/funding disabled. Free synchronization and custody economics remain unchanged. See [remediation](../audits/offer-escrow-remediation-2026-10-31.md), including the explicit distinction between client workflow recognition and contract classification of private semantics. Existing lifecycle Mermaid diagrams remain applicable.
+
+
 This document describes the current frontend Escrow Rekber architecture and lifecycle on `feat/strk20-unshield-fees` (reviewed 31 October 2026, baseline `764c78d`).
 
 **Escrow Rekber** is the user-facing product name for VINSS's two-party agreement, custody, fulfillment and protected settlement flow. Code identifiers such as `EscrowPanel`, `escrow` tab keys, `VinssPrivateEscrowHelper` and `VinssEscrowRekber` retain their technical names for compatibility. A UI label is not a contract rename.
@@ -56,7 +63,7 @@ The payer and payee sign the agreement before funding. The active payload/signat
 | Funding and settlement | [settlement.ts](../../../frontend/lib/deal-room/settlement.ts), `depositEscrow`, `invokeSettlement`, lifecycle wrappers | Real custody operations, commitments, canonical reads and proofs |
 | Rail execution | [vinssExecution.ts](../../../frontend/lib/starknet/vinssExecution.ts), [publicRailCalls.ts](../../../frontend/lib/starknet/publicRailCalls.ts) | Native Shield dispatch or public adapter translation and allowance cleanup |
 | Protection actions | [RekberProtectionPanel.tsx](../../../frontend/components/room/escrow/RekberProtectionPanel.tsx), [useRekberProtectionActions.ts](../../../frontend/hooks/room/useRekberProtectionActions.ts) | Revision, refund, dispute, resolution and auto-release UX |
-| Local secret recovery | [rekberSecrets.ts](../../../frontend/lib/deal-room/rekberSecrets.ts) | Per-role custody secrets; still room-key-encrypted, not the separate direct-history v3 key |
+| Local secret recovery | [rekberSecrets.ts](../../../frontend/lib/deal-room/rekberSecrets.ts) | Per-role custody secrets protected by the independent device key; verified migration from room-key v2 preserves funded capabilities |
 | Chain authority | [vinss_escrow_rekber.cairo](../../../contracts/src/escrow_rekber/vinss_escrow_rekber.cairo), [vinss_public_rail.cairo](../../../contracts/src/public_rail/vinss_public_rail.cairo) | Custody invariants and public entry points |
 
 ## Fees and evidence limits
@@ -905,7 +912,7 @@ revision < fulfillment
 Current secret namespace:
 
 ```text
-vinss:rekber-secrets:v2:<roomId>:<wallet>:<custody>
+vinss:rekber-secrets:v3:<roomId>:<wallet>:<custody>
 ```
 
 ---
@@ -913,13 +920,7 @@ vinss:rekber-secrets:v2:<roomId>:<wallet>:<custody>
 
 ## Secret Store Protection
 
-`rekberSecrets.ts` uses the shared encrypted local JSON helper with:
-
-```text
-room channelKey
-```
-
-to encrypt each wallet's local Rekber secret record.
+`rekberSecrets.ts` uses `deviceCache.ts` with the independent non-exportable key from `deviceKey.ts`. The room channelKey unlocks legacy v2 only for migration. The v3 encrypted wrapper binds wallet/room/custody context; the inner capability record retains version 2 and its original secrets. A verified replacement is required before removing legacy ciphertext.
 
 ---
 
@@ -2419,7 +2420,7 @@ Different Rekber stages use different strongest evidence:
 | `P6` | Only opaque evidence commitments need reach public custody. |
 | `P7` | Used preimages may become observable after use. |
 | `P8` | Certificate ownership is intentionally public. |
-| `P9` | Local Rekber secret store is encrypted with room channelKey. |
+| `P9` | Local Rekber secret store uses independent device encryption; legacy migration preserves funded capabilities. |
 | `P10` | Dedicated Dispute is an explicit plaintext trust-boundary transition. |
 
 
@@ -2651,11 +2652,11 @@ mainnet transaction success
 
 | Caveat | Current implication |
 |---|---|
-| Fee comment inconsistency | `escrow.ts` comment says only payer create is revenue-bearing, executable condition charges create/accept/dispute. |
+| Coordination fee classification | Create/accept/dispute have the existing workflow fee; public paid recognition requires exact per-action trace evidence. |
 | Workflow fee policy split | Selected workflow fee is currently frontend-defined 1 STRK after revenue-policy validation. |
 | Source tests are not E2E | Five mapping + six protection + one dispute source cases are logic evidence only. |
 | Frontend orchestration concentration | EscrowPanel still owns much of production transaction sequencing; refactors are intentionally conservative. |
-| Local secret protection depends on room key | Rekber secret records are encrypted application storage, not secure enclave storage. |
+| Local secret protection requires device-key access | IndexedDB key loss blocks recovery; active origin/device compromise remains outside storage-dump protection. |
 | Public settlement metadata | Token, amount, timing, commitments, lifecycle state and used preimages are observable. |
 | Certificate linkability | Claim intentionally makes wallet/role/custody relationship public. |
 | RPC polling | Active custody refresh currently polls around every 1s. |

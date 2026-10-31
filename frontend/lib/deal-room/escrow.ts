@@ -1,3 +1,6 @@
+import { assertRekberRail, verifyRekberSetup, verifyRekberAcceptance } from "./rekberAuthorization";
+import { computeReleaseAuthorizationCommitment } from "./settlement";
+import { verifyEnvelopeProof, felt } from "./envelopeProof";
 import { contractsForAccount } from "@/lib/starknet/railConfig";
 import { prepareActionLocator } from "@/lib/starknet/actionLocator";
 import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
@@ -85,9 +88,9 @@ async function invokeHelper(
   }
 
   /*
-   * Only the payer's Rekber Agreement/create action is revenue-bearing.
-   * Every other encrypted coordination action consumes 10 wei solely for
-   * Privacy Pool replay protection and must not create another VINSS fee.
+   * Create, accept and explicit dispute coordination use the workflow fee.
+   * Background coordination uses 10 wei for native pool replay protection;
+   * the public translator keeps that background path free.
    */
   const replayOrRevenueAmount =
     revenueFee > 0n
@@ -240,6 +243,7 @@ export async function discoverEscrowActions(
   backendUrl: string,
   channelKey: ChannelKey,
   route?: MessageRoute | MessageRoute[],
+  account?: object,
 ): Promise<
   Array<{
     actionLocator: string;
@@ -249,6 +253,7 @@ export async function discoverEscrowActions(
     action: EscrowActionPayload;
     blockNumber: number;
     transactionHash: string;
+    recoveryOnly?: boolean;
   }>
 > {
   const res = await fetch(
@@ -304,9 +309,12 @@ export async function discoverEscrowActions(
     action: EscrowActionPayload;
     blockNumber: number;
     transactionHash: string;
+    recoveryOnly?: boolean;
   }> = [];
 
+  if (!Array.isArray(records)) throw new Error("Invalid ciphertext discovery response.");
   for (const record of records) {
+    if (!record || typeof record !== "object") continue;
     if (
       !record.senderTag ||
       !record.recipientTag
@@ -314,8 +322,8 @@ export async function discoverEscrowActions(
       continue;
     }
 
-    const actionLocator =
-      BigInt(record.actionLocator);
+    let actionLocator: bigint;
+    try { actionLocator = felt(record.actionLocator); } catch { continue; }
 
     for (const candidate of candidateRoutes) {
       try {
@@ -376,7 +384,9 @@ export async function discoverEscrowActions(
           continue;
         }
 
+        const proof = await verifyEnvelopeProof("escrow", record, account, ["create", "accept", "dispute"].includes(action.kind), action.custodyCommitment);
         decrypted.push({
+          recoveryOnly: proof.recoveryOnly,
           actionLocator:
             record.actionLocator,
           payloadCommitment:
@@ -399,5 +409,35 @@ export async function discoverEscrowActions(
     }
   }
 
-  return decrypted;
+  // Shared-key peers may create ciphertext, but may not replace wallet-signed
+  // agreement state or poison the release capability selected by the UI.
+  const setups = new Map<string, EscrowActionPayload>();
+  const authenticated: typeof decrypted = [];
+  for (const record of decrypted) {
+    if (record.action.kind !== "create") continue;
+    try {
+      assertRekberRail(account as WalletAccountV6, record.action);
+      if (await verifyRekberSetup(record.action)) {
+        setups.set(felt(record.action.custodyCommitment).toString(), record.action);
+        authenticated.push(record);
+      }
+    } catch { /* Invalid or another-rail setup is never authoritative state. */ }
+  }
+  for (const record of decrypted) {
+    const action = record.action;
+    if (action.kind === "create") continue;
+    try {
+      const setup = action.custodyCommitment ? setups.get(felt(action.custodyCommitment).toString()) : undefined;
+      if (action.kind === "accept") {
+        assertRekberRail(account as WalletAccountV6, action);
+        if (!setup || !await verifyRekberAcceptance(setup, action)) continue;
+      }
+      if (action.kind === "resolve" && action.releaseAuthorizationSecret) {
+        if (!setup || computeReleaseAuthorizationCommitment(BigInt(action.custodyCommitment!), BigInt(action.releaseAuthorizationSecret)) !== BigInt(setup.releaseAuthorizationCommitment!)) continue;
+      }
+      authenticated.push(record);
+    } catch { /* Skip malformed private coordination instead of suppressing valid history. */ }
+  }
+  return authenticated.sort((a,b) => a.blockNumber-b.blockNumber);
+
 }

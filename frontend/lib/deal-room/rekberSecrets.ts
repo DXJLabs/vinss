@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  loadEncryptedLocalJson,
-  saveEncryptedLocalJson,
-} from "@/lib/privacy/encryptedChatCache";
+import { readDeviceCache, writeDeviceCache } from "@/lib/privacy/deviceCache";
 import {
   canonicalStarknetAddress,
 } from "@/lib/privacy/participantKeys";
@@ -55,37 +52,36 @@ function storageKey(
   ].join(":");
 }
 
-export async function saveRekberSecrets(
-  roomId: string,
-  walletAddress: string,
-  custodyCommitment: bigint,
-  channelKey: Uint8Array,
-  secrets: StoredRekberSecrets,
-): Promise<void> {
-  await saveEncryptedLocalJson(
-    storageKey(
-      roomId,
-      walletAddress,
-      custodyCommitment,
-    ),
-    channelKey,
-    secrets,
-  );
+function cacheOptions(roomId: string, walletAddress: string, custody: bigint, legacyKey: Uint8Array) {
+  const legacyStorageKey = storageKey(roomId, walletAddress, custody);
+  return {
+    storageKey: legacyStorageKey.replace(":v2:", ":v3:"), legacyStorageKey,
+    walletAddress, context: legacyStorageKey, legacyKey,
+    validate(value: unknown): StoredRekberSecrets {
+      const data = value as StoredRekberSecrets;
+      if (!data || data.version !== 2 || BigInt(data.custodyCommitment) !== custody ||
+          !["payer", "payee"].includes(data.role) || !data.certificateSecret || typeof data.savedAt !== "string") {
+        throw new Error("Invalid Escrow Rekber recovery data.");
+      }
+      return data;
+    },
+    mergeLegacy(current: StoredRekberSecrets, legacy: StoredRekberSecrets) {
+      assertSameCapabilities(current, legacy);
+      return Date.parse(legacy.savedAt) > Date.parse(current.savedAt) ? legacy : current;
+    },
+  };
 }
-
-export async function loadRekberSecrets(
-  roomId: string,
-  walletAddress: string,
-  custodyCommitment: bigint,
-  channelKey: Uint8Array,
-): Promise<StoredRekberSecrets | null> {
-  return loadEncryptedLocalJson<StoredRekberSecrets>(
-    storageKey(
-      roomId,
-      walletAddress,
-      custodyCommitment,
-    ),
-    channelKey,
-  );
+function assertSameCapabilities(current: StoredRekberSecrets, next: StoredRekberSecrets): void {
+  for (const name of ["role", "releaseAuthorizationSecret", "payeeClaimSecret", "refundSecret", "payerConfirmationSecret", "payerDisputeSecret", "revisionChainSecrets", "payeeDisputeSecret", "payeeRefundConsentSecret", "fulfillmentChainSecrets", "certificateSecret"] as const) {
+    if (JSON.stringify(current[name]) !== JSON.stringify(next[name])) throw new Error("Escrow Rekber recovery capabilities cannot be replaced.");
+  }
 }
-
+export async function saveRekberSecrets(roomId: string, walletAddress: string, custody: bigint, channelKey: Uint8Array, secrets: StoredRekberSecrets): Promise<void> {
+  await writeDeviceCache(cacheOptions(roomId, walletAddress, custody, channelKey), previous => {
+    if (previous) assertSameCapabilities(previous, secrets);
+    return secrets;
+  });
+}
+export async function loadRekberSecrets(roomId: string, walletAddress: string, custody: bigint, channelKey: Uint8Array): Promise<StoredRekberSecrets | null> {
+  return readDeviceCache(cacheOptions(roomId, walletAddress, custody, channelKey));
+}

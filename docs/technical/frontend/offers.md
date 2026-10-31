@@ -1,5 +1,12 @@
 # VINSS Private Offers
 
+## Security update — 31 October 2026
+
+New Offer actions use encrypted SNIP-12 wallet authorship, not shared-key HMAC tags alone. The signature binds deterministic full payload content, one-time locator, sender/recipient, chain, rail and helper. Discovery verifies the helper record and successful transaction event before the hook authenticates the lifecycle. Unsigned historical cards remain readable but cannot supersede signed parents or authorize a new agreement. Ready X signs before encrypted publication.
+
+Local Offer history now uses independent device encryption (`offer-history:v2`), migrating room-key `v1` only after a verified write. See [remediation and code map](../audits/offer-escrow-remediation-2026-10-31.md) for exact boundaries, compatibility and verification limits. Existing Mermaid diagrams are retained; the send/encrypt/publish and discover/decrypt stages now include these authorization and proof checks.
+
+
 > Shield/Unshield integration checked 31 October 2026 against `d3daf1e`. The Offer uses the same room toggle as Message. This update verifies runtime dispatch with controlled wallet/RPC fixtures; it is not a claim of a fresh live two-wallet Offer transaction.
 
 
@@ -1392,7 +1399,7 @@ so polling does not create duplicate lifecycle cards.
 Current local history key:
 
 ```text
-vinss:offer-history:v1:<roomId>:<canonical-wallet>
+vinss:offer-history:v2:<roomId>:<canonical-wallet>
 ```
 
 ---
@@ -1400,13 +1407,7 @@ vinss:offer-history:v1:<roomId>:<canonical-wallet>
 
 ## History Encryption
 
-Offer history is encrypted with:
-
-```text
-room channelKey
-```
-
-through `encryptedChatCache.ts`.
+Offer history is encrypted with an independent non-exportable device key from `deviceKey.ts`, through `offerHistory.ts` and `deviceCache.ts`. Legacy `v1` uses room channelKey only for verified migration; it is not the new storage key. The decrypted device wrapper binds its context before returning the history value.
 
 ---
 
@@ -2387,9 +2388,9 @@ flowchart LR
 
 # Local-State Checklist
 
-- [ ] Offer history namespace remains v1 unless migrated.
+- [ ] Offer history uses v2 after verified migration from v1.
 - [ ] Offer history remains AES-GCM encrypted.
-- [ ] Room channelKey remains history encryption key.
+- [ ] Independent device key encrypts current history; the room key is used only for legacy migration.
 - [ ] Prepared cards have empty tx hash until callback/discovery update.
 - [ ] Cached cards cannot bypass authenticated parent route requirement.
 - [ ] ReadAt remains UX Presence state.
@@ -2598,7 +2599,7 @@ Known issues:
 | Backend Discovery dependency | Fresh/private Offer synchronization depends on ciphertext index availability. |
 | Public metadata remains | Timing, helper interaction, locators, tags, commitment, ciphertext are observable. |
 | No dedicated full Offer frontend test suite | Current automated evidence is partial/cross-layer. |
-| Legacy no-route path remains | Low-level API retains room-key compatibility even though current UI is direct. |
+| New Offer attribution | Low-level sends require sender/recipient wallet identities; current direct UI supplies the pairwise route. Unsigned history is display-only. |
 | SettlementPlan compatibility | Old Offers without plan are intentionally blocked from current Counter/Accept production Rekber path. |
 
 

@@ -1,6 +1,13 @@
 # VINSS Frontend Privacy Model
 
-> Message/storage boundaries refreshed 31 October 2026. Direct history v3 uses an independent device key; Offer/Rekber local caches retain their existing room-key protection. See [Message architecture](./messaging-implementation-audit.md) and [device history](./device-history.md).
+## Security update — 31 October 2026
+
+Offer authorship now has encrypted SNIP-12 signatures; shared-key HMAC is routing/integrity evidence, not individual wallet consent. Offer and private Escrow discovery verify the selected helper's committed ciphertext and successful transaction event through the configured Starknet RPC. Local Offer history and Rekber recovery secrets now use independent, non-exportable device-key protection with verified legacy migration. Existing escrow capabilities are preserved, not rotated.
+
+See [remediation and limitations](../audits/offer-escrow-remediation-2026-10-31.md) for unsigned historical records, funded recovery, per-action Unshield fee proof, retained legacy copies and RPC requirements. Shield/Unshield are Starknet modes; they do not replace Canton's separate DAML privacy/authorization model.
+
+
+> Message/storage boundaries refreshed 31 October 2026. Direct history v3 uses an independent device key; Offer history and Rekber recovery now share the independent device-key provider with verified legacy migration. See [Message architecture](./messaging-implementation-audit.md) and [device history](./device-history.md).
 
 
 This document defines the current privacy boundaries implemented by the VINSS frontend.
@@ -1807,10 +1814,10 @@ It supports room-scoped coordination/cache encryption but does not itself derive
 | P-256 private identity | IndexedDB | non-exportable CryptoKey |
 | participant cache | localStorage | plaintext metadata |
 | direct history v3 | localStorage ciphertext + IndexedDB key | AES-GCM / independent non-exportable device key |
-| Offer history | localStorage | AES-GCM / room key |
+| Offer history v2 | localStorage ciphertext + IndexedDB key | AES-GCM / independent non-exportable device key |
 | direct pending Message | localStorage | AES-GCM / pairwise key |
 | Group pending Message | localStorage | locator/timestamps only |
-| Rekber secrets | localStorage | AES-GCM / room key |
+| Rekber secrets v3 | localStorage ciphertext + IndexedDB key | AES-GCM / independent non-exportable device key |
 | Invite recovery link | localStorage | plaintext bearer capability |
 
 ---
