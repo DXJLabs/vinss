@@ -1,4 +1,5 @@
 "use client";
+import { OpenMlsSessionControls } from "./OpenMlsSessionControls";
 import { supersededOfferParents } from "@/lib/deal-room/offerLifecycle";
 import type { WalletAccountV6 } from "starknet";
 import { useConversationScroll } from "@/hooks/room/useConversationScroll";
@@ -56,6 +57,7 @@ import type {
 } from "@/lib/privacy/rekberEvidenceChannel";
 
 interface DirectConversationPanelProps {
+  mlsDirect: import("@/hooks/room/useStarknetDirectMls").MlsDirectControls;
   account?: WalletAccountV6;
   entries: ConversationEntry[];
   offerEntries: ConversationEntry[];
@@ -124,6 +126,7 @@ interface DirectConversationPanelProps {
  * useDirectConversation; this component should stay interaction-focused.
  */
 export function DirectConversationPanel({
+  mlsDirect,
   account,
   entries,
   offerEntries,
@@ -981,6 +984,7 @@ export function DirectConversationPanel({
         </button>
       </div>
 
+      <OpenMlsSessionControls controls={mlsDirect} busy={busy} />
       <div className="relative">
         <div
           ref={scrollBoxRef}
@@ -2110,11 +2114,13 @@ export function DirectConversationPanel({
               !connected ||
               !channelReady ||
               busy ||
+              mlsDirect.busy ||
+              !mlsDirect.ready ||
               !draft.trim()
             }
             className="h-11 rounded-xl border border-signal/30 bg-signal/[0.07] px-4 font-display text-[9px] uppercase tracking-[0.14em] text-signal transition hover:bg-signal hover:text-ink disabled:bg-transparent disabled:opacity-30"
           >
-            Send
+            {mlsDirect.ready ? "Send" : "Set up OpenMLS"}
           </button>
         </div>
       </div>

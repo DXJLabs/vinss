@@ -135,6 +135,7 @@ export default function DealRoomPage() {
     sendDirectWorkSubmission,
     sendDirectWorkReview,
     handleRefresh,
+    mlsDirect,
   } = useRoomConversation({
     roomId: room?.id ?? null,
     session,
@@ -540,7 +541,7 @@ export default function DealRoomPage() {
             {transactionMode === "shield" ? "Shield" : "Unshield"}
           </span>
           <button type="button" role="switch" aria-label="Shield mode" aria-checked={transactionMode === "shield"}
-            disabled={Boolean(modeError) || busy || (transactionMode === "shield" && Boolean(publicRailConfigurationError()))}
+            disabled={Boolean(modeError) || busy || mlsDirect.busy || (transactionMode === "shield" && Boolean(publicRailConfigurationError()))}
             title={transactionMode === "shield" ? "Switch to Unshield" : "Switch to Shield"}
             onClick={() => { try { changeMode(transactionMode === "shield" ? "unshield" : "shield"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cannot change room mode."); } }}
             className="flex h-11 w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-40">
@@ -689,6 +690,7 @@ export default function DealRoomPage() {
         tab !== "activity" &&
         tab !== "loyalty" && (
         <ConversationPanel account={session?.account}
+          mlsDirect={mlsDirect}
           roomId={room?.id ?? params.roomId}
           entries={entries}
           offerEntries={offerEntries}

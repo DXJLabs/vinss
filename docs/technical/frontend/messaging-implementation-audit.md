@@ -1,6 +1,6 @@
 # VINSS Starknet Messaging — Code Audit and Security Boundaries
 
-> Refreshed 31 October 2026 from branch `feat/strk20-unshield-fees`, source baseline `d3daf1e` (includes cache v3 and mobile layout). **This is an implementation audit, not a new messaging protocol and not live-chain proof.** The separate OpenMLS branch has not been integrated here.
+> Refreshed 31 October 2026 from branch `feat/strk20-unshield-fees`, source baseline `d3daf1e` (includes cache v3 and mobile layout). **This is an implementation audit, not a new messaging protocol and not live-chain proof.** This is the pre-MLS baseline. New direct text now uses [OpenMLS inside this transport](./openmls-starknet.md); the findings and diagrams below describe the outer envelope and legacy/separate workflows.
 
 ## 1. Architectural thesis
 
@@ -12,7 +12,7 @@ VINSS combines private *commercial coordination* with public verifiable settleme
 - **Backend indexer:** follows public events, reads on-chain ciphertext into PostgreSQL, and serves candidates by `POST /discover` without app decryption keys.
 - **Receiving browser:** validates routing tags, decrypts ciphertext locally, filters direct-peer/group scope and reconciles pending state.
 
-The currently implemented application cryptography is **WebCrypto AES-GCM + HMAC-SHA-256 + P-256 ECDH/HKDF**, not OpenMLS or a claim of MLS-style forward secrecy.
+The audited baseline application cryptography is **WebCrypto AES-GCM + HMAC-SHA-256 + P-256 ECDH/HKDF**. These primitives remain the outer transport. The later direct-text OpenMLS integration has its own linked code map and evidence.
 
 ## 2. Source-of-truth map
 
@@ -163,7 +163,7 @@ Previously `messaging.ts` logged raw wallet error metadata, `debugActions` and J
 
 [Direct two-party chat](./direct-chat.md) · [Privacy model](./privacy-model.md) · [Wallet and STRK20](./wallet-strk20.md) · [Shield/Unshield](./shield-unshield.md) · [MessageHelper Cairo](../smart-contracts/message-helper.md) · [Discovery/indexer](../backend/discovery-indexer.md).
 
-**Future OpenMLS work belongs in `feat/openmls-starknet`:** design authenticated group membership/epochs, key-package provisioning, device restore and backward-compatible V2 migration explicitly. STRK20 remains the Shield transaction mechanism; Unshield uses the public adapter. MLS should not be described as already active.
+**Historical OpenMLS recommendation, superseded for direct text by the linked integration:** design authenticated group membership/epochs, key-package provisioning, device restore and backward-compatible V2 migration explicitly. STRK20 remains the Shield transaction mechanism; Unshield uses the public adapter. MLS should not be described as already active.
 
 
 ## 11. Updated execution and plaintext boundary

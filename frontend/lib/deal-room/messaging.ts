@@ -1,3 +1,4 @@
+import { verifyEnvelopeProof, felt } from "./envelopeProof";
 import { contractsForAccount } from "@/lib/starknet/railConfig";
 import { prepareActionLocator } from "@/lib/starknet/actionLocator";
 import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
@@ -233,6 +234,7 @@ export async function discoverMessages(
   backendUrl: string,
   channelKey: ChannelKey,
   route?: MessageRoute | MessageRoute[],
+  proof?: { account: object; verifyPublication: true },
 ): Promise<Array<{
   actionLocator: string;
   payloadCommitment: string;
@@ -275,13 +277,16 @@ export async function discoverMessages(
   const decrypted = [];
 
 
+  if (!Array.isArray(records)) throw new Error("Invalid ciphertext discovery response.");
   for (const record of records) {
+    if (!record || typeof record !== "object") continue;
     if (!record.senderTag || !record.recipientTag) {
       console.warn("[VINSS MSG SKIP missing-tags]", record.actionLocator);
       continue;
     }
 
-    const actionLocator = BigInt(record.actionLocator);
+    let actionLocator: bigint;
+    try { actionLocator = felt(record.actionLocator); } catch { continue; }
 
     let routeIndex = 0;
 
@@ -328,6 +333,7 @@ export async function discoverMessages(
           }
         }
 
+        if (proof?.verifyPublication) await verifyEnvelopeProof("message", record, proof.account);
         decrypted.push({
           actionLocator: record.actionLocator,
           payloadCommitment: record.payloadCommitment,

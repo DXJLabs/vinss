@@ -1,5 +1,7 @@
 # VINSS Frontend Technical Reference
 
+**Current main:** [OpenMLS direct text: scope, code map, durability and fees](./openmls-starknet.md). New direct text uses OpenMLS inside the existing Message V2 transport. Attachments, groups, Offer and Escrow Rekber retain separate encryption. The older audits below remain dated evidence, not a claim that all workflows use MLS.
+
 > Implementation reference updated 31 October 2026: Message/Offer use the room Shield/Unshield selection; direct history uses device-key v3. See [Message architecture and code map](./messaging-implementation-audit.md), [direct history](./device-history.md), and [mobile layout](./mobile-chat-layout.md).
 
 
@@ -45,7 +47,8 @@ The frontend currently uses:
 - Starknet.js 10.4.0;
 - Wallet Standard V6 integration;
 - STRK20 Wallet API capability detection;
-- WebCrypto AES-GCM, HMAC-SHA-256, P-256 ECDH, HKDF-SHA-256, and SHA-256;
+- OpenMLS 0.9 browser WASM for new direct text;
+- WebCrypto AES-GCM, HMAC-SHA-256, P-256 ECDH, HKDF-SHA-256, and SHA-256 for outer envelopes and separate workflows;
 - browser IndexedDB and localStorage;
 - VINSS Railway backend APIs;
 - Starknet RPC reads;

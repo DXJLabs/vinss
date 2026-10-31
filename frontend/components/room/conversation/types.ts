@@ -16,6 +16,7 @@ export interface ConversationEntry {
   workEvidence?: WorkEvidence;
   attachment?: AttachmentRef;
   readAt?: string;
+  mlsReceiptCount?: number;
 }
 
 export interface ConversationParticipant {

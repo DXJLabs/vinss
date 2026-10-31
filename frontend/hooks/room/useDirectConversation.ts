@@ -1,4 +1,6 @@
 "use client";
+import { useStarknetDirectMls, type MlsDirectControls } from "./useStarknetDirectMls";
+import type { MlsInboxMessage } from "@/lib/openmls-core/starknet-mls-chat";
 import { backendForAccount } from "@/lib/starknet/railConfig";
 
 import {
@@ -90,6 +92,7 @@ interface UseDirectConversationOptions {
 }
 
 interface UseDirectConversationResult {
+  mlsDirect: MlsDirectControls;
   entries: ConversationEntry[];
   draft: string;
   setDraft: Dispatch<SetStateAction<string>>;
@@ -210,6 +213,29 @@ export function useDirectConversation({
     ],
   );
 
+  const mlsDirect = useStarknetDirectMls({
+    roomId, account: session?.account ?? null, wallet: session?.wallet ?? null,
+    identity: messagingIdentity, peerAddress: selectedPeer?.address ?? null,
+    peerPublicKey: selectedPeer?.publicKey ?? null, selfAliases: selfRoutingIdentities,
+    onInbox: (messages: MlsInboxMessage[]) => {
+      setEntries(previous => {
+        const merged = new Map(previous.map(entry => [entry.id,entry]));
+        for (const item of messages) {
+          const receipt = item.receipts.at(-1);
+          if (!receipt) continue;
+          const id = `mls:${item.packetId}`;
+          merged.set(id, {...merged.get(id), id, kind:"message", summary:item.message.body,
+            transactionHash:receipt.transactionHash, actionLocator:BigInt(receipt.actionLocator).toString(16),
+            sentAt:new Date(item.message.sentAt).toISOString(), scope:"direct",
+            senderAddress:item.message.from,recipientAddress:item.message.to,mlsReceiptCount:item.receipts.length});
+        }
+        const next=[...merged.values()].sort((a,b)=>Date.parse(a.sentAt)-Date.parse(b.sentAt));
+        void persistHistory(next).catch(()=>setError("OpenMLS messages remain in the secure checkpoint; local history could not be updated."));
+        return next;
+      });
+    },
+  });
+
   async function resolveDirectKey():
     Promise<Uint8Array | null> {
     if (
@@ -309,6 +335,7 @@ export function useDirectConversation({
       const incoming: ConversationEntry[] =
         discovered
           .filter((item) => {
+            if (item.message.kind === "system_note" && item.message.body.startsWith("vinss:mls:v1:")) return false;
             if (
               item.message.scope !== "direct"
             ) {
@@ -633,6 +660,15 @@ export function useDirectConversation({
       !selectedPeer ||
       !draft.trim()
     ) {
+      return;
+    }
+
+    if (mlsDirect.requiresMls()) {
+      if (!mlsDirect.ready) { setError("OpenMLS secure session is not ready. Publish keys on both wallets, then start and sync the session."); return; }
+      setBusy(true); setError(null);
+      try { await mlsDirect.send(draft.trim()); setDraft(""); }
+      catch (error) { setError(error instanceof Error ? error.message : "OpenMLS send could not be confirmed."); }
+      finally { setBusy(false); }
       return;
     }
 
@@ -2142,6 +2178,7 @@ export function useDirectConversation({
 
 
   return {
+    mlsDirect,
     entries,
     draft,
     setDraft,

@@ -9,7 +9,7 @@ VINSS is multichain by product design; messages must remain a chain-neutral appl
 | Concern | Shared client/application responsibility | Chain-specific implementation |
 |---|---|---|
 | Conversation | Private peer/group membership and authenticated identity associations | Binding to Starknet address, Canton Party or EVM account |
-| Encryption | P-256 ECDH/HKDF for current direct chat, group secret, AES-GCM JSON payload | Serialize encrypted bytes to native ledger representation |
+| Encryption | OpenMLS for new direct text; P-256 ECDH/HKDF outer transport, group secret and AES-GCM envelopes | Serialize encrypted bytes to native ledger representation |
 | Message routing | Ephemeral tags, logical message/recovery IDs | Chain-qualified immutable receipt, checkpoint and finality |
 | Sender authority | User-approved action with correct wallet context | Shield native invoke and Unshield public account execution today; Canton/EVM must implement own signatures |
 | Fees | Principal versus app revenue versus wallet/network cost remain distinct | Per-chain quote and fee token |
@@ -43,7 +43,7 @@ On a non-Starknet ledger, use **the same encrypted byte payload model** with a s
 4. **Explicit cross-chain delivery policy.** Merely registering multiple adapters does *not* transmit messages between chains. Opt-in relay/bridge semantics and independently provable source and destination receipts are needed.
 5. **Dedupe / replay handling.** A private logical message identifier with chain-qualified delivery receipts prevents duplicated bubbles, replay and accidental multiple charge.
 6. **Consistency.** A message displayed as confirmed must be readable via local decrypt and backed by a native accepted receipt, even when a wallet callback is ambiguous.
-7. **Recovery and rotation.** Support key backup, group membership changes and legacy format migration; don't claim OpenMLS epoch-based forward secrecy until OpenMLS is truly integrated.
+7. **Recovery and rotation.** Support key backup, group membership changes and legacy format migration; the direct text ratchet is integrated, but UI device replacement, periodic epoch rotation and MLS group chat remain unimplemented.
 8. **Release evidence.** CI is source testing; before launch, run browser Alice/Bob E2E, active wallet transaction, actual indexed ciphertext/decrypt and fee/finality proofs **on each supported chain**.
 
 ## Security/release caveats
@@ -51,7 +51,7 @@ On a non-Starknet ledger, use **the same encrypted byte payload model** with a s
 - Current key material, device-local room/group secrets and participant metadata have distinct privacy boundaries; the backend normal `/discover` endpoint remains ciphertext-only.
 - Wallet exceptions in Message send now produce sanitized static categories instead of raw ciphertext-bearing payload logs. Review other logging and telemetry.
 - New codec unit tests do not prove old real-chain records migrate; the real Sepolia acceptance test and historical fixtures remain release gates.
-- OpenMLS remains on separate `feat/openmls-starknet`, to be integrated only with explicit protocol migration.
+- OpenMLS new direct-text integration is now on main; see [scope and migration](./openmls-starknet.md). Other workflows retain their separate encryption.
 - Rekber 2% minimum/reserve, STRK20 fees and production Mainnet are not modified.
 
 See [Message cross-layer audit](./messaging-implementation-audit.md), [Direct Chat](./direct-chat.md), [Privacy Model](./privacy-model.md), [Wallet STRK20](./wallet-strk20.md).

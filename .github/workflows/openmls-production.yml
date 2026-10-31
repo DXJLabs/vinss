@@ -1,0 +1,60 @@
+name: VINSS OpenMLS integration
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "wasm/vinss_mls/**"
+      - "tests/**"
+      - "scripts/test-privacy-boundaries.mjs"
+      - "scripts/verify-frontend-only-build.mjs"
+      - ".github/workflows/openmls-production.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "wasm/vinss_mls/**"
+      - "tests/**"
+      - ".github/workflows/openmls-production.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix backend
+      - name: Root regressions including MLS attestation and framing
+        run: node --experimental-strip-types --test tests/*.test.mjs
+      - name: Real WASM and all frontend runtime regressions
+        run: TSX_TSCONFIG_PATH=frontend/tsconfig.json node --import ./backend/node_modules/tsx/dist/loader.mjs --test frontend/tests/*.test.ts
+      - run: npm --prefix frontend run typecheck
+      - run: node scripts/test-privacy-boundaries.mjs
+      - name: Production build without sibling backend
+        run: node scripts/verify-frontend-only-build.mjs
+  rust-wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Rust engine tests
+        run: cargo test --manifest-path wasm/vinss_mls/Cargo.toml
+      - name: Install pinned WASM packaging tool
+        run: cargo install wasm-pack --version 0.14.0 --locked
+      - name: Rebuild browser module from checked-in Rust source
+        run: wasm-pack build wasm/vinss_mls --target web --out-dir ../../frontend/lib/openmls --release
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix backend
+      - name: Verify rebuilt WASM with actual engine and chain-transport tests
+        run: TSX_TSCONFIG_PATH=frontend/tsconfig.json node --import ./backend/node_modules/tsx/dist/loader.mjs --test frontend/tests/openmls-engine.test.ts frontend/tests/openmls-starknet-runtime.test.ts

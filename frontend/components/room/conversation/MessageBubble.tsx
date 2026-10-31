@@ -315,8 +315,8 @@ export function MessageBubble({
 
             <span
               className="inline-flex text-signal/55"
-              title="End-to-end encrypted"
-              aria-label="End-to-end encrypted"
+              title={entry.id.startsWith("mls:") ? "OpenMLS end-to-end encrypted" : "End-to-end encrypted"}
+              aria-label={entry.id.startsWith("mls:") ? "OpenMLS end-to-end encrypted" : "End-to-end encrypted"}
             >
               <ShieldIcon />
             </span>
@@ -327,7 +327,7 @@ export function MessageBubble({
                   type="button"
                   onClick={() => onViewProof(entry)}
                   className="inline-flex rounded-md p-0.5 text-signal/65 transition hover:bg-signal/10 hover:text-signal"
-                  title="View on-chain proof"
+                  title={entry.mlsReceiptCount ? `OpenMLS publication: ${entry.mlsReceiptCount} verified fragments; view final transaction` : "View on-chain proof"}
                   aria-label="View on-chain proof"
                 >
                   <ProofIcon />
@@ -382,7 +382,7 @@ export function MessageBubble({
                 }}
                 className="block w-full px-4 py-3 text-left text-[11px] font-medium text-danger transition hover:bg-danger/[0.08]"
               >
-                Delete from this device
+                Hide in this browser
               </button>
 
               <button

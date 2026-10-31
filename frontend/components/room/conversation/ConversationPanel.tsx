@@ -42,6 +42,7 @@ export type {
 } from "@/components/room/conversation/types";
 
 interface ConversationPanelProps {
+  mlsDirect: import("@/hooks/room/useStarknetDirectMls").MlsDirectControls;
   account?: WalletAccountV6;
   roomId: string;
   entries: ConversationEntry[];
@@ -122,6 +123,7 @@ interface ConversationPanelProps {
 }
 
 export function ConversationPanel({
+  mlsDirect,
   account,
   roomId,
   entries,
@@ -259,6 +261,7 @@ export function ConversationPanel({
         />
       ) : (
         <DirectConversationPanel account={account}
+          mlsDirect={mlsDirect}
           entries={entries}
           offerEntries={
             offerEntries

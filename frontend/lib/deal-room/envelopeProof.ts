@@ -35,7 +35,7 @@ const verified = new Map<string, {
     recoveryOnly: boolean;
 }>();
 /** Verify the selected helper AND the claimed successful publication; never trust indexer metadata alone. */
-export async function verifyEnvelopeProof(kind: "offer" | "escrow", record: DiscoveryEnvelope, account?: object, paidCoordination = false, recoveryCustody?: string): Promise<{
+export async function verifyEnvelopeProof(kind: "message" | "offer" | "escrow", record: DiscoveryEnvelope, account?: object, paidCoordination = false, recoveryCustody?: string): Promise<{
     recoveryOnly: boolean;
 }> {
     if (!Array.isArray(record.ciphertextChunks) || record.ciphertextChunks.length < 1 || record.ciphertextChunks.length > MAX_PAYLOAD_CHUNKS)
@@ -45,11 +45,11 @@ export async function verifyEnvelopeProof(kind: "offer" | "escrow", record: Disc
     if (!locator || !sender || !recipient || !commitment || !felt(record.transactionHash))
         throw new Error("Empty envelope identity.");
     const envelope = [2n, locator, sender, recipient, commitment, BigInt(chunks.length)];
-    const domain = kind === "offer" ? "VINSS_OFFER_COMMIT_V2" : "VINSS_PRIVATE_ESCROW_COMMIT_V2";
+    const domain = kind === "message" ? "VINSS_MSG_COMMIT_V2" : kind === "offer" ? "VINSS_OFFER_COMMIT_V2" : "VINSS_PRIVATE_ESCROW_COMMIT_V2";
     const computed = hash.computePoseidonHashOnElements([shortStringToFelt(domain), 2n, locator, sender, recipient, BigInt(chunks.length), ...chunks].map(String));
     if (!same(computed, record.payloadCommitment))
         throw new Error("Ciphertext commitment mismatch.");
-    const helper = kind === "offer" ? contractsForAccount(account).offerHelper : contractsForAccount(account).privateEscrowHelper;
+    const helper = kind === "message" ? contractsForAccount(account).messageHelper : kind === "offer" ? contractsForAccount(account).offerHelper : contractsForAccount(account).privateEscrowHelper;
     if (!helper)
         throw new Error("Selected ciphertext helper is not configured.");
     const provider = getProvider();
@@ -61,7 +61,7 @@ export async function verifyEnvelopeProof(kind: "offer" | "escrow", record: Disc
     if (cached && cached.expires > Date.now())
         return { recoveryOnly: cached.recoveryOnly };
     const [stored, receipt] = await Promise.all([
-        provider.callContract({ contractAddress: helper, entrypoint: kind === "offer" ? "get_offer_action" : "get_private_escrow_action", calldata: ["0x" + locator.toString(16)] }),
+        provider.callContract({ contractAddress: helper, entrypoint: kind === "message" ? "get_message" : kind === "offer" ? "get_offer_action" : "get_private_escrow_action", calldata: ["0x" + locator.toString(16)] }),
         provider.getTransactionReceipt(record.transactionHash),
     ]);
     if (stored.length !== envelope.length || stored.some((value, i) => !same(value, String(envelope[i]))))
@@ -70,7 +70,7 @@ export async function verifyEnvelopeProof(kind: "offer" | "escrow", record: Disc
     if (!same(r.transaction_hash, record.transactionHash) || r.type !== "INVOKE" || r.execution_status !== "SUCCEEDED" ||
         !["ACCEPTED_ON_L1", "ACCEPTED_ON_L2"].includes(r.finality_status))
         throw new Error("Publication is not an accepted successful transaction.");
-    const selector = hash.getSelectorFromName(kind === "offer" ? "OfferActionCommitted" : "PrivateEscrowActionCommitted");
+    const selector = hash.getSelectorFromName(kind === "message" ? "MessageCommitted" : kind === "offer" ? "OfferActionCommitted" : "PrivateEscrowActionCommitted");
     if (!Array.isArray(r.events) || !r.events.some((e: any) => same(e.from_address, helper) && e.keys?.length === 2 && same(e.keys[0], selector) && same(e.keys[1], record.actionLocator) && e.data?.length === 3 && [commitment, sender, recipient].every((n, i) => same(e.data[i], String(n)))))
         throw new Error("Publication event does not match selected helper envelope.");
     // The indexer's block label must agree with the authenticated receipt too.

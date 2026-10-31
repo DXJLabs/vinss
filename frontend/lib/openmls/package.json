@@ -1,0 +1,17 @@
+{
+  "name": "vinss_mls",
+  "type": "module",
+  "description": "Browser WASM bridge for VINSS secure messaging using OpenMLS",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "vinss_mls_bg.wasm",
+    "vinss_mls.js",
+    "vinss_mls.d.ts"
+  ],
+  "main": "vinss_mls.js",
+  "types": "vinss_mls.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

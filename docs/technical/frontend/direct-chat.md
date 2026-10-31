@@ -5,9 +5,11 @@
 
 This document describes the current direct two-party private Chat implementation in the VINSS frontend.
 
-**Current code audit (31 October 2026):** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. No OpenMLS integration is claimed.
+**Current OpenMLS integration (31 October 2026):** New two-party text requires the wallet-authenticated OpenMLS session described in [OpenMLS architecture and code map](./openmls-starknet.md). Legacy history, attachments and the outer Message V2 transport retain the design below. Group, Offer and Escrow Rekber are separate protocols.
 
-Direct Chat is a browser-side privacy workflow built from:
+**Historical code audit:** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. That audit predates the current OpenMLS text integration.
+
+The outer transport and legacy direct chat are a browser-side privacy workflow built from:
 
 ```text
 per-room P-256 messaging identity

@@ -2,6 +2,8 @@
 
 ## Security update — 31 October 2026
 
+New direct text now requires OpenMLS, with signed wallet/device onboarding and durable ratchet/inbox checkpoints. See [exact scope, code locations and limitations](./openmls-starknet.md). Attachments, group chat, Offer, Escrow Rekber and settlement are not migrated to MLS. The existing ECDH/AES-GCM Message V2 envelope remains the outer transport and legacy decoder.
+
 Offer authorship now has encrypted SNIP-12 signatures; shared-key HMAC is routing/integrity evidence, not individual wallet consent. Offer and private Escrow discovery verify the selected helper's committed ciphertext and successful transaction event through the configured Starknet RPC. Local Offer history and Rekber recovery secrets now use independent, non-exportable device-key protection with verified legacy migration. Existing escrow capabilities are preserved, not rotated.
 
 See [remediation and limitations](../audits/offer-escrow-remediation-2026-10-31.md) for unsigned historical records, funded recovery, per-action Unshield fee proof, retained legacy copies and RPC requirements. Shield/Unshield are Starknet modes; they do not replace Canton's separate DAML privacy/authorization model.
