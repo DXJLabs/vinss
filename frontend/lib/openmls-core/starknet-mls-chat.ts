@@ -83,12 +83,14 @@ export class StarknetOpenMlsChat {
     private exclusive<T>(run: () => Promise<T>): Promise<T> { const next = this.queue.catch(() => undefined).then(run); this.queue = next; return next; }
     private persist = () => this.bridge.saveApplicationState(encode(this.state));
     private async packets() { return (await readStarknetMlsOnchain(this.transport)).complete; }
-    private async peerPackage(): Promise<SignedMlsKeyPackage | null> {
+    private async peerPackage(expectedInstallationScope?: string): Promise<SignedMlsKeyPackage | null> {
         const packets = (await this.packets()).filter(packet => packet.kind === "key_package" && canonicalStarknetAddress(packet.sender) === this.peerAddress);
         for (const packet of packets.reverse())
             try {
                 const value = decode<SignedMlsKeyPackage>(packet.bytes);
                 await verifySignedMlsKeyPackage(value, { chainId: this.ownScope.chainId, roomId: this.ownScope.roomId, expectedWalletAddress: this.peerAddress }, StarknetOpenMlsChat.walletVerifier);
+                if (expectedInstallationScope && member(value, "member").installationId !== expectedInstallationScope)
+                    continue;
                 return value;
             }
             catch { /* Another installation or an expired/forged package is not an identity. */ }
@@ -111,10 +113,36 @@ export class StarknetOpenMlsChat {
     catch {
         return false;
     } }
-    async status() { this.bridge.readApplicationState(); return { ready: await this.isReady(), keyPublished: !!this.state.keyPackagePublished, pendingBody: this.state.pendingApplication?.message.body, pending: this.state.pendingTransport?.kind, inbox: [...this.state.inbox] }; }
+    private async pendingKind(): Promise<MlsPacketPlan["kind"] | undefined> {
+        this.bridge.readApplicationState();
+        if (this.state.pendingTransport)
+            return this.state.pendingTransport.kind;
+        if (this.state.pendingApplication)
+            return "application";
+        const commit = (await this.bridge.listPendingOutboundCommits()).find(item => item.conversationId === this.conversationId);
+        return commit ? "welcome" : undefined;
+    }
+    private async requirePendingKind(kind: MlsPacketPlan["kind"]): Promise<void> {
+        const pending = await this.pendingKind();
+        if (pending && pending !== kind)
+            throw new Error("MLS has an unfinished packet. Resume it before creating another operation.");
+    }
+    async status() { return { ready: await this.isReady(), keyPublished: !!this.state.keyPackagePublished, pendingBody: this.state.pendingApplication?.message.body, pending: await this.pendingKind(), inbox: [...this.state.inbox] }; }
+    async resumePending(confirm: (count: number, kind: string) => Promise<boolean>): Promise<void> {
+        const pending = await this.pendingKind();
+        if (pending === "application" && this.state.pendingApplication)
+            await this.sendText(this.state.pendingApplication.message.body, confirm);
+        else if (pending === "welcome")
+            await this.invitePeer(confirm);
+        else if (pending === "key_package")
+            await this.publishKeyPackage(confirm);
+        else
+            await this.joinFromPeerWelcome();
+    }
     async hasVerifiedPeerKeyPackage() { return (await this.peerPackage()) !== null; }
     async publishKeyPackage(confirm: (count: number, kind: string) => Promise<boolean>): Promise<void> {
         return this.exclusive(async () => {
+            await this.requirePendingKind("key_package");
             if (this.state.keyPackagePublished && (this.state.keyPackageExpiresAt ?? 0) > Date.now() + 300000 && !this.state.pendingTransport)
                 return;
             let bytes: Uint8Array;
@@ -135,6 +163,7 @@ export class StarknetOpenMlsChat {
     }
     async invitePeer(confirm: (count: number, kind: string) => Promise<boolean>): Promise<void> {
         return this.exclusive(async () => {
+            await this.requirePendingKind("welcome");
             if (!this.canInvite)
                 throw new Error("The designated peer creates this MLS session. Sync its signed Welcome instead.");
             if (await this.isReady()) {
@@ -150,14 +179,18 @@ export class StarknetOpenMlsChat {
             }
             if (!this.state.keyPackagePublished)
                 throw new Error("Publish your signed MLS KeyPackage first.");
-            const peer = await this.peerPackage();
-            if (!peer)
-                throw new Error("Peer has no wallet-verified MLS KeyPackage.");
             let bytes: Uint8Array;
             if (this.state.pendingTransport?.kind === "welcome")
                 bytes = Uint8Array.from(this.state.pendingTransport.bytes);
             else {
                 const existing = (await this.bridge.listPendingOutboundCommits()).find(item => item.conversationId === this.conversationId);
+                if (existing && (existing.change.type !== "add" || !existing.welcome))
+                    throw new Error("MLS pending membership operation cannot be resumed as a Welcome.");
+                // A prepared Welcome is encrypted to the original installation's KeyPackage.
+                // Never sign it for a newer installation advertised while signing was interrupted.
+                const peer = await this.peerPackage(existing?.change.type === "add" ? existing.change.member.installationId : undefined);
+                if (!peer)
+                    throw new Error("Peer has no wallet-verified MLS KeyPackage for the pending installation.");
                 let welcome = existing?.welcome;
                 if (!welcome) {
                     try {
@@ -214,6 +247,7 @@ export class StarknetOpenMlsChat {
     }
     async sendText(body: string, confirm: (count: number, kind: string) => Promise<boolean>): Promise<MlsInboxMessage> {
         return this.exclusive(async () => {
+            await this.requirePendingKind("application");
             if (!await this.isReady())
                 throw new Error("MLS secure session is not ready.");
             if (!body.trim() || body.length > 3000)

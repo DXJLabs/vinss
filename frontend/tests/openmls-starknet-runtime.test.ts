@@ -82,13 +82,24 @@ test("actual WASM over real VINSS Shield/Unshield messaging: signed onboarding, 
     await alice.publishKeyPackage(approve);
     await bob.publishKeyPackage(approve);
     await assert.rejects(bob.invitePeer(approve), /designated/);
+    // The membership commit is durable before the wallet signs its Welcome.
+    const cancelledSignature = t.mock.method(a, "signMessage", async () => { throw new Error("wallet signature cancelled"); });
+    await assert.rejects(alice.invitePeer(approve), /signature cancelled/);
+    cancelledSignature.mock.restore();
+    alice = await session(a, bobAddress, "phone-a");
+    assert.equal((await alice.status()).pending, "welcome", "a prepared membership commit must remain resumable before a transport plan exists");
+    // A newer device package must not retarget an already prepared Welcome.
+    const newerBob = await session(b, aliceAddress, "phone-b-new");
+    await newerBob.publishKeyPackage(approve);
     // Crash after the Welcome is proved and the commit merged, before transport cleanup.
     const interrupted = t.mock.method(alice.bridge, "markGroupStatePublished", async () => { throw new Error("simulated browser close"); });
-    await assert.rejects(alice.invitePeer(approve), /browser close/);
+    await assert.rejects(alice.resumePending(approve), /browser close/);
     interrupted.mock.restore();
     const afterWelcome = transactions;
     alice = await session(a, bobAddress, "phone-a");
-    await alice.invitePeer(approve);
+    await assert.rejects(alice.sendText("Do not advance the ratchet during Welcome recovery", approve), /unfinished packet/);
+    assert.equal((await alice.status()).pendingBody, undefined, "a conflicting operation must not encrypt another message");
+    await alice.resumePending(approve);
     assert.equal(transactions, afterWelcome, "recovery must not republish an already proved Welcome");
     assert.equal((await alice.status()).pending, undefined);
     assert.equal(await bob.joinFromPeerWelcome(), true);
@@ -125,5 +136,47 @@ test("actual WASM over real VINSS Shield/Unshield messaging: signed onboarding, 
     assert.equal((await reloadedBob.receiveTexts()).at(-1)?.message.body, "Resume this exact message");
     const all = await reloadedBob.receiveTexts();
     assert.equal(all.filter(item => item.message.body === "Resume this exact message").length, 1);
+    // Crash between the atomic ratchet/application checkpoint and packet framing.
+    const beforeFraming = transactions;
+    const encrypt = restoredAlice.bridge.encryptApplicationMessage.bind(restoredAlice.bridge);
+    const closedAfterEncryption = t.mock.method(restoredAlice.bridge, "encryptApplicationMessage", async (input: Parameters<typeof encrypt>[0]) => {
+        await encrypt(input);
+        throw new Error("browser closed before framing");
+    });
+    await assert.rejects(restoredAlice.sendText("Resume before transport exists", approve), /before framing/);
+    closedAfterEncryption.mock.restore();
+    assert.equal(transactions, beforeFraming);
+    const durable = JSON.parse(new TextDecoder().decode(restoredAlice.bridge.readApplicationState()));
+    assert.ok(durable.pendingApplication.ciphertext.length > 0);
+    assert.equal(durable.pendingTransport, undefined);
+    const afterEncryption = await session(a, bobAddress, "phone-a");
+    assert.equal((await afterEncryption.status()).pending, "application");
+    const forbiddenReencrypt = t.mock.method(afterEncryption.bridge, "encryptApplicationMessage", async () => { throw new Error("must reuse the persisted ciphertext"); });
+    await afterEncryption.resumePending(approve);
+    forbiddenReencrypt.mock.restore();
+    assert.equal((await afterEncryption.status()).pending, undefined);
+    assert.equal((await reloadedBob.receiveTexts()).filter(item => item.message.body === "Resume before transport exists").length, 1);
+    // Crash after the first fragment reaches chain, before its receipt is checkpointed.
+    const beforeFragment = transactions;
+    const save = afterEncryption.bridge.saveApplicationState.bind(afterEncryption.bridge);
+    const closedAfterFragment = t.mock.method(afterEncryption.bridge, "saveApplicationState", async (bytes: Uint8Array) => {
+        const state = JSON.parse(new TextDecoder().decode(bytes));
+        if (state.pendingTransport?.frames.some((frame: any) => frame.receipt))
+            throw new Error("browser closed after fragment publication");
+        await save(bytes);
+    });
+    const fragmentedBody = "Partial publication ".repeat(60);
+    await assert.rejects(afterEncryption.sendText(fragmentedBody, approve), /after fragment publication/);
+    closedAfterFragment.mock.restore();
+    assert.equal(transactions, beforeFragment + 1);
+    const interruptedPlan = JSON.parse(new TextDecoder().decode(afterEncryption.bridge.readApplicationState())).pendingTransport;
+    assert.ok(interruptedPlan.frames.length > 1);
+    const wrongRail = await session(a, bobAddress, "phone-a", "unshield");
+    await assert.rejects(wrongRail.resumePending(approve), /another transaction mode/);
+    assert.equal(transactions, beforeFragment + 1, "switching rails cannot republish a pending fragment");
+    const resumedFragment = await session(a, bobAddress, "phone-a");
+    await resumedFragment.resumePending(approve);
+    assert.equal(transactions, beforeFragment + interruptedPlan.frames.length, "recovery publishes only the missing fragments");
+    assert.equal((await reloadedBob.receiveTexts()).filter(item => item.message.body === fragmentedBody.trim()).length, 1);
     assert.equal(JSON.stringify(records).includes("Actual OpenMLS secret"), false);
 });

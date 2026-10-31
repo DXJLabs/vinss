@@ -35,6 +35,9 @@ Existing Mermaid diagrams in [Direct Chat](./direct-chat.md) and the [Message V2
 - Outgoing ciphertext, original text, selected rail, fragments, prepared locators and receipts are durable. Resume publishes the same packet; a different draft cannot replace an unfinished message.
 - A prepared frame with unknown wallet outcome is reconciled against its exact on-chain locator. It is not automatically sent again. Indexer/RPC availability can therefore leave an unresolved operation pending.
 - A crash after Welcome commit merge resumes the existing verified publication and clears its plan without a second membership merge or publication.
+- Recovery status includes an encrypted outgoing application or prepared membership commit even before wire framing creates a transport plan. The same Resume action handles these checkpoints and already-framed packets.
+- A conflicting action is rejected before generating a KeyPackage, signing a new Welcome or advancing an application ratchet. An interrupted Welcome signature remains bound to the installation in its original membership commit, even if the peer advertises a newer device package. The original package must still be valid and discoverable before signing; automatic device replacement is not implemented.
+- Resume runs through the same UI busy/error handling as other MLS operations. A pending transport plan retains its original Shield/Unshield rail; switching rails cannot silently republish it.
 - Checkpoint writes use an atomic revision comparison; stale tabs fail closed instead of overwriting newer ratchet state. Reload the stale tab.
 - A rejected MLS cryptographic operation rolls back provider storage before processing another packet. A failed checkpoint write faults the bridge until reload.
 - A marked existing installation whose checkpoint is missing is blocked. Clearing localStorage as well can create a new installation, but does not restore the previous peer's established group. Keep browser storage; device backup/recovery UI is not implemented.
@@ -52,7 +55,7 @@ MLS application secret ratcheting is active. Do not claim deployed periodic epoc
 ## Verification
 
 - `frontend/tests/openmls-engine.test.ts`: actual generated WASM, Alice/Bob exchange, persistence, corrupt-ciphertext rollback, membership change/removal and stale-writer rejection.
-- `frontend/tests/openmls-starknet-runtime.test.ts`: actual WASM and Starknet ECDSA, existing envelope/fee/rail code with simulated wallet/RPC/indexer boundaries; signed onboarding, altered signature scope rejection, post-merge Welcome interruption, real receipt tracking, cross-rail reply, reload and ambiguous callback recovery.
+- `frontend/tests/openmls-starknet-runtime.test.ts`: actual WASM and Starknet ECDSA, existing envelope/fee/rail code with simulated wallet/RPC/indexer boundaries; signed onboarding, altered signature scope rejection, post-merge Welcome interruption, real receipt tracking, cross-rail reply, reload and ambiguous callback recovery. Additional recovery regressions cover signature cancellation before Welcome framing, a newer peer installation during that interruption, conflicting-operation rejection before encryption, closure after atomic application encryption but before framing, and closure after the first fragment reaches chain. Partial publication resumes the original locators and submits only missing fragments; the wrong rail is rejected without a transaction.
 - `tests/openmls-keypackage-identity.test.mjs`, `openmls-starknet-framing.test.mjs`: attestation and wire-format edge cases.
 - `.github/workflows/openmls-production.yml`: main-branch regressions, typecheck, privacy boundary, isolated frontend build; Rust native tests and rebuild of browser WASM followed by actual engine/runtime tests.
 

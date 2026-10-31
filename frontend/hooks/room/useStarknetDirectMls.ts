@@ -186,16 +186,8 @@ export function useStarknetDirectMls({ roomId, account, wallet, identity, peerAd
         }
     }, [init, confirmMultiple, refresh]);
     const resume = useCallback(async () => {
-        const chat = await init(), state = await chat.status();
-        if (state.pending === "application" && state.pendingBody)
-            await send(state.pendingBody);
-        else if (state.pending === "welcome")
-            await invite();
-        else if (state.pending === "key_package")
-            await activate();
-        else
-            await sync();
-    }, [init, send, invite, activate, sync]);
+        await run(chat => chat.resumePending(confirmMultiple));
+    }, [run, confirmMultiple]);
     useEffect(() => {
         if (!requiresMls())
             return;
