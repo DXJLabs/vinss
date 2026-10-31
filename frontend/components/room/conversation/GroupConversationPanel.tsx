@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useConversationScroll } from "@/hooks/room/useConversationScroll";
 import {
   useEffect,
   useRef,
@@ -108,6 +109,9 @@ export function GroupConversationPanel({
             right.sentAt,
           ).getTime(),
       );
+
+  const { scrollBoxRef, setEndNode, updateScrollIntent, pauseFollowing } =
+    useConversationScroll(`${walletAddress}:${group.id}`, visibleEntries.length, chatEndRef);
 
   const admin =
     isGroupAdmin(
@@ -287,7 +291,10 @@ export function GroupConversationPanel({
         )}
       </div>
 
-      <div className="min-h-[320px] max-h-[55vh] overflow-y-auto border-x border-wire/60 bg-black/10">
+      <div ref={scrollBoxRef} data-conversation-scroll="group" onScroll={updateScrollIntent}
+        onPointerDown={pauseFollowing} onPointerUp={updateScrollIntent}
+        onWheel={(event) => { if (event.deltaY < 0) pauseFollowing(); }}
+        className="vinss-conversation-scroll border-x border-wire/60 bg-black/10">
         {visibleEntries.length ===
         0 ? (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-8 text-center">
@@ -325,10 +332,7 @@ export function GroupConversationPanel({
             )}
 
             <div
-              ref={(node) => {
-                chatEndRef.current =
-                  node;
-              }}
+              ref={setEndNode}
               className="h-px"
               aria-hidden="true"
             />

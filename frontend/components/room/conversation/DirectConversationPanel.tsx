@@ -1,5 +1,6 @@
 "use client";
 import type { WalletAccountV6 } from "starknet";
+import { useConversationScroll } from "@/hooks/room/useConversationScroll";
 
 import {
   useEffect,
@@ -154,16 +155,12 @@ export function DirectConversationPanel({
 }: DirectConversationPanelProps) {
   const [proofEntry, setProofEntry] =
     useState<ConversationEntry | null>(null);
-  const scrollBoxRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef =
     useRef<HTMLInputElement | null>(null);
   const messageInputRef =
     useRef<HTMLTextAreaElement | null>(null);
   const [messageInputFocused, setMessageInputFocused] =
     useState(false);
-  const endNodeRef = useRef<HTMLDivElement | null>(null);
-  const autoScrollRef = useRef(true);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [
     fundedCustodies,
     setFundedCustodies,
@@ -945,40 +942,8 @@ export function DirectConversationPanel({
     peerAddress,
   );
 
-  useEffect(() => {
-    autoScrollRef.current = true;
-    setShowJumpToLatest(false);
-    chatEndRef.current = endNodeRef.current;
-
-    const timer = window.setTimeout(() => {
-      endNodeRef.current?.scrollIntoView({ block: "end" });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [account,peerAddress]);
-
-  const updateScrollIntent = () => {
-    const node = scrollBoxRef.current;
-    if (!node) return;
-
-    const distanceFromBottom =
-      node.scrollHeight - node.scrollTop - node.clientHeight;
-    const nearBottom = distanceFromBottom < 96;
-
-    autoScrollRef.current = nearBottom;
-    setShowJumpToLatest(!nearBottom);
-    chatEndRef.current = nearBottom ? endNodeRef.current : null;
-  };
-
-  const jumpToLatest = () => {
-    autoScrollRef.current = true;
-    setShowJumpToLatest(false);
-    chatEndRef.current = endNodeRef.current;
-    endNodeRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
-  };
+  const { scrollBoxRef, setEndNode, updateScrollIntent, jumpToLatest, showJumpToLatest, pauseFollowing } =
+    useConversationScroll(`${walletAddress}:${peerAddress}`, pairEntries.length, chatEndRef);
 
   const resizeMessageInput = () => {
     const node = messageInputRef.current;
@@ -1036,7 +1001,11 @@ export function DirectConversationPanel({
         <div
           ref={scrollBoxRef}
           onScroll={updateScrollIntent}
-          className="flex h-[68dvh] min-h-[520px] max-h-[780px] flex-col overflow-y-auto overscroll-contain border-x border-wire/70 bg-[#060a0e] lg:h-[calc(100dvh-285px)] lg:min-h-[650px] lg:max-h-[900px]"
+          onPointerDown={pauseFollowing}
+          onPointerUp={updateScrollIntent}
+          onWheel={(event) => { if (event.deltaY < 0) pauseFollowing(); }}
+          data-conversation-scroll="direct"
+          className="vinss-conversation-scroll border-x border-wire/70 bg-[#060a0e]"
         >
         {currentRekberState &&
           fundedDealEntry && (
@@ -1859,12 +1828,7 @@ export function DirectConversationPanel({
             })}
 
             <div
-              ref={(node) => {
-                endNodeRef.current = node;
-                if (autoScrollRef.current) {
-                  chatEndRef.current = node;
-                }
-              }}
+              ref={setEndNode}
               className="h-px"
               aria-hidden="true"
             />

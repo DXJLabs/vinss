@@ -2140,22 +2140,6 @@ export function useDirectConversation({
       setEntries,
     });
 
-  useEffect(() => {
-    if (!active || entries.length === 0) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
-    }, 80);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [BACKEND_URL, entries.length, active, peerKey]);
 
   return {
     entries,

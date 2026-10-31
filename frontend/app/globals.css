@@ -18,6 +18,28 @@
   color-scheme: dark;
 }
 
+/* A single scrolling surface on touch screens: dragging chat also scrolls
+   the page, so the composer/actions remain reachable past the message list. */
+.vinss-conversation-scroll {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  overflow: visible;
+  touch-action: pan-y pinch-zoom;
+}
+
+.vinss-conversation-scroll > * { flex-shrink: 0; }
+
+@media (min-width: 1024px) {
+  .vinss-conversation-scroll {
+    height: clamp(420px, calc(100dvh - 285px), 900px);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+
 body {
   background-color: var(--color-ink);
   background-image:

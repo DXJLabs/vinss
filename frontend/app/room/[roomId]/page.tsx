@@ -533,24 +533,33 @@ export default function DealRoomPage() {
         roomId={params.roomId}
       />
 
-      {room && modeHydrated && <section aria-label="Room transaction mode" className="mb-4 rounded-xl border border-wire p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <span className="col-span-2 text-xs text-paper/65">Transaction mode</span>
-          {(["shield", "unshield"] as const).map(mode => <button key={mode} type="button"
-            aria-pressed={transactionMode === mode}
-            disabled={Boolean(modeError) || busy || (mode === "unshield" && Boolean(publicRailConfigurationError()))}
-            onClick={() => { try { changeMode(mode); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cannot change room mode."); } }}
-            className="min-h-12 rounded-lg border border-wire px-3 py-2 text-xs text-paper aria-pressed:border-signal aria-pressed:text-signal disabled:opacity-50">
-            {mode === "shield" ? "Shield · STRK20" : "Unshield · Public"}
-          </button>)}
+      {room && modeHydrated && <section aria-label="Room transaction mode" className="mb-3 rounded-xl border border-wire/60 bg-vault/20 px-3 py-2">
+        <div className="flex min-h-9 items-center gap-3">
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-paper/75">
+            <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" />
+            {transactionMode === "shield" ? "Shield · STRK20" : "Unshield · Public"}
+          </span>
+          <button type="button" role="switch" aria-label="Shield mode" aria-checked={transactionMode === "shield"}
+            disabled={Boolean(modeError) || busy || (transactionMode === "shield" && Boolean(publicRailConfigurationError()))}
+            title={transactionMode === "shield" ? "Switch to Unshield" : "Switch to Shield"}
+            onClick={() => { try { changeMode(transactionMode === "shield" ? "unshield" : "shield"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cannot change room mode."); } }}
+            className="flex h-11 w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-40">
+            <span aria-hidden="true" className={`relative h-6 w-11 rounded-full border transition-colors ${transactionMode === "shield" ? "border-signal/45 bg-signal/20" : "border-wire bg-paper/10"}`}>
+              <span className={`absolute left-0 top-0.5 h-[18px] w-[18px] rounded-full transition-transform ${transactionMode === "shield" ? "translate-x-[21px] bg-signal" : "translate-x-0.5 bg-paper/60"}`} />
+            </span>
+          </button>
+          <details className="relative shrink-0">
+            <summary aria-label="About Shield and Unshield" className="flex h-11 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-base text-paper/40 hover:text-signal [&::-webkit-details-marker]:hidden">ⓘ</summary>
+            <div className="absolute right-0 top-full z-40 mt-2 w-[min(19rem,calc(100vw-3.5rem))] rounded-xl border border-wire bg-[#10161b] p-4 text-xs leading-5 text-paper/65 shadow-xl">
+              <p>Messages and offers stay encrypted in both modes. Unshield makes your wallet, token amounts and transaction metadata public.</p>
+              <p className="mt-2">This setting applies to your next transaction. Existing escrow agreements keep their original mode.</p>
+              {publicRailConfigurationError() && <p className="mt-2 text-amber">Unshield is currently unavailable.</p>}
+            </div>
+          </details>
         </div>
-        <p className="mt-2 text-xs leading-5 text-paper/55">
-          Messages and offers stay encrypted onchain in both modes. Unshield exposes the wallet, token amounts and transaction metadata. Rekber remains escrow.
-        </p>
-        {modeError && <p role="alert" className="mt-2 text-xs text-danger">{modeError}</p>}
-        <p className="mt-1 text-xs text-paper/45">Choose the mode for your next transaction. Existing escrow agreements keep their original mode.</p>
-        {publicRailConfigurationError() && <p className="mt-1 text-xs text-paper/45">Unshield requires its public contracts and discovery service to be deployed and configured.</p>}
+        {modeError && <p role="alert" className="mt-1 text-xs text-danger">{modeError}</p>}
       </section>}
+
 
       {roomHydrated && !room && (
         <p className="mb-6 border border-danger/40 px-4 py-3 text-xs text-danger">
