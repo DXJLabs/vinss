@@ -345,6 +345,41 @@ test("public rail runtime seams", async (t) => {
     assert.throws(() => authorization.buildRekberAcceptanceTypedData(setup, { ...acceptance, publicRailAddress: "0x99" }), /different transaction rails/);
   });
 
+  await t.test("Offer lifecycle uses the room mode in both rails and keeps pairwise terms encrypted", async () => {
+    const pairwiseKey = new Uint8Array(32).fill(11);
+    for (const mode of ["shield", "unshield"] as const) {
+      for (const kind of ["create", "counter", "accept", "reject", "cancel", "expire"] as const) {
+        const payload: OfferActionPayload = {
+          kind, asset: "STRK", amount: "19.75", parentOfferLocator: "abc",
+          paymentTerms: "pairwise offer terms", senderAddress: "0xabc", recipientAddress: "0xdef",
+        };
+        const beforePublic = executions.length, beforeShield = shieldBundles.length;
+        await sendOfferAction(modes.accountForMode(account, mode, "same-offer-room"), key, payload, {
+          recipientIdentity: "0xdef", encryptionKey: pairwiseKey, routingKey: pairwiseKey,
+        });
+        let data: string[];
+        if (mode === "shield") {
+          assert.equal(executions.length, beforePublic);
+          assert.equal(shieldBundles.length, beforeShield + 1);
+          const bundle = shieldBundles.at(-1) as Array<{ type: string; contract?: string; calldata?: string[] }>;
+          assert.deepEqual(bundle.map(action => action.type), ["withdraw", "transfer", "invoke"]);
+          assert.equal(bundle[2]!.contract, "0x13");
+          data = bundle[2]!.calldata!;
+          assert.equal(BigInt(data.at(-2)!), 200n);
+        } else {
+          assert.equal(shieldBundles.length, beforeShield);
+          assert.deepEqual(lastCalls().map(call => call.entrypoint), ["approve", "post_offer", "approve"]);
+          data = adapterCall("post_offer").calldata;
+          assert.equal(BigInt(data.at(-3)!), 100n);
+        }
+        const ciphertext = data.slice(7, 7 + Number(BigInt(data[6]!))).map(BigInt);
+        assert.deepEqual(await decryptPayload(pairwiseKey, ciphertext), payload);
+        await assert.rejects(decryptPayload(key, ciphertext), /authentication/i);
+        assert.ok(!JSON.stringify(data).includes(payload.paymentTerms!));
+      }
+    }
+  });
+
   await t.test("missing, malformed, mismatched config and wallet/RPC network reject before execute", async () => {
     const actions: Actions = [{ type: "invoke", contract: "0x12", calldata: ["0x1", "0x1"] }];
     const before = executions.length, beforeShield = shieldBundles.length;

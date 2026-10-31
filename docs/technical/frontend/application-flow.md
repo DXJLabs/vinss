@@ -1,5 +1,8 @@
 # VINSS Frontend Application Flow
 
+> Implementation reference updated 31 October 2026: Message/Offer use the room Shield/Unshield selection; direct history uses device-key v3. See [Message architecture and code map](./messaging-implementation-audit.md), [direct history](./device-history.md), and [mobile layout](./mobile-chat-layout.md).
+
+
 This document describes the current end-to-end application flows implemented by the VINSS frontend.
 
 It focuses on:
@@ -321,32 +324,28 @@ Current direct Message flow:
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant H as useDirectConversation
-    participant M as messaging.ts
-    participant F as FeePolicy
-    participant W as Ready X / Wallet
-    participant C as MessageHelper
-    participant I as Backend Discovery index
-
-    U->>H: Send message
-    H->>H: resolve selected peer + pairwise key
-    H->>M: sendMessage(payload, direct route)
-    M->>M: generate fresh action locator
-    M->>M: derive sender/recipient HMAC tags
-    M->>M: AES-GCM encrypt payload
-    M->>M: compute Message V2 commitment
-    M->>F: quoteMessageFee()
-    F-->>M: current quote
-    M-->>H: onPrepared(locator, commitment)
-    H->>H: persist encrypted pending record + optimistic bubble
-    M->>W: strk20InvokeTransaction
-    W->>C: private helper invoke
-    C-->>I: on-chain event/ciphertext indexed
-    H->>I: POST /discover {kind: message}
-    I-->>H: candidate ciphertext
-    H->>H: match route + decrypt + validate
-    H->>H: exact locator upgrades optimistic message
+    participant H as Conversation hook
+    participant M as Domain and rail dispatcher
+    participant W as Ready wallet
+    participant C as Selected Message contracts
+    participant I as Ciphertext index
+    H->>H: Resolve direct or group encryption key
+    H->>M: sendMessage with plaintext and local route
+    M->>M: Encrypt, derive tags, commit, quote and preflight
+    M-->>H: Prepared locator and commitment
+    H->>H: Persist encrypted pending and optimistic entry
+    alt Shield
+        M->>W: strk20InvokeTransaction
+        W->>C: Pool invokes native MessageHelper
+    else Unshield
+        M->>W: execute approval, post_message and revoke
+        W->>C: Public adapter invokes its helper
+    end
+    C-->>I: Event and ciphertext getters indexed
+    H->>I: POST discover kind message
+    I-->>H: Ciphertext and public metadata
+    H->>H: Match tags, decrypt and filter scope
+    H->>H: Reconcile locator and persist device history
 ```
 
 ---
@@ -493,10 +492,10 @@ persist encrypted local history
 Confirmed/known direct history is stored under:
 
 ```text
-vinss:direct-history:v2:<roomId>:<self>:<peer>
+vinss:direct-history:v3:<roomId>:<self>:<peer>
 ```
 
-using AES-GCM encrypted local JSON.
+using device-key AES-GCM encrypted local JSON; the non-exportable key is in IndexedDB `vinss-device-history/keys`.
 
 History writes are serialized so out-of-order mobile callbacks do not blindly overwrite newer persisted snapshots.
 
@@ -526,27 +525,28 @@ Group Message reuses Message V2 envelope infrastructure but changes the privacy 
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant G as useGroupConversation
-    participant M as messaging.ts
-    participant W as Wallet
-    participant C as MessageHelper
-    participant I as Backend Discovery
-
-    U->>G: Send Group message
-    G->>G: build scope=group payload + groupId
-    G->>M: sendMessage(groupKey, payload)
-    M->>M: encrypt under Group key
-    M->>M: derive Group recipient tag
-    M-->>G: onPrepared(locator)
-    G->>G: persist non-plaintext pending metadata
-    G->>G: show optimistic Group message
-    M->>W: STRK20 transaction
-    W->>C: MessageHelper write
-    C-->>I: indexed ciphertext
-    G->>I: discover Message candidates
-    I-->>G: ciphertext
-    G->>G: decrypt with Group key + verify groupId
+    participant H as Group conversation hook
+    participant M as Domain and rail dispatcher
+    participant W as Ready wallet
+    participant C as Selected Message contracts
+    participant I as Ciphertext index
+    H->>H: Resolve group key
+    H->>M: sendMessage with plaintext and local route
+    M->>M: Encrypt, derive tags, commit, quote and preflight
+    M-->>H: Prepared locator and commitment
+    H->>H: Persist encrypted pending and optimistic entry
+    alt Shield
+        M->>W: strk20InvokeTransaction
+        W->>C: Pool invokes native MessageHelper
+    else Unshield
+        M->>W: execute approval, post_message and revoke
+        W->>C: Public adapter invokes its helper
+    end
+    C-->>I: Event and ciphertext getters indexed
+    H->>I: POST discover kind message
+    I-->>H: Ciphertext and public metadata
+    H->>H: Match tags, decrypt and filter scope
+    H->>H: Reconcile locator and update in-memory group entries
 ```
 
 ---
@@ -660,31 +660,26 @@ Active structured Offers are direct/pairwise.
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant H as useRoomOffers
-    participant O as offers.ts
-    participant F as FeePolicy
-    participant W as Wallet
-    participant C as OfferHelper
-    participant I as Backend Discovery
-
-    U->>H: Create Offer
-    H->>H: resolve selected direct peer
-    H->>H: derive current pairwise key
-    H->>O: createOffer(payload, route)
-    O->>O: fresh locator + route tags
-    O->>O: encrypt Offer terms
-    O->>O: compute Offer V2 commitment
-    O->>F: quoteOfferFee()
-    F-->>O: quote
-    O-->>H: onPrepared(locator, commitment)
-    H->>H: optimistic Offer card
-    O->>W: STRK20 transaction
-    W->>C: OfferHelper write
-    C-->>I: ciphertext indexed
-    H->>I: POST /discover {kind:offer}
-    I-->>H: candidate ciphertext
-    H->>H: route match + decrypt + authenticate
+    participant H as Offer hook
+    participant O as Offer domain and dispatcher
+    participant W as Ready wallet
+    participant C as Selected Offer contracts
+    participant I as Ciphertext index
+    H->>H: Resolve selected peer and pairwise route
+    H->>O: Offer lifecycle payload
+    O->>O: Encrypt terms, tag, commit, quote and preflight
+    O-->>H: Prepared locator for recovery
+    alt Shield
+        O->>W: STRK20 withdraw, OPEN and invoke
+        W->>C: Pool invokes native OfferHelper
+    else Unshield
+        O->>W: execute approve, post_offer and revoke
+        W->>C: Public adapter invokes selected helper
+    end
+    C-->>I: Offer event and ciphertext
+    H->>I: Discover kind offer
+    I-->>H: Candidate encrypted records
+    H->>H: Authenticate route, decrypt and reconcile action
 ```
 
 ---
@@ -1917,7 +1912,7 @@ Current Offer/Rekber user flow should not be inferred to be Group-based simply b
 | Room | `vinss:local-rooms` | roomSecret plaintext local JSON |
 | Group | `vinss:local-groups:v1:<roomId>` | groupSecret plaintext local JSON |
 | Last wallet | `vinss:last-wallet-id` | public wallet id only |
-| Direct Message history | `vinss:direct-history:v2:...` | AES-GCM encrypted |
+| Direct Message history | `vinss:direct-history:v3:...` | AES-GCM encrypted |
 | Direct pending Message | `vinss:pending-direct-message:...` | AES-GCM encrypted under direct key |
 | Offer history | `vinss:offer-history:v1:...` | AES-GCM encrypted |
 | Group pending Message | `vinss:pending-group-message:...` | locator/timestamp metadata only |
@@ -2254,8 +2249,8 @@ Do not infer one path from another.
 |---|---|---|
 | Invite CREATE | strk20InvokeTransaction | Invite contract |
 | Invite CONSUME | strk20InvokeTransaction | Invite contract |
-| Message | strk20InvokeTransaction | MessageHelper |
-| Offer | strk20InvokeTransaction | OfferHelper |
+| Message | Shield: strk20InvokeTransaction; Unshield: account.execute | selected MessageHelper via pool or public adapter |
+| Offer | Shield: strk20InvokeTransaction; Unshield: account.execute | selected OfferHelper via pool or public adapter |
 | Private Escrow coordination | strk20InvokeTransaction | PrivateEscrowHelper |
 | Rekber funding | strk20InvokeTransaction | VinssEscrowRekber |
 | Rekber protection/lifecycle | strk20InvokeTransaction | VinssEscrowRekber |

@@ -1,5 +1,8 @@
 # VINSS Private Offers
 
+> Shield/Unshield integration checked 31 October 2026 against `d3daf1e`. The Offer uses the same room toggle as Message. This update verifies runtime dispatch with controlled wallet/RPC fixtures; it is not a claim of a fresh live two-wallet Offer transaction.
+
+
 This document describes the current private Offer architecture implemented by the VINSS frontend.
 
 Offers convert free-form negotiation into immutable encrypted lifecycle actions while preserving private relationship links between:
@@ -34,6 +37,28 @@ expire
 Do not confuse low-level protocol support with currently wired primary UI behavior.
 
 ---
+
+
+# Shield and Unshield: one Offer lifecycle, two execution rails
+
+The mode is chosen by the room toggle labelled **Shield** / **Unshield**, not a second Offer-only setting. `frontend/app/room/[roomId]/page.tsx` creates a scoped account using `accountForMode` and passes that session to `useRoomOffers`. Creating/countering/accepting/rejecting an Offer therefore reaches `sendOfferAction` with the selected rail. Existing Rekber agreements retain their bound rail; changing the next-transaction mode does not migrate custody.
+
+| Stage | Shield | Unshield |
+|---|---|---|
+| App confidentiality | Pairwise direct key for direct Offer terms | Same pairwise encryption before public execution |
+| Encryption/domain code | `frontend/lib/deal-room/offers.ts`, `sendOfferAction` | Same domain function |
+| Runtime submission | `invokeVinssActions` -> `account.strk20InvokeTransaction` | `invokeVinssActions` -> `buildPublicRailCalls` -> `account.execute` |
+| Operations | fee withdraw, treasury OPEN output, selected OfferHelper invoke | STRK approval, adapter post_offer, allowance revoke |
+| Helper selection | Native helper from selected Shield configuration | Dedicated public helper/adapter from Unshield configuration |
+| Replay binding | Native private action locator | Actor/network/adapter-bound public nonce/locator |
+| Visible execution | STRK20 metadata and public helper interaction | Public wallet, amount/token and transaction metadata |
+| Terms on chain/backend | Ciphertext | Ciphertext |
+
+The v2 app policy targets Offer $0.10 Shield / $0.05 Unshield; the helper-linked oracle quote determines STRK. Wallet/pool fees are separate, and fee amounts must not be inferred from an older screenshot or a source constant. The app-fee transport remains helper/OpenNote or adapter payment, not a claim of wallet-native fee classification.
+
+The runtime test `Offer lifecycle uses the room mode in both rails and keeps pairwise terms encrypted` in `frontend/tests/public-rail-runtime.test.ts` runs all six low-level kinds (`create`, `counter`, `accept`, `reject`, `cancel`, `expire`) through both rails. It checks dispatch, selected helper/adapter, fee quote, decrypt with the intended pairwise key and rejection with a different room key. The primary UI still exposes only create/counter/accept/reject; this test does not add cancel/expire controls.
+
+Code map: [Offer hook](../../../frontend/hooks/room/useRoomOffers.ts), [Offer domain](../../../frontend/lib/deal-room/offers.ts), [execution gateway](../../../frontend/lib/starknet/vinssExecution.ts), [public builder](../../../frontend/lib/starknet/publicRailCalls.ts), [runtime evidence](../../../frontend/tests/public-rail-runtime.test.ts).
 
 # Evidence Rule
 
@@ -132,7 +157,7 @@ flowchart TD
     TAGS["Opaque HMAC routing tags"]
     ENC["AES-GCM Offer V2 ciphertext"]
     FEE["Offer FeePolicy quote"]
-    WALLET["Ready X / STRK20"]
+    WALLET["Ready X / selected execution rail"]
     HELPER["VinssOfferHelper"]
     INDEX["Ciphertext Discovery"]
     AUTH["Local route authentication"]
@@ -1999,29 +2024,26 @@ stateDiagram-v2
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant H as useRoomOffers
-    participant O as offers.ts
-    participant F as FeePolicy
-    participant W as Ready X
-    participant C as OfferHelper
-    participant I as Backend index
-
-    U->>H: Create/Counter/Accept/Reject
-    H->>H: resolve authenticated/current pairwise route
-    H->>O: sendOfferAction(payload)
-    O->>O: fresh locator + HMAC tags
-    O->>O: AES-GCM encrypt + Poseidon commitment
-    O->>F: quoteOfferFee()
-    F-->>O: current quote
-    O-->>H: onPrepared(locator, commitment)
-    H->>H: optimistic encrypted history card
-    O->>W: STRK20 action bundle
-    W->>C: Offer V2 invoke
-    C-->>I: immutable ciphertext indexed
-    H->>I: private Offer Discovery
-    I-->>H: candidate ciphertext
-    H->>H: route match + decrypt + authenticate
+    participant H as Offer hook
+    participant O as Offer domain and dispatcher
+    participant W as Ready wallet
+    participant C as Selected Offer contracts
+    participant I as Ciphertext index
+    H->>H: Resolve selected peer and pairwise route
+    H->>O: Offer lifecycle payload
+    O->>O: Encrypt terms, tag, commit, quote and preflight
+    O-->>H: Prepared locator for recovery
+    alt Shield
+        O->>W: STRK20 withdraw, OPEN and invoke
+        W->>C: Pool invokes native OfferHelper
+    else Unshield
+        O->>W: execute approve, post_offer and revoke
+        W->>C: Public adapter invokes selected helper
+    end
+    C-->>I: Offer event and ciphertext
+    H->>I: Discover kind offer
+    I-->>H: Candidate encrypted records
+    H->>H: Authenticate route, decrypt and reconcile action
 ```
 
 ---
@@ -2896,7 +2918,7 @@ flowchart TB
     ROUTE["Per-action HMAC tags"]
     COMMIT["VINSS_OFFER_COMMIT_V2"]
     FEE["Dynamic Offer FeePolicy quote"]
-    READY["Ready X / STRK20"]
+    READY["Ready X / selected execution rail"]
     HELPER["OfferHelper immutable ciphertext"]
     DISC["Keyless backend Discovery"]
     AUTH["Local recipient/sender binding"]

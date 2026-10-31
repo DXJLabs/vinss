@@ -1,6 +1,6 @@
 # VINSS Frontend Local State
 
-> Pembaruan 31 Oktober 2026: penyimpanan riwayat direct aktif menggunakan cache v3 dan kunci perangkat non-exportable di IndexedDB. Bagian v1/v2 di bawah adalah format legacy untuk migrasi; lihat [device history](./device-history.md) untuk aturan penyimpanan dan pemulihan terbaru.
+> Diperbarui 31 Oktober 2026. Cache direct aktif adalah v3 dengan kunci perangkat; v1/v2 di bagian migrasi adalah format legacy. Lihat [device history](./device-history.md) untuk implementasi, failure behavior dan batas pemulihan.
 
 
 This document describes the current browser-local state model implemented by the VINSS frontend.
@@ -85,6 +85,7 @@ frontend/components/room/conversation/MessageBubble.tsx
 frontend/lib/privacy/channelKey.ts
 frontend/lib/privacy/participantKeys.ts
 frontend/lib/privacy/encryptedChatCache.ts
+frontend/lib/privacy/deviceHistory.ts
 frontend/lib/groups/localGroups.ts
 frontend/lib/deal-room/rekberSecrets.ts
 frontend/app/invite/[token]/page.tsx
@@ -111,7 +112,7 @@ flowchart TD
     UI --> NETWORK
 
     LS -. "cache / capability / recovery" .-> UI
-    IDB -. "messaging identity" .-> UI
+    IDB -. "messaging identity and device-history key" .-> UI
 ```
 
 ---
@@ -585,9 +586,9 @@ ciphertext = base64
 Current local encryption:
 
 ```text
-raw 32-byte key
+raw 32-byte key OR persisted non-exportable CryptoKey
     ↓
-WebCrypto import AES-GCM
+WebCrypto AES-GCM
     ↓
 fresh random 12-byte IV
     ↓
@@ -603,7 +604,7 @@ AES-GCM encrypt
 
 The current generic encrypted local JSON wrapper does not specify additional authenticated data.
 
-Its integrity/authentication is provided by AES-GCM over the ciphertext under the selected key.
+Its integrity/authentication is provided by AES-GCM over the ciphertext under the selected key. V3 device history additionally checks an encrypted context field against the expected room/self/peer namespace; that is an application validation step after authenticated decrypt, not AES additional authenticated data.
 
 ---
 
@@ -616,7 +617,7 @@ Its integrity/authentication is provided by AES-GCM over the ciphertext under th
 null
 ```
 
-on parse/decrypt failure without deleting the stored encrypted record.
+on parse/decrypt failure without deleting the stored encrypted record. This generic convenience behavior is not used to silently reset device history v3: `deviceHistory.ts` performs strict reads and rejects corrupt/wrong-key/context-mismatched current records.
 
 ---
 
@@ -635,7 +636,7 @@ Deleting it immediately could destroy state that becomes readable once the corre
 Current direct Chat history uses:
 
 ```text
-vinss:direct-history:v2:<roomId>:<self>:<peer>
+vinss:direct-history:v3:<roomId>:<self>:<peer>
 ```
 
 ---
@@ -643,13 +644,7 @@ vinss:direct-history:v2:<roomId>:<self>:<peer>
 
 ## Direct History Key
 
-Direct history is encrypted with:
-
-```text
-room channelKey
-```
-
-not the pairwise direct key.
+Direct history v3 is encrypted with an independent, random non-exportable AES-GCM CryptoKey stored per canonical wallet in IndexedDB `vinss-device-history/keys`. It is neither the room channelKey nor the pairwise direct key. A copy of roomSecret cannot reconstruct that device key.
 
 ---
 
@@ -661,6 +656,7 @@ Current saved object contains:
 ```text
 version
 savedAt
+context
 entries[]
 ```
 
@@ -686,9 +682,7 @@ but immutable Message existence is established by helper/indexed locator evidenc
 
 # Serialized Direct History Writes
 
-Direct history writes are serialized through a Promise chain.
-
-Before each encrypted write, the hook reloads the latest persisted encrypted history and merges by action locator.
+`deviceHistory.ts` serializes writes per cache key with a shared module queue; Web Locks serializes cooperating tabs where available. Before each write it authenticates the latest v3 value, merges readable legacy history and new entries by locator, encrypts, verifies persisted content, and only then removes migrated unchanged legacy copies.
 
 ---
 
@@ -718,11 +712,7 @@ vinss:direct-history:v1:...
 
 as a legacy namespace.
 
-Current active history namespace is:
-
-```text
-v2
-```
+Current active history namespace is v3. Legacy v1 uses the available pairwise key; legacy v2 uses the room key. Failed legacy decrypts are retained for retry, while an unreadable v3 blocks overwriting its cache.
 
 ---
 
@@ -1281,7 +1271,7 @@ Current derived symmetric keys are generally recreated in memory from persisted 
 Current design uses both browser stores for different reasons.
 
 ```mermaid
-flowchart LR
+flowchart TD
     LS["localStorage"]
     IDB["IndexedDB"]
 
@@ -1293,6 +1283,8 @@ flowchart LR
 
     IDB --> KEY["non-exportable P-256 CryptoKey"]
     IDB --> PUB["messaging public key"]
+    IDB --> DEVICE["Non-exportable AES device-history key"]
+    DEVICE --> CACHE
 ```
 
 ---
@@ -1651,7 +1643,7 @@ zero local metadata
 Examples:
 
 ```text
-vinss:direct-history:v2:<roomId>:<self>:<peer>
+vinss:direct-history:v3:<roomId>:<self>:<peer>
 vinss:rekber-secrets:v2:<roomId>:<wallet>:<custody>
 vinss:invite:v3:<roomId>:group:<groupId>
 ```
@@ -1667,7 +1659,7 @@ Encrypted local data is only as recoverable as the key source.
 
 | Encrypted state | Encryption key | Key source |
 |---|---|---|
-| direct history | room channelKey | roomSecret |
+| direct history v3 | independent device AES-GCM CryptoKey | IndexedDB vinss-device-history/keys |
 | Offer history | room channelKey | roomSecret |
 | Rekber secrets | room channelKey | roomSecret |
 | pending direct Message | direct pairwise key | P-256 private key + peer public key + roomId |
@@ -1679,13 +1671,7 @@ Encrypted local data is only as recoverable as the key source.
 
 If `roomSecret` is disclosed, an attacker may derive the room channel key and decrypt any copied local encrypted records that use that same key.
 
-This includes current:
-
-```text
-direct history cache
-Offer history cache
-Rekber secret store
-```
+This includes copied legacy direct v2 caches that have not migrated, current Offer history caches and the Rekber secret store. **Migrated direct v3 history is excluded** because its key is independent of roomSecret.
 
 if the attacker also obtains those ciphertext records.
 
@@ -1963,7 +1949,7 @@ Versioned namespaces exist because local-state schema changes can break recovery
 Examples:
 
 ```text
-vinss:direct-history:v2
+vinss:direct-history:v3
 vinss:offer-history:v1
 vinss:rekber-secrets:v2
 vinss:invite:v3
@@ -1993,9 +1979,11 @@ whether deleting it can strand a user
 |---|---|---|---|
 | `vinss:local-rooms` | Room records | plaintext | roomSecret capability |
 | `vinss:local-groups:v1:<roomId>` | Group records | plaintext | groupSecret capability |
-| IndexedDB `vinss-messaging-keys/identities` | P-256 messaging identity | structured CryptoKey | critical key |
+| IndexedDB `vinss-messaging-keys/identities` | P-256 messaging identity | non-exportable CryptoKey | network message continuity |
+| IndexedDB `vinss-device-history/keys` | direct-history AES key per wallet | non-exportable CryptoKey | device cache continuity |
 | `vinss:participants:<roomId>:<self>` | Participant cache | plaintext | relationship metadata |
-| `vinss:direct-history:v2:<roomId>:<self>:<peer>` | Direct history | AES-GCM | private history |
+| `vinss:direct-history:v3:<roomId>:<self>:<peer>` | Active direct history | device-key AES-GCM | private history |
+| `vinss:direct-history:v2:...` | Legacy room-key direct history | AES-GCM | migrate only after verified v3 write |
 | `vinss:direct-history:v1:...` | Legacy direct history | legacy | migration |
 | `vinss:pending-direct-message:<roomId>:<self>:<peer>` | Direct pending | AES-GCM | private recovery |
 | `vinss:pending-group-message:<roomId>:<groupId>:<wallet>` | Group pending | plaintext metadata | recovery metadata |
@@ -2034,7 +2022,7 @@ whether deleting it can strand a user
 | Room record | No | N/A | roomSecret plaintext |
 | Group record | No | N/A | groupSecret plaintext |
 | Participant cache | No | N/A | address/publicKey plaintext |
-| Direct history | Yes | room channelKey | AES-GCM |
+| Direct history v3 | Yes | independent IndexedDB AES-GCM CryptoKey | Context-bound encrypted payload; migrated per conversation |
 | Direct pending Message | Yes | pairwise direct key | AES-GCM |
 | Group pending Message | No body stored | N/A | locator/timestamps only |
 | Offer history | Yes | room channelKey | AES-GCM |
@@ -2051,7 +2039,8 @@ whether deleting it can strand a user
 | groupSecret | Group Message capability lost |
 | P-256 private key | Historical pairwise direct key continuity lost |
 | participant cache | Usually recoverable from encrypted participant discovery |
-| direct history | UI history lost; network ciphertext may still be rediscovered |
+| direct history | UI cache lost; network ciphertext may still be rediscovered with original pairwise keys |
+| device-history AES key | Existing v3 cache cannot be decrypted; no silent room-key fallback |
 | pending direct Message | Recovery UX lost; chain action may still exist |
 | Offer history | Cached cards lost; authenticated Discovery can rebuild selected state |
 | Rekber secrets | Role settlement capability may be lost |
@@ -2068,7 +2057,8 @@ whether deleting it can strand a user
 | groupSecret | Derive Group key; decrypt compatible Group ciphertext |
 | P-256 private CryptoKey usage | Derive direct pairwise keys for known peers |
 | participant cache | Reveal relationship/public-key metadata |
-| direct encrypted history only | Still needs room key |
+| direct encrypted history v3 only | Still needs the device key in IndexedDB |
+| copied legacy direct v2 + roomSecret | Can decrypt until that legacy copy is removed/migrated |
 | Rekber encrypted record only | Still needs room key |
 | full Invite link | Potentially consume unexpired Invite first |
 | pending Group metadata | Reveal action locator/timing |
@@ -2083,7 +2073,7 @@ whether deleting it can strand a user
 | `L2` | roomSecret and groupSecret are sensitive plaintext local capabilities. |
 | `L3` | Persisted P-256 private key remains non-exportable. |
 | `L4` | Direct pairwise key is derived, not directly persisted. |
-| `L5` | Direct history is AES-GCM encrypted with room channelKey. |
+| `L5` | Direct history v3 is AES-GCM encrypted with an independent non-exportable IndexedDB device key; v1/v2 are migration sources. |
 | `L6` | Direct pending Message is AES-GCM encrypted with pairwise key. |
 | `L7` | Group pending record does not persist Message plaintext. |
 | `L8` | Offer history is encrypted with room channelKey. |
@@ -2241,13 +2231,14 @@ sequenceDiagram
 
     U->>UI: open room
     UI->>LS: load room/group capabilities
-    UI->>IDB: restore P-256 identity
+    UI->>IDB: Restore P-256 identity and independent AES history key
     UI->>UI: derive room/group/pairwise keys
-    UI->>LS: hydrate encrypted/private UX caches
+    UI->>LS: Read v3 ciphertext and readable legacy sources
+    UI->>UI: Authenticate and verify migrated history
     UI->>N: refresh immutable/canonical state
     N-->>UI: indexed/contract evidence
     UI->>UI: reconcile local state against stronger evidence
-    UI->>LS: persist updated recovery/cache state
+    UI->>LS: Persist and verify v3 before legacy cleanup
 ```
 
 ---
@@ -2262,7 +2253,7 @@ flowchart TD
     ENC["Encrypted pending direct record"]
     WALLET["Ready X"]
     DISC["Exact locator Discovery"]
-    HIST["Encrypted direct history"]
+    HIST["V3 device-key encrypted direct history"]
     FAIL["Restore draft"]
 
     DRAFT --> PREP

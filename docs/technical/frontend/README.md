@@ -1,8 +1,11 @@
 # VINSS Frontend Technical Reference
 
+> Implementation reference updated 31 October 2026: Message/Offer use the room Shield/Unshield selection; direct history uses device-key v3. See [Message architecture and code map](./messaging-implementation-audit.md), [direct history](./device-history.md), and [mobile layout](./mobile-chat-layout.md).
+
+
 The VINSS frontend is the privacy-sensitive client and orchestration layer of the Deal Room.
 
-**23 October 2026 feature-branch audit:** [Message V2 implementation and security review](./messaging-implementation-audit.md) · [Native Shield/Unshield technical addendum](./shield-unshield.md). These describe `feat/strk20-unshield-fees` and distinguish source changes from chain verification. Older baseline paragraphs below were originally authored on `main`.
+**31 October 2026 feature-branch reference:** [Message V2 implementation and security review](./messaging-implementation-audit.md) · [Native Shield/Unshield technical addendum](./shield-unshield.md). These describe `feat/strk20-unshield-fees` and distinguish source changes from chain verification. Older baseline paragraphs below were originally authored on `main`.
 
 It owns the application state that must remain on the authorized user device, including:
 
@@ -129,7 +132,9 @@ flowchart TD
     UI --> LOCAL
     UI --> CRYPTO
     CRYPTO --> WALLET
-    WALLET --> POOL
+    WALLET -->|Shield| POOL
+    WALLET -->|Unshield| PUBLIC["Public adapter"]
+    PUBLIC --> CONTRACTS
     POOL --> CONTRACTS
     CONTRACTS --> RPC
     RPC --> BACKEND
@@ -234,6 +239,9 @@ flowchart TD
     DIRECT --> MSG
     DIRECT --> PRES
     DIRECT --> ATT
+    DEVICE["Independent non-exportable device AES key"]
+    HISTORY["Direct-history v3 ciphertext"]
+    DEVICE --> HISTORY
 ```
 
 Three different application-key concepts must not be conflated:
@@ -505,28 +513,28 @@ The browser then:
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant FP as FeePolicy
-    participant W as Ready X / Wallet
-    participant C as MessageHelper
-    participant B as Discovery backend
-
-    U->>FE: Send private message
-    FE->>FE: Derive pairwise route
-    FE->>FE: Generate locator + routing tags
-    FE->>FE: AES-GCM encrypt payload
-    FE->>FE: Compute Message V2 commitment
-    FE->>FP: quoteMessageFee()
-    FP-->>FE: current quote
-    FE->>FE: Persist prepared recovery state
-    FE->>W: strk20InvokeTransaction(actions)
-    W->>C: privacy_invoke
-    C-->>B: indexed ciphertext/public event
-    FE->>B: POST /discover {kind: message}
-    B-->>FE: candidate ciphertext
-    FE->>FE: match + decrypt + bind sender
-    FE->>FE: exact locator confirms optimistic bubble
+    participant H as Conversation hook
+    participant M as Domain and rail dispatcher
+    participant W as Ready wallet
+    participant C as Selected Message contracts
+    participant I as Ciphertext index
+    H->>H: Resolve direct or group encryption key
+    H->>M: sendMessage with plaintext and local route
+    M->>M: Encrypt, derive tags, commit, quote and preflight
+    M-->>H: Prepared locator and commitment
+    H->>H: Persist encrypted pending and optimistic entry
+    alt Shield
+        M->>W: strk20InvokeTransaction
+        W->>C: Pool invokes native MessageHelper
+    else Unshield
+        M->>W: execute approval, post_message and revoke
+        W->>C: Public adapter invokes its helper
+    end
+    C-->>I: Event and ciphertext getters indexed
+    H->>I: POST discover kind message
+    I-->>H: Ciphertext and public metadata
+    H->>H: Match tags, decrypt and filter scope
+    H->>H: Reconcile locator and persist device history
 ```
 
 ---
@@ -632,17 +640,17 @@ These are UX/recovery values, not protocol finality guarantees.
 
 # Direct Message Local History
 
-Confirmed/optimistic direct conversation history is persisted through `encryptedChatCache.ts`.
+Confirmed/optimistic direct conversation history is merged, migrated and persisted by `deviceHistory.ts`, using the AES-GCM primitives in `encryptedChatCache.ts`.
 
 Current history key namespace:
 
 ```text
-vinss:direct-history:v2:<roomId>:<self>:<peer>
+vinss:direct-history:v3:<roomId>:<self>:<peer>
 ```
 
 The history record is AES-GCM encrypted before being written to localStorage.
 
-Current implementation uses the room `channelKey` as the local-history encryption key.
+Current direct history uses the independent non-exportable IndexedDB AES-GCM key managed by `deviceHistory.ts`, not the room channelKey. Legacy v1/v2 records migrate only after verified v3 persistence.
 
 Do not overstate this as:
 
@@ -1890,7 +1898,7 @@ Most private workflow transactions use:
 account.strk20InvokeTransaction(...)
 ```
 
-The Settlement Certificate claim intentionally uses:
+The Unshield room rail uses `account.execute` for encrypted Message/Offer actions through the public adapter. The Settlement Certificate claim also intentionally uses:
 
 ```text
 account.execute(...)
@@ -3839,7 +3847,7 @@ and future frontend documentation should remain anchored to current source plus 
 | Rooms | vinss:local-rooms | Plain local room records including roomSecret when available |
 | Groups | vinss:local-groups:v1:<roomId> | Plain local Group definitions including groupSecret |
 | Participants | vinss:participants:<roomId>:<self> | Peer address + public messaging key cache |
-| Direct history | vinss:direct-history:v2:<roomId>:<self>:<peer> | Encrypted conversation history |
+| Direct history | vinss:direct-history:v3:<roomId>:<self>:<peer> | Encrypted conversation history |
 | Direct pending | vinss:pending-direct-message:<roomId>:<self>:<peer> | Encrypted pending Message recovery |
 | Offer history | vinss:offer-history:v1:<roomId>:<self> | Encrypted Offer history |
 | Direct Invite | vinss:invite:v3:<roomId>:direct | Invite link/expiry/commitment/status |

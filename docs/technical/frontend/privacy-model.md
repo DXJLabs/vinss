@@ -1,5 +1,8 @@
 # VINSS Frontend Privacy Model
 
+> Message/storage boundaries refreshed 31 October 2026. Direct history v3 uses an independent device key; Offer/Rekber local caches retain their existing room-key protection. See [Message architecture](./messaging-implementation-audit.md) and [device history](./device-history.md).
+
+
 This document defines the current privacy boundaries implemented by the VINSS frontend.
 
 VINSS privacy is not a claim that all metadata disappears.
@@ -1613,7 +1616,7 @@ In the audited `feat/strk20-unshield-fees` source, the older `[VINSS DECRYPTED M
 
 ## Impact
 
-The standard backend Discovery path still receives ciphertext, not app decryption keys. Yet `sendMessage()` logs wallet errors and action-bundle metadata on failed STRK20 private submission. These diagnostics may expose private-action metadata or ciphertext in browser logs, and require production review.
+The standard backend Discovery path receives ciphertext, not app decryption keys. The current Message send exception path emits static failure categories instead of raw wallet exceptions or action bundles. This reviewed path does not prove that every unrelated diagnostic/telemetry path is safe.
 
 ---
 
@@ -1803,7 +1806,7 @@ It supports room-scoped coordination/cache encryption but does not itself derive
 | groupSecret | localStorage | plaintext capability |
 | P-256 private identity | IndexedDB | non-exportable CryptoKey |
 | participant cache | localStorage | plaintext metadata |
-| direct history | localStorage | AES-GCM / room key |
+| direct history v3 | localStorage ciphertext + IndexedDB key | AES-GCM / independent non-exportable device key |
 | Offer history | localStorage | AES-GCM / room key |
 | direct pending Message | localStorage | AES-GCM / pairwise key |
 | Group pending Message | localStorage | locator/timestamps only |

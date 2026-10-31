@@ -1,11 +1,11 @@
 # VINSS Two-Party Private Chat
 
-> Pembaruan 31 Oktober 2026: penyimpanan riwayat direct aktif menggunakan cache v3 dan kunci perangkat non-exportable di IndexedDB. Bagian v1/v2 di bawah adalah format legacy untuk migrasi; lihat [device history](./device-history.md) untuk aturan penyimpanan dan pemulihan terbaru.
+> Diperbarui 31 Oktober 2026 dari implementasi `d3daf1e`: Message V2, Shield/Unshield, cache perangkat v3, migrasi, dan scroll mobile. Diagram dan pembahasan protokol tetap dipertahankan. Versi v1/v2 hanya disebut sebagai sumber migrasi bila diberi label legacy.
 
 
 This document describes the current direct two-party private Chat implementation in the VINSS frontend.
 
-**Current code audit (23 October 2026):** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. No OpenMLS integration is claimed.
+**Current code audit (31 October 2026):** [cross-layer Message V2 review](./messaging-implementation-audit.md) includes a verified leading-zero felt-packing risk, a wallet-diagnostics review and the distinction between app encryption and STRK20 wallet authorization. No OpenMLS integration is claimed.
 
 Direct Chat is a browser-side privacy workflow built from:
 
@@ -26,7 +26,7 @@ opaque per-action sender/recipient routing tags
     ↓
 AES-GCM ciphertext
     ↓
-wallet-authorized STRK20 submission
+wallet authorization through the selected Shield or Unshield rail
     ↓
 Message Helper immutable record
     ↓
@@ -104,14 +104,21 @@ frontend/hooks/room/useDirectConversation.ts
 frontend/hooks/room/useRoomParticipants.ts
 frontend/hooks/room/useDirectPresence.ts
 
+frontend/lib/deal-room/messageGateway.ts
+frontend/lib/deal-room/messageTransport.ts
 frontend/lib/deal-room/messaging.ts
 frontend/lib/deal-room/directMessageRouting.ts
+frontend/lib/starknet/vinssExecution.ts
+frontend/lib/starknet/publicRailCalls.ts
 
 frontend/lib/privacy/participantKeys.ts
 frontend/lib/privacy/messageRouting.ts
 frontend/lib/privacy/envelope.ts
 frontend/lib/privacy/presence.ts
 frontend/lib/privacy/encryptedChatCache.ts
+frontend/lib/privacy/deviceHistory.ts
+frontend/hooks/room/useConversationScroll.ts
+frontend/lib/ui/conversationScroll.ts
 frontend/lib/privacy/directAttachments.ts
 frontend/lib/privacy/rekberEvidenceChannel.ts
 
@@ -130,8 +137,8 @@ flowchart TD
     ID["P-256 messaging identity"]
     PEER["Peer public identity"]
     ECDH["P-256 ECDH + HKDF"]
-    MSG["messaging.ts"]
-    WALLET["Ready X / Wallet"]
+    MSG["Message domain and rail dispatcher"]
+    WALLET["Ready wallet: Shield or Unshield"]
     HELPER["VinssMessageHelper"]
     INDEX["Backend Discovery index"]
     LOCAL["Local decrypt + history"]
@@ -678,32 +685,28 @@ This commitment authenticates the exact public encrypted envelope shape expected
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant H as useDirectConversation
-    participant M as messaging.ts
-    participant F as FeePolicy
-    participant W as Ready X / Wallet
-    participant C as MessageHelper
-    participant I as Backend index
-
-    U->>H: sendDirectMessage()
-    H->>H: resolve peer + pairwise key
-    H->>M: sendMessage(payload, direct route)
-    M->>M: generate locator
-    M->>M: derive HMAC sender/recipient tags
-    M->>M: AES-GCM encrypt
-    M->>M: compute Message V2 commitment
-    M->>F: quoteMessageFee()
-    F-->>M: current fee quote
-    M-->>H: onPrepared(locator, commitment)
-    H->>H: save encrypted pending + optimistic entry
-    M->>W: strk20InvokeTransaction(actions)
-    W->>C: privacy helper invocation
-    C-->>I: immutable ciphertext/event indexed
-    H->>I: discover exact locator
-    I-->>H: candidate encrypted records
-    H->>H: private route match + decrypt
-    H->>H: upgrade optimistic entry
+    participant H as Conversation hook
+    participant M as Domain and rail dispatcher
+    participant W as Ready wallet
+    participant C as Selected Message contracts
+    participant I as Ciphertext index
+    H->>H: Resolve direct or group encryption key
+    H->>M: sendMessage with plaintext and local route
+    M->>M: Encrypt, derive tags, commit, quote and preflight
+    M-->>H: Prepared locator and commitment
+    H->>H: Persist encrypted pending and optimistic entry
+    alt Shield
+        M->>W: strk20InvokeTransaction
+        W->>C: Pool invokes native MessageHelper
+    else Unshield
+        M->>W: execute approval, post_message and revoke
+        W->>C: Public adapter invokes its helper
+    end
+    C-->>I: Event and ciphertext getters indexed
+    H->>I: POST discover kind message
+    I-->>H: Ciphertext and public metadata
+    H->>H: Match tags, decrypt and filter scope
+    H->>H: Reconcile locator and persist device history
 ```
 
 ---
@@ -747,9 +750,9 @@ If a deployed FeePolicy happens to quote a specific amount, that belongs in a da
 ---
 
 
-# Message STRK20 Action Bundle
+# Message Action Bundle and Execution Rail
 
-Current `sendMessage()` builds:
+`sendMessage()` constructs the encrypted app intent below. `invokeVinssActions()` submits that intent through Shield or translates it for Unshield:
 
 ```text
 withdraw quoted fee token
@@ -1041,7 +1044,7 @@ Transaction block order and local UI order are therefore not assumed to be the s
 Direct conversation history is cached under:
 
 ```text
-vinss:direct-history:v2:<roomId>:<canonical-self>:<canonical-peer>
+vinss:direct-history:v3:<roomId>:<canonical-self>:<canonical-peer>
 ```
 
 ---
@@ -1049,13 +1052,9 @@ vinss:direct-history:v2:<roomId>:<canonical-self>:<canonical-peer>
 
 ## History Encryption Key
 
-Current direct history cache uses:
+Current direct history cache uses an independent random 256-bit AES-GCM device key, persisted as a non-exportable CryptoKey in IndexedDB `vinss-device-history/keys`, scoped by canonical wallet address.
 
-```text
-room channelKey
-```
-
-through `encryptedChatCache.ts`.
+`deviceHistory.ts` controls reads, merging, migration and verified writes; `encryptedChatCache.ts` accepts either that CryptoKey or the raw keys still used by other local records. The room secret cannot reconstruct the v3 key.
 
 This differs from the pending Message recovery record, which uses the direct pairwise key.
 
@@ -1069,6 +1068,7 @@ The saved local JSON contains:
 ```text
 version
 savedAt
+context = roomId:self:peer
 entries[]
 ```
 
@@ -1085,7 +1085,7 @@ ciphertext
 
 ## Serialized History Writes
 
-Direct history writes are serialized through a Promise chain.
+Direct history writes are serialized per cache namespace by the module-level queue in `deviceHistory.ts`. Cooperating browser tabs also use Web Locks where available.
 
 Reason:
 
@@ -1100,22 +1100,16 @@ so each write reloads the latest encrypted persisted snapshot, merges by locator
 
 # Legacy History Namespace
 
-Current direct hook still knows a legacy:
+The storage module can read legacy v1 with the available pairwise key and legacy v2 with the room key. The active namespace is v3, protected by the independent device key.
 
-```text
-vinss:direct-history:v1:...
-```
-
-namespace for compatibility/migration behavior.
-
-The active current namespace is V2.
+It merges readable legacy entries by locator, saves v3, reads the serialized value back and authenticates its content, then deletes only unchanged legacy copies that were successfully migrated. Undecryptable legacy copies remain for retry. Opening/writing each conversation triggers migration; unopened legacy conversations are not silently bulk-converted.
 
 ---
 
 
 # Failed Local Cache Decrypt
 
-`loadEncryptedLocalJson()` deliberately returns `null` without deleting the encrypted record when AES-GCM decrypt fails.
+The generic `loadEncryptedLocalJson()` returns `null` without deleting a record when its key/format is temporarily wrong. **Device history v3 uses strict authenticated reads instead:** a corrupt/wrong-key/context-mismatched v3 record blocks overwriting that cache. Failed quota/IndexedDB writes do not cause a room-key or plaintext fallback. Legacy failed decrypts retain their source copies.
 
 Reason:
 
@@ -1588,7 +1582,7 @@ public/private boundary
 # Direct Chat Privacy Boundary
 
 ```mermaid
-flowchart LR
+flowchart TD
     PLAIN["Message plaintext"]
     KEY["Direct pairwise key"]
     CLIENT["Authorized frontend"]
@@ -1702,7 +1696,7 @@ invisible.
 | P-256 public key | IndexedDB/cache/Presence | Public-key metadata | Persistent/ephemeral |
 | Peer cache | localStorage | Plain metadata | Persistent |
 | Direct pairwise key | derived memory | Raw Uint8Array | Ephemeral/derivable |
-| Confirmed direct history | localStorage | AES-GCM encrypted | Persistent |
+| Confirmed direct history v3 | localStorage ciphertext + IndexedDB device key | AES-GCM, non-exportable independent key | Persistent |
 | Pending direct Message | localStorage | AES-GCM encrypted with direct key | Temporary |
 | On-chain Message | Starknet | Ciphertext + public metadata | Immutable |
 | Discovery record | Backend DB | Ciphertext + public metadata | Persistent index |
@@ -2145,6 +2139,42 @@ Treat them as protocol/data changes, not cosmetic refactors.
 ---
 
 
+
+# Current Message Code Walkthrough
+
+| Stage | Source and entry point | Input/output and boundary |
+|---|---|---|
+| Room mode | [room page](../../../frontend/app/room/[roomId]/page.tsx), `accountForMode` in [transactionMode.ts](../../../frontend/lib/starknet/transactionMode.ts) | One scoped account feeds Message and Offer hooks; mode switching does not rewrite existing escrow agreements. |
+| Compose direct | [useDirectConversation.ts](../../../frontend/hooks/room/useDirectConversation.ts), `sendDirectMessage`, `resolveDirectKey` | Plaintext stays in browser memory; direct route uses the pairwise key. |
+| Compose group | [useGroupConversation.ts](../../../frontend/hooks/room/useGroupConversation.ts), `sendGroupMessage` | Group key and encrypted groupId remain separate from direct key/state. |
+| Select transport | [messageGateway.ts](../../../frontend/lib/deal-room/messageGateway.ts) | Registers `starknet:<network>:strk20` and `starknet:<network>:public`; both call the real Message domain implementation. |
+| Encrypt and commit | [messaging.ts](../../../frontend/lib/deal-room/messaging.ts), `sendMessage`; [envelope.ts](../../../frontend/lib/privacy/envelope.ts), `encryptPayload`; [feltCodec.ts](../../../frontend/lib/privacy/feltCodec.ts) | JSON -> AES-GCM with fresh IV -> lossless felts -> Message V2 commitment. No plaintext body/key is included in calldata. |
+| Quote and preflight | [feePolicy.ts](../../../frontend/lib/starknet/feePolicy.ts), `quoteMessageFee`; [vinssExecution.ts](../../../frontend/lib/starknet/vinssExecution.ts) | Resolve the selected helper/policy and check public deployment/network before exposing prepared recovery state. |
+| Submit Shield | `invokeVinssActions` | `account.strk20InvokeTransaction(actions)`; wallet adds its infrastructure fee separately. |
+| Submit Unshield | `buildPublicRailCalls` in [publicRailCalls.ts](../../../frontend/lib/starknet/publicRailCalls.ts) | `account.execute` with approve -> public adapter `post_message` -> revoke. Public replay nonce binds actor/network/adapter. Body remains encrypted. |
+| Publish/index | [vinss_message_helper.cairo](../../../contracts/src/messaging/vinss_message_helper.cairo), `store_message`; [indexer/service.ts](../../../backend/src/indexer/service.ts), `hydrateAction` | Contract stores ciphertext chunks; backend hydrates a ciphertext-only read model from getters/events. |
+| Discover/decrypt | [discover.ts](../../../backend/src/routes/discover.ts), `/discover`; `messaging.ts`, `discoverMessages` | Request contains kind/block range only. Browser checks recipient tag, decrypts, binds sender tag and filters peer/scope. |
+| Local history | [deviceHistory.ts](../../../frontend/lib/privacy/deviceHistory.ts), `readDirectHistory`, `writeDirectHistory` | Browser associates decrypted content with locator/hash/block; only encrypted v3 values are persisted. |
+| Scroll | [useConversationScroll.ts](../../../frontend/hooks/room/useConversationScroll.ts), [conversationScroll.ts](../../../frontend/lib/ui/conversationScroll.ts), [globals.css](../../../frontend/app/globals.css) | Mobile uses document flow; desktop uses a bounded timeline. Data hooks no longer scroll during polling. |
+
+## Shield and Unshield preserve message confidentiality
+
+Shield uses the STRK20 native action bundle. Unshield uses a public account call and public adapter with its own helper deployment. Both serialize the same Message V2 ciphertext/header; they differ in wallet visibility, fee execution, locator derivation and submission path. A transport switch does not turn ciphertext into plaintext or create a cross-chain bridge.
+
+App fee policy v2 targets Message $0.02 in Shield and $0.01 in Unshield. Those are USD pricing targets, not a fixed STRK amount. The active helper-linked quote is authoritative; wallet/pool/relayer charges are separate. VINSS app revenue still follows the helper/OpenNote or public adapter payment path and is not claimed to be a wallet-native application fee.
+
+## Scrolling and reconciliation are separate lifecycles
+
+The Direct/Group panels call `useConversationScroll`; `useDirectConversation` and `useGroupConversation` own data, keys and reconciliation. The scroll controller uses a stable conversation identity and entry count, tracks near-latest intent, pauses follow during user navigation, and confines desktop latest jumps to the timeline. Mobile below 1024px has no fixed-height contained chat scroller, so dragging blank space can continue toward actions/composer.
+
+This is source/tested behavior. Android/Ready gesture verification remains a device check; generated UI references are not browser evidence.
+
+## Local history migration and recovery detail
+
+V3 uses its own non-exportable device AES key, while pending direct messages continue using the pairwise key. Encrypted context binds room/self/peer; moving ciphertext to a different peer namespace fails validation. A saved read receipt survives merge when newer chain data omits readAt. A corrupt v3 cache blocks replacement, and failed writes retain recovery material.
+
+A localStorage-only copy cannot restore v3 on a new browser because it lacks the IndexedDB key. Clearing site data can remove this key and the separate P-256 messaging identity. Re-discovery of chain ciphertext is independent of local cache recovery and still needs the original message key material. No secure-enclave, cross-device backup, XSS immunity or OpenMLS ratchet is implied.
+
 # Message V2 Compatibility
 
 Current constants:
@@ -2180,7 +2210,7 @@ must remain identical on both counterpart clients for historical decrypt continu
 Current direct history namespace:
 
 ```text
-vinss:direct-history:v2
+vinss:direct-history:v3
 ```
 
 is part of device-local migration behavior.
@@ -2430,6 +2460,9 @@ Discovery backend unavailable
 8. frontend/lib/privacy/envelope.ts
 9. frontend/lib/privacy/presence.ts
 10. frontend/lib/privacy/encryptedChatCache.ts
+frontend/lib/privacy/deviceHistory.ts
+frontend/hooks/room/useConversationScroll.ts
+frontend/lib/ui/conversationScroll.ts
 11. frontend/lib/privacy/directAttachments.ts
 12. cross-layer privacy regression
 13. live two-wallet transaction/decrypt evidence
@@ -2463,11 +2496,12 @@ flowchart TB
     TAG["Per-action HMAC tags"]
     ENC["AES-GCM Message V2"]
     FEE["Dynamic Message FeePolicy quote"]
-    READY["Ready X / STRK20"]
+    READY["Wallet: selected Shield or Unshield rail"]
     CHAIN["MessageHelper ciphertext"]
     IDX["Backend Discovery index"]
     AUTH["Local tag match + sender binding"]
-    HIST["Encrypted local history"]
+    HIST["V3 local history ciphertext"]
+    DEVICE["Independent device AES key in IndexedDB"]
     PRES["Encrypted typing/read Presence"]
     FILE["Encrypted attachment"]
 
@@ -2485,6 +2519,7 @@ flowchart TB
     IDX --> AUTH
     KEY --> AUTH
     AUTH --> HIST
+    DEVICE --> HIST
     KEY --> PRES
     KEY --> FILE
 ```
@@ -2517,4 +2552,4 @@ The strongest current local-state statement is:
 
 The most important current privacy caveat is:
 
-> The formerly documented decrypted-message console log is absent from the audited `discoverMessages()`; wallet errors and STRK20 action metadata still enter debug diagnostics and need review before strict privacy claims.
+> The normal Message send path sanitizes wallet errors into static categories and does not log raw actions or decrypted bodies. This does not establish that every unrelated application diagnostic is safe. Room/group secrets remain plaintext local capabilities; migrated direct-history v3 is protected by a separate device key, while active-origin script compromise remains outside that protection.

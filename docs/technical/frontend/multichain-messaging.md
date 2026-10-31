@@ -1,6 +1,6 @@
 # VINSS Multichain Messaging — Production Transport Boundary
 
-> Status: **Starknet STRK20 active; Canton/EVM not yet connected.** Implementation milestone 23 October 2026, branch `feat/strk20-unshield-fees`. No Mainnet deployment, Canton Daml messaging deployment, EVM contract deployment or cross-chain relay is claimed.
+> Status: **Starknet Shield and Unshield active; Canton/EVM not connected.** Source review 31 October 2026, branch `feat/strk20-unshield-fees`. No Mainnet deployment, Canton Daml messaging deployment, EVM contract deployment or cross-chain relay is claimed.
 
 ## Design constraint: chain-agnostic confidentiality, chain-native delivery
 
@@ -11,7 +11,7 @@ VINSS is multichain by product design; messages must remain a chain-neutral appl
 | Conversation | Private peer/group membership and authenticated identity associations | Binding to Starknet address, Canton Party or EVM account |
 | Encryption | P-256 ECDH/HKDF for current direct chat, group secret, AES-GCM JSON payload | Serialize encrypted bytes to native ledger representation |
 | Message routing | Ephemeral tags, logical message/recovery IDs | Chain-qualified immutable receipt, checkpoint and finality |
-| Sender authority | User-approved action with correct wallet context | STRK20 native invoke today; Canton/EVM must implement own signatures |
+| Sender authority | User-approved action with correct wallet context | Shield native invoke and Unshield public account execution today; Canton/EVM must implement own signatures |
 | Fees | Principal versus app revenue versus wallet/network cost remain distinct | Per-chain quote and fee token |
 | Discovery | Encrypted candidate retrieval without giving server plaintext keys | Starknet event+getter indexer today; Canton/EVM native indexer in future |
 | Replay & reliability | Unique encrypted message, dedupe, pending-wallet ambiguity | Network-specific nonce/locator, confirmed receipt, fork/finality rules |
@@ -20,7 +20,7 @@ VINSS is multichain by product design; messages must remain a chain-neutral appl
 
 - `frontend/lib/deal-room/messageTransport.ts` implements a typed registry and explicit, fail-closed dispatch.
 - Transport IDs are `family:network:rail`. Valid example `starknet:sepolia:strk20`; reserved future examples `canton:devnet:daml` and `evm:11155111:contract`.
-- `frontend/lib/deal-room/messageGateway.ts` registers **only** the actual Starknet STRK20 functions `sendMessage` and `discoverMessages` from `frontend/lib/deal-room/messaging.ts`. It exposes the same interface used by the active direct and group hooks.
+- `frontend/lib/deal-room/messageGateway.ts` registers both Starknet rail IDs, `starknet:<network>:strk20` and `starknet:<network>:public`, backed by the actual domain functions `sendMessage` and `discoverMessages` from `frontend/lib/deal-room/messaging.ts`. It exposes the same interface used by the active direct and group hooks.
 - `frontend/hooks/room/useDirectConversation.ts` and `useGroupConversation.ts` now use the gateway, preserving the deployed native action and backend read flow.
 - `NEXT_PUBLIC_MESSAGE_TRANSPORT_ID` may select an **already registered** transport; selecting any unsupported ID rejects with an error. It never silently posts Canton or EVM messages to the Starknet helper.
 - This milestone does **not** expose a misleading multichain selector in the UI.
