@@ -15,8 +15,6 @@ test("Shield is the in-room default, with a real Unshield public alternative", (
   const state=readFileSync(new URL("../frontend/hooks/room/useRoomTransactionMode.ts",import.meta.url),"utf8");
   assert.match(state,/useState<TransactionMode>\("shield"\)/);
   assert.match(room,/aria-label="Room transaction mode"/);
-  assert.match(room,/Shield · STRK20/);
-  assert.match(room,/Unshield · Public/);
   assert.match(room,/accountForMode\(connectedSession.account, transactionMode/);
   assert.match(room,/<EscrowPanel/);
   assert.doesNotMatch(room,/PublicTransferPanel/);

@@ -537,7 +537,7 @@ export default function DealRoomPage() {
         <div className="flex min-h-9 items-center gap-3">
           <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-paper/75">
             <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" />
-            {transactionMode === "shield" ? "Shield · STRK20" : "Unshield · Public"}
+            {transactionMode === "shield" ? "Shield" : "Unshield"}
           </span>
           <button type="button" role="switch" aria-label="Shield mode" aria-checked={transactionMode === "shield"}
             disabled={Boolean(modeError) || busy || (transactionMode === "shield" && Boolean(publicRailConfigurationError()))}
