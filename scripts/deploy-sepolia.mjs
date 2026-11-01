@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 const frontend = fileURLToPath(new URL('../frontend/', import.meta.url));
 const values = new Map();
-for (const rail of ['fees-v2']) {
+for (const rail of ['invite-fees-v3']) {
   const env = readFileSync(new URL(`../deployments/sepolia/${rail}/frontend.env`, import.meta.url), 'utf8');
   for (const line of env.split(/\r?\n/)) {
     if (!line.trim() || line.startsWith('#')) continue;

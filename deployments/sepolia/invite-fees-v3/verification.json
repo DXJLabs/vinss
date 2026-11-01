@@ -1,0 +1,42 @@
+{
+  "network": "sepolia",
+  "verifiedAt": "2026-11-01T01:57:32.962Z",
+  "blockNumber": 17458114,
+  "nativeInvite": "0x6d877e59f5e1e95edacdab4aaa6a0a906a75556527a1b9c563c174fe8525fec",
+  "publicInvite": "0x7b007cb60f6616e8c83fd6d9ea1d9058f58c84ae240b27f0d58c63d31845654",
+  "publicInviteAdapter": "0x2de49d040c7b58e8d5f1a03d1cd5cf0efe1d89b15766dc4b2c7a6c5cbe465c",
+  "shieldUsdMicros": "20000",
+  "unshieldUsdMicros": "10000",
+  "shieldWei": "409005399075770500",
+  "unshieldWei": "204502699537885250",
+  "preserved": [
+    {
+      "mode": "shield",
+      "action": "MESSAGE_HELPER",
+      "helper": "0x2fe9d58755197fa7b8b22731fe673c97de915def5d1ee748ac328beab082caf",
+      "usdMicros": "20000"
+    },
+    {
+      "mode": "unshield",
+      "action": "MESSAGE_HELPER",
+      "helper": "0x35f30958a8132bc6eb0d1907d03f4165b798656474be1c4b57cdbb0d2153596",
+      "usdMicros": "10000"
+    },
+    {
+      "mode": "shield",
+      "action": "OFFER_HELPER",
+      "helper": "0x365d97f9fdaceb0ac224f0e761c02e8ae631e171e36f860749d5f7d94804a99",
+      "usdMicros": "100000"
+    },
+    {
+      "mode": "unshield",
+      "action": "OFFER_HELPER",
+      "helper": "0x29395ca27658b5a3f68c421af8a1222f4f2acda73f12ec65809de6dbc57e53f",
+      "usdMicros": "50000"
+    }
+  ],
+  "rekberPolicy": "0x1d359b83015702c9e369563bb0732da07e31c0ae478c03ddb611258c20825c8",
+  "activation": "Invite-only public profile and native override; Vercel publication remains separate.",
+  "workflowRun": "https://github.com/DXJLabs/vinss/actions/runs/41262798611",
+  "artifactSha256": "50021db01c771bdb94ca6459a42722831daf947f43645c52fb830beea5d3e5b9"
+}
