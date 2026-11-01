@@ -17,7 +17,7 @@ pub mod VinssAppFeePolicy {
         self.min_sources.write(min_sources);
     }
     fn usd_price(action: u8) -> u128 {
-        if action == 1 || action == 3 { 100_000 } else if action == 2 { 20_000 }
+        if action == 3 { 100_000 } else if action == 1 || action == 2 { 20_000 }
         else { panic!("BAD_FEE_ACTION") }
     }
     #[abi(embed_v0)]

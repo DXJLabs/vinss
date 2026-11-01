@@ -20,10 +20,11 @@ const newSourceFloors: {
   id: FlatVinssAction;
   label: string;
   baseUsd: string;
+  shieldUsd: string;
 }[] = [
-  { id: "roomActivation", label: "Room activation", baseUsd: "$0.05" },
-  { id: "message", label: "Message", baseUsd: "$0.01" },
-  { id: "offer", label: "Offer", baseUsd: "$0.05" },
+  { id: "roomActivation", label: "Invite creation", baseUsd: "$0.01", shieldUsd: "$0.02" },
+  { id: "message", label: "Message", baseUsd: "$0.01", shieldUsd: "$0.02" },
+  { id: "offer", label: "Offer", baseUsd: "$0.05", shieldUsd: "$0.10" },
 ];
 
 type QuoteResult =
@@ -99,8 +100,8 @@ export default function FeeTransparencyPage() {
           <h1 className="mt-3 font-display text-2xl uppercase">Fees</h1>
           <p className="mt-3 text-sm leading-6 text-paper/70">
             Fee amounts below are quoted from the currently configured Starknet
-            contracts. They may exceed the base USD prices because of the sponsor-cost floor.
-            Transfer amounts are not service fees.
+            contracts. USD targets describe this source version; use the on-chain quotes to review the active deployment.
+            Wallet and network charges are additional.
           </p>
           <div className="mt-6 overflow-x-auto border border-wire">
             <table className="w-full min-w-[410px] text-left text-xs sm:text-sm">
@@ -108,6 +109,7 @@ export default function FeeTransparencyPage() {
                 <tr>
                   <th className="px-3 py-3 font-normal">Action</th>
                   <th className="px-3 py-3 font-normal">Unshield target</th>
+                  <th className="px-3 py-3 font-normal">Shield target</th>
                   <th className="px-3 py-3 font-normal">On-chain quote · Shield</th>
                   <th className="px-3 py-3 font-normal">On-chain quote · Unshield</th>
                 </tr>
@@ -120,6 +122,7 @@ export default function FeeTransparencyPage() {
                     <tr key={entry.id} className="border-b border-wire/60">
                       <td className="px-3 py-3">{entry.label}</td>
                       <td className="px-3 py-3 font-mono text-paper/70">{entry.baseUsd}</td>
+                      <td className="px-3 py-3 font-mono text-paper/70">{entry.shieldUsd}</td>
                       <td className="px-3 py-3 font-mono text-signal">
                         {quote.state === "ready" ? quote.value :
                           quote.state === "loading" ? "Loading…" : "Unavailable"}
@@ -153,7 +156,7 @@ export default function FeeTransparencyPage() {
             <p><strong className="text-paper">Unshield (ordinary public mode):</strong>{" "}
               Uses ordinary Starknet account transactions for room activation,
               encrypted onchain messages, offers and Rekber. The public flat fee policy
-              targets $0.01 per message and $0.05 per offer or room activation.
+              targets $0.01 per message or Invite creation and $0.05 per offer.
               Shield app targets are twice those amounts. Rekber's
               2% / floor / reserve and existing workflow fees stay unchanged.
               Wallet addresses, token amounts and transaction metadata are public;

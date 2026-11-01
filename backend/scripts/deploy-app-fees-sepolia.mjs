@@ -3,6 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { Account, RpcProvider, CallData, hash } from 'starknet';
 const output = 'deployment-app-fees-sepolia';
+const deploymentVersion = 'v3-invite';
 mkdirSync(output, { recursive: true });
 const manifest = { network: 'sepolia', verified: false, contracts: {} };
 const save = () => writeFileSync(`${output}/manifest.json`, JSON.stringify(manifest, null, 2));
@@ -37,7 +38,7 @@ async function main() {
     }
     const constructorCalldata = new CallData(contract.abi).compile('constructor', args);
     const { calls, addresses } = account.deployer.buildDeployerCall({ classHash, constructorCalldata,
-      salt: hash.getSelectorFromName(`vinss-flat-app-sepolia-v2-${name}`), unique: true }, account.address);
+      salt: hash.getSelectorFromName(`vinss-flat-app-sepolia-${deploymentVersion}-${name}`), unique: true }, account.address);
     const address = addresses[0];
     let existing;
     try { existing = await provider.getClassHashAt(address); }
@@ -59,7 +60,7 @@ async function main() {
     if (!eq((await call(helpers[name], 'get_privacy_pool'))[0], pool) ||
         !eq((await call(helpers[name], 'get_fee_policy'))[0], policy)) throw new Error('Helper configuration mismatch');
   }
-  for (const [action, usd] of [[1,50000n],[2,10000n],[3,50000n]]) {
+  for (const [action, usd] of [[1,10000n],[2,10000n],[3,50000n]]) {
     if (!eq((await call(publicPolicy, 'quote_fee_usd_micros', [action]))[0], usd)) throw new Error('Public USD quote mismatch');
     if (!eq((await call(policy, 'quote_fee_usd_micros', [action]))[0], usd * 2n)) throw new Error('Shield USD quote mismatch');
     const shield = BigInt((await call(policy, 'quote_fee', [action]))[0]);
@@ -74,7 +75,7 @@ async function main() {
   manifest.activation = 'Staged: backend rollout and frontend promotion must be verified before activation.';
   save();
   execFileSync(process.execPath, ['scripts/deploy-public-sepolia.mjs'], {
-    stdio: 'inherit', env: { ...process.env, VINSS_APP_FEE_POLICY_ADDRESS: policy },
+    stdio: 'inherit', env: { ...process.env, VINSS_APP_FEE_POLICY_ADDRESS: policy, VINSS_PUBLIC_DEPLOYMENT_VERSION: deploymentVersion },
   });
   console.log('Verified new Shield helpers and full public fee deployment saved. Active frontend/backend pointers are unchanged.');
 }

@@ -1,7 +1,7 @@
 "use client";
 import { accountForMode, parseTransactionMode, transactionModeOf, type TransactionMode } from "@/lib/starknet/transactionMode";
 import { publicInviteConsumedBy } from "@/lib/starknet/publicInvite";
-import { PUBLIC_RAIL_ADDRESS } from "@/lib/starknet/constants";
+import { publicInviteDeployment } from "@/lib/starknet/inviteDeployment";
 
 import Link from "next/link";
 import {
@@ -168,6 +168,7 @@ async function waitConsumed(
   onchainSecret: string,
   account: InviteConsumeAccount,
   publicCommitment?: string,
+  publicAdapter?: string,
   attempts = 10,
 ) {
   for (let i = 0; i < attempts; i++) {
@@ -177,10 +178,11 @@ async function waitConsumed(
           onchainSecret,
           account,
           publicCommitment,
+          publicAdapter,
         );
 
       if (state.exists && state.consumed) {
-        return transactionModeOf(account) === "unshield" ? publicInviteConsumedBy(publicCommitment ?? "", account.address) : true;
+        return transactionModeOf(account) === "unshield" ? publicInviteConsumedBy(publicCommitment ?? "", account.address, publicAdapter) : true;
       }
     } catch {}
 
@@ -199,8 +201,9 @@ async function ensureInviteConsumed(
   invite: InvitePayload,
 ) {
   const mode = parseTransactionMode(invite.transactionMode);
-  if (mode === "unshield" && (!invite.publicRailAddress || BigInt(invite.publicRailAddress) !== BigInt(PUBLIC_RAIL_ADDRESS || "0"))) {
-    throw new Error("This Unshield invitation belongs to a different or unconfigured public deployment.");
+  if (mode === "unshield") {
+    if (!invite.publicRailAddress) throw new Error("Missing public Invite deployment.");
+    publicInviteDeployment(invite.publicRailAddress);
   }
   const storedRooms = JSON.parse(window.localStorage.getItem(ROOM_STORAGE_KEY) ?? "[]") as LocalRoom[];
   const existing = storedRooms.find(room => room.id === invite.roomId);
@@ -224,6 +227,7 @@ async function ensureInviteConsumed(
           invite.onchainSecret,
           account,
           invite.publicInviteCommitment,
+          invite.publicRailAddress,
         );
 
       if (candidate.exists) {
@@ -245,7 +249,7 @@ async function ensureInviteConsumed(
 
   if (state.consumed) {
     if (mode === "unshield") {
-      if (await publicInviteConsumedBy(invite.publicInviteCommitment ?? "", account.address)) return;
+      if (await publicInviteConsumedBy(invite.publicInviteCommitment ?? "", account.address, invite.publicRailAddress)) return;
       throw new Error("INVITE_ALREADY_CONSUMED_BY_ANOTHER_WALLET");
     }
     if (pending) return;
@@ -267,6 +271,7 @@ async function ensureInviteConsumed(
       account,
       invite.onchainSecret,
       invite.publicInviteCommitment,
+      invite.publicRailAddress,
     );
   } catch (error) {
     if (
@@ -274,6 +279,7 @@ async function ensureInviteConsumed(
         invite.onchainSecret,
         account,
         invite.publicInviteCommitment,
+        invite.publicRailAddress,
       )
     ) {
       return;

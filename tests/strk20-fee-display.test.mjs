@@ -22,7 +22,9 @@ test("fees UI fetches active FeePolicy quotes instead of treating source prices 
   assert.match(page, /quoteOfferFee/);
   assert.match(page, /quoteRoomActivationFee/);
   assert.match(page, /On-chain quote/);
-  assert.match(page, /may exceed the base/);
+  assert.match(page, /USD targets describe this source version/);
+  assert.match(page, /Shield target/);
+  assert.match(page, /Invite creation/);
   assert.match(page, /Wallet \/ network charges/);
   assert.doesNotMatch(page, /quoteRekberWorkflowFee/);
 });

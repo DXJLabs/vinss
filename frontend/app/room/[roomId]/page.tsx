@@ -607,6 +607,7 @@ export default function DealRoomPage() {
         room &&
         inviteScope && (
           <InvitationPanel
+            account={session?.account}
             scope={inviteScope}
             roomId={room.id}
             group={accessGroup}

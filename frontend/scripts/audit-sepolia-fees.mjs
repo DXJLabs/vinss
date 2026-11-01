@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 const SEPOLIA_CHAIN_ID = 0x534e5f5345504f4c4941n;
 const PRIME = (1n << 251n) + 17n * (1n << 192n) + 1n;
 const ACTIONS = [
-  { action: "roomActivation", number: 1, baseUsdMicros: 50_000n },
+  { action: "roomActivation", number: 1, baseUsdMicros: 10_000n },
   { action: "message", number: 2, baseUsdMicros: 10_000n },
   { action: "offer", number: 3, baseUsdMicros: 50_000n },
 ];
@@ -74,7 +74,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const { RpcProvider } = await import("starknet");
     const provider = new RpcProvider({ nodeUrl: process.env.NEXT_PUBLIC_RPC_URL });
     const helpers = {
-      roomActivation: process.env.NEXT_PUBLIC_INVITE_ADDRESS,
+      roomActivation: process.env.NEXT_PUBLIC_SHIELD_INVITE_OVERRIDE_ADDRESS ?? process.env.NEXT_PUBLIC_INVITE_ADDRESS,
       message: process.env.NEXT_PUBLIC_MESSAGE_HELPER_ADDRESS,
       offer: process.env.NEXT_PUBLIC_OFFER_HELPER_ADDRESS,
     };

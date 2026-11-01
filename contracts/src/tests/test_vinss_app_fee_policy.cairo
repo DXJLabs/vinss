@@ -19,12 +19,14 @@ fn flat_fees_exclude_sponsor_reserve_and_public_rekber_keeps_original_policy() {
     let public_policy = IVinssFeePolicyDispatcher { contract_address: public };
     assert_eq!(shield_policy.quote_fee(2), 20_000_000_000_000_000);
     assert_eq!(public_policy.quote_fee(2), 10_000_000_000_000_000);
-    assert_eq!(public_policy.quote_fee_usd_micros(1), 50_000);
+    assert_eq!(public_policy.quote_fee_usd_micros(1), 10_000);
     assert_eq!(public_policy.quote_fee_usd_micros(2), 10_000);
     assert_eq!(public_policy.quote_fee_usd_micros(3), 50_000);
-    assert_eq!(shield_policy.quote_fee_usd_micros(1), 100_000);
+    assert_eq!(shield_policy.quote_fee_usd_micros(1), 20_000);
     assert_eq!(shield_policy.quote_fee_usd_micros(2), 20_000);
     assert_eq!(shield_policy.quote_fee_usd_micros(3), 100_000);
+    assert_eq!(shield_policy.quote_fee(1), 20_000_000_000_000_000);
+    assert_eq!(public_policy.quote_fee(1), 10_000_000_000_000_000);
     assert_eq!(public_policy.quote_fee(4), old_policy.quote_fee(4));
     assert_eq!(public_policy.quote_fee_usd_micros(4), old_policy.quote_fee_usd_micros(4));
     assert_eq!(shield_policy.quote_fee(4), old_policy.quote_fee(4));

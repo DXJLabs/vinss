@@ -1,3 +1,4 @@
+import { inviteHelperForAccount } from "./inviteDeployment";
 import { num } from "starknet";
 import { toFelt } from "@/lib/privacy/envelope";
 import type { WalletAccountV6 } from "starknet";
@@ -125,12 +126,18 @@ async function quoteFlatFee(
  * remains a replay-protected, non-revenue action in the current contract.
  */
 export function quoteRoomActivationFee(account?: object): Promise<bigint> {
-  const CONTRACTS = contractsForAccount(account);
   return quoteFlatFee(
-    CONTRACTS.invite,
+    inviteHelperForAccount(account),
     VINSS_FEE_ACTION.roomActivation,
     "VINSS Invite",
   );
+}
+
+/** Read the actual USD target alongside the STRK conversion; never substitute a source default. */
+export async function quoteRoomActivationDetails(account: object): Promise<{fee: bigint; usdMicros: bigint}> {
+  const policy = await resolveHelperFeePolicy(inviteHelperForAccount(account), "VINSS Invite");
+  const [strk, usd] = await Promise.all(["quote_fee", "quote_fee_usd_micros"].map(entrypoint => getProvider().callContract({contractAddress:policy,entrypoint,calldata:["0x1"]})));
+  return {fee:requirePositiveQuote(strk?.[0], "VINSS Invite"),usdMicros:requirePositiveQuote(usd?.[0], "VINSS Invite USD")};
 }
 
 export function quoteMessageFee(account?: object): Promise<bigint> {

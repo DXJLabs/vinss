@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import type { WalletAccountV6 } from "starknet";
+import { quoteRoomActivationDetails } from "@/lib/starknet/feePolicy";
+import { formatLiveFeeStrk } from "@/lib/starknet/feeQuoteView";
+import { transactionModeOf } from "@/lib/starknet/transactionMode";
 import { QRCodeCanvas } from "qrcode.react";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -493,6 +497,7 @@ function InviteCard({
 }
 
 interface InvitationPanelProps {
+  account?: WalletAccountV6;
   scope: InviteScope;
   roomId: string;
   group: LocalRoomGroup | null;
@@ -523,6 +528,7 @@ interface InvitationPanelProps {
 }
 
 export function InvitationPanel({
+  account,
   scope,
   roomId,
   group,
@@ -538,6 +544,16 @@ export function InvitationPanel({
   onShare,
   onShareTo,
 }: InvitationPanelProps) {
+  const [quote, setQuote] = useState<{account: WalletAccountV6; fee: bigint; usdMicros: bigint} | null>(null);
+  const [quoteFailed, setQuoteFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setQuote(null); setQuoteFailed(false);
+    if (account) void quoteRoomActivationDetails(account).then(value => { if (!cancelled) setQuote({account,...value}); }, () => { if (!cancelled) setQuoteFailed(true); });
+    return () => { cancelled = true; };
+  }, [account]);
+  const liveQuote = quote?.account === account ? quote : null;
+  const usd = liveQuote ? (Number(liveQuote.usdMicros) / 1_000_000).toFixed(2) : null;
   const groupMode =
     scope === "group";
 
@@ -595,6 +611,11 @@ export function InvitationPanel({
       </header>
 
       <div>
+        <div className="mb-3 rounded-xl border border-wire/60 bg-vault/20 px-3 py-3 text-xs" aria-live="polite">
+          <p className="text-paper/65">VINSS Invite fee · {transactionModeOf(account) === "shield" ? "Shield" : "Unshield"}</p>
+          <p className="mt-1 break-words font-mono text-signal">{liveQuote ? `${formatLiveFeeStrk(liveQuote.fee)} · $${usd}` : !account ? "Connect your wallet to view the quote" : quoteFailed ? "Quote unavailable" : "Loading quote…"}</p>
+          <p className="mt-1 text-[10px] leading-relaxed text-paper/40">Per new link, including Regenerate. Wallet and network charges are separate. Accepting a link has no VINSS Invite creation fee.</p>
+        </div>
         {groupMode ? (
           group ? (
             <InviteCard

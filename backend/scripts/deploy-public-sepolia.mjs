@@ -3,7 +3,8 @@ import { Account, RpcProvider, CallData, hash } from 'starknet';
 
 const out = 'deployment-public-sepolia';
 const appPolicy = process.env.VINSS_APP_FEE_POLICY_ADDRESS;
-const deploymentVersion = appPolicy ? 'v2-app-fees' : 'v1';
+const deploymentVersion = process.env.VINSS_PUBLIC_DEPLOYMENT_VERSION ?? (appPolicy ? 'v2-app-fees' : 'v1');
+if (!/^v[0-9]+(?:-[a-z-]+)?$/.test(deploymentVersion)) throw new Error('Invalid public deployment version');
 mkdirSync(out, { recursive: true });
 const manifest = { network: 'sepolia', source: process.env.GITHUB_SHA, contracts: {}, verified: false };
 const save = () => writeFileSync(`${out}/manifest.json`, JSON.stringify(manifest, null, 2));

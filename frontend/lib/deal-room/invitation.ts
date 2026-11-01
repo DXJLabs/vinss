@@ -1,10 +1,10 @@
 import { contractsForAccount } from "@/lib/starknet/railConfig";
 import { parseTransactionMode, transactionModeOf, type TransactionMode } from "@/lib/starknet/transactionMode";
-import { consumePublicInvite, computePublicInviteCapability } from "@/lib/starknet/publicInvite";
-import { PUBLIC_RAIL_ADDRESS } from "@/lib/starknet/constants";
+import { consumePublicInvite, computePublicInviteCapability, createPublicInvite } from "@/lib/starknet/publicInvite";
+import { inviteHelperForAccount, publicInviteDeployment, publicInviteDeployments, shieldInviteHelpers } from "@/lib/starknet/inviteDeployment";
 import { invokeVinssActions, preflightVinssActions } from "@/lib/starknet/vinssExecution";
 import { hash, RpcProvider, type WalletAccountV6 } from "starknet";
-import { CONTRACTS, RPC_URL } from "../starknet/constants";
+import { RPC_URL } from "../starknet/constants";
 import {
   shortStringToFelt,
   toFelt,
@@ -41,17 +41,10 @@ async function waitForInviteOnchain(
   attempts = 8,
   account?: WalletAccountV6,
 ): Promise<boolean> {
-  const CONTRACTS = contractsForAccount(account);
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const result = await inviteReadProvider.callContract({
-        contractAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : CONTRACTS.invite,
-        entrypoint: "get_invite",
-        calldata: [toFelt(commitment)],
-      });
-
-      // InviteEntry = [expires_at, consumed, exists]
-      if (BigInt(result[2] ?? "0") !== 0n) {
+      const state = await getInviteOnchainState(commitment, account);
+      if (state.exists) {
         return true;
       }
     } catch {
@@ -203,8 +196,9 @@ async function invokeInvite(
   inviteCalldata: Array<bigint | number | string>,
   quotedFee?: bigint,
   inviteClaimKey?: string,
+  helper?: string,
 ): Promise<{ transaction_hash: string }> {
-  const CONTRACTS = contractsForAccount(account);
+  const CONTRACTS = { ...contractsForAccount(account), invite: helper ?? inviteHelperForAccount(account) };
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
@@ -218,6 +212,10 @@ async function invokeInvite(
   }
 
   const calldata = inviteCalldata.map(toFelt);
+  if (transactionModeOf(account) === "unshield" && quotedFee !== undefined) {
+    if (!inviteClaimKey) throw new Error("Missing public Invite claim key.");
+    return createPublicInvite(account, calldata, quotedFee, inviteClaimKey);
+  }
 
   const treasuryAddress =
     process.env.NEXT_PUBLIC_VINSS_TREASURY_ADDRESS;
@@ -290,7 +288,7 @@ export async function createInviteToken(
     invite: EncryptedInviteToken,
   ) => void | Promise<void>,
 ): Promise<EncryptedInviteToken> {
-  const CONTRACTS = contractsForAccount(account);
+  const CONTRACTS = { ...contractsForAccount(account), invite: inviteHelperForAccount(account) };
   if (!CONTRACTS.invite) {
     throw new Error(
       "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
@@ -339,7 +337,7 @@ export async function createInviteToken(
   const payload: InvitePayload = {
     publicInviteCommitment: publicCapability?.commitment,
     transactionMode: transactionModeOf(account),
-    publicRailAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : undefined,
+    publicRailAddress: transactionModeOf(account) === "unshield" ? publicInviteDeployment().adapter : undefined,
     v: INVITE_VERSION,
     inviteId: randomHex(16),
     scope: input.scope,
@@ -598,7 +596,7 @@ export async function decodeInviteToken(
     parseTransactionMode(payload.transactionMode);
     if (payload.transactionMode === "unshield") {
       if (!payload.publicRailAddress || !payload.publicInviteCommitment || !payload.inviterAddress) return null;
-      const capability = computePublicInviteCapability(payload.onchainSecret!, payload.inviterAddress);
+      const capability = computePublicInviteCapability(payload.onchainSecret!, payload.inviterAddress, payload.publicRailAddress);
       if (BigInt(capability.commitment) !== BigInt(payload.publicInviteCommitment)) return null;
     }
     return payload as InvitePayload;
@@ -648,24 +646,29 @@ export interface InviteOnchainState {
   exists: boolean;
 }
 
+/** Only configured Invite deployments are queried, including the previous active deployment. */
+async function locateInvite(commitment: string | bigint, account?: WalletAccountV6, publicAdapter?: string) {
+  const targets = transactionModeOf(account) === "unshield"
+    ? publicAdapter ? [publicInviteDeployment(publicAdapter).adapter] : publicInviteDeployments().map(item => item.adapter)
+    : shieldInviteHelpers();
+  let first: {target: string; result: string[]} | undefined;
+  for (const target of [...new Set(targets.filter(Boolean))]) {
+    try {
+      const result = await inviteReadProvider.callContract({contractAddress:target,entrypoint:"get_invite",calldata:[toFelt(commitment)]});
+      if (result.length !== 3) throw new Error("Invalid Invite state response.");
+      first ??= {target,result};
+      if (BigInt(result[2]!) !== 0n) return {target,result};
+    } catch { /* Another configured deployment may contain this older Invite. */ }
+  }
+  if (first) return first;
+  throw new Error("Configured Invite state is unavailable.");
+}
 export async function getInviteOnchainState(
   commitment: string | bigint,
   account?: WalletAccountV6,
+  publicAdapter?: string,
 ): Promise<InviteOnchainState> {
-  const CONTRACTS = contractsForAccount(account);
-  if (!CONTRACTS.invite) {
-    throw new Error(
-      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
-    );
-  }
-
-  const result = await inviteReadProvider.callContract({
-    contractAddress: transactionModeOf(account) === "unshield" ? PUBLIC_RAIL_ADDRESS : CONTRACTS.invite,
-    entrypoint: "get_invite",
-    calldata: [toFelt(commitment)],
-  });
-
-  // InviteEntry = [expires_at, consumed, exists]
+  const {result} = await locateInvite(commitment, account, publicAdapter);
   return {
     expiresAt: Number(BigInt(result[0] ?? "0")),
     consumed: BigInt(result[1] ?? "0") !== 0n,
@@ -677,11 +680,13 @@ export async function getInviteOnchainStateForSecret(
   onchainSecret: string,
   account?: WalletAccountV6,
   publicCommitment?: string,
+  publicAdapter?: string,
 ): Promise<InviteOnchainState> {
   if (transactionModeOf(account) === "unshield" && !publicCommitment) throw new Error("Missing public invite commitment.");
   return getInviteOnchainState(
     transactionModeOf(account) === "unshield" ? publicCommitment! : computeInviteCommitment(onchainSecret),
     account,
+    publicAdapter,
   );
 }
 
@@ -689,19 +694,15 @@ export async function consumeInviteOnchain(
   account: WalletAccountV6,
   onchainSecret: string,
   publicCommitment?: string,
+  publicAdapter?: string,
 ): Promise<{ transactionHash: string }> {
-  const CONTRACTS = contractsForAccount(account);
-  if (!CONTRACTS.invite) {
-    throw new Error(
-      "NEXT_PUBLIC_INVITE_ADDRESS is not configured.",
-    );
-  }
-
-  const response = transactionModeOf(account) === "unshield"
-    ? await consumePublicInvite(account, onchainSecret, publicCommitment ?? "")
-    : await invokeInvite(account, [1, onchainSecret]);
-
-  return {
-    transactionHash: response.transaction_hash,
-  };
+  const publicMode = transactionModeOf(account) === "unshield";
+  if (publicMode && !publicCommitment) throw new Error("Missing public Invite commitment.");
+  const commitment = publicMode ? publicCommitment! : computeInviteCommitment(onchainSecret);
+  const {target, result} = await locateInvite(commitment, account, publicAdapter);
+  if (BigInt(result[2]!) === 0n) throw new Error("INVITE_NOT_FOUND");
+  const response = publicMode
+    ? await consumePublicInvite(account, onchainSecret, publicCommitment!, target)
+    : await invokeInvite(account, [1, onchainSecret], undefined, undefined, target);
+  return {transactionHash:response.transaction_hash};
 }
